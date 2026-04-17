@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/bronze-buttons.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shura — Faith-Centered Mental Health</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'cream': '#FDFBF5',
+                        'sand': '#F3E9DC',
+                        'taupe': '#BFAEA0',
+                        'brown': {
+                            'soft': '#8D7B68',
+                            'dark': '#5C5043',
+                        },
+                        'slate-blue': '#6B8A9A',
+                        'gold': '#C0A062',
+                        'ivory': '#FFFCF5',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        serif: ['Playfair Display', 'serif'],
+                    },
+                },
+            },
+        };
+    </script>
+<style>
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-modal-enter {
+  animation: modal-enter 0.2s ease-out forwards;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out forwards;
+}
+@keyframes popup-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-popup-enter {
+  animation: popup-enter 0.2s cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+body {
+  background-color: #EFEAE2; /* Darker fallback cream */
+  background-image:
+    /* The large, soft, flowing shapes. Darker tones. */
+    radial-gradient(ellipse 80% 70% at -15% 25%, #E0D5C9, transparent), /* Darker Sand color */
+    radial-gradient(ellipse 80% 70% at 115% 75%, rgba(169, 154, 140, 0.4), transparent), /* Darker Taupe color, more opaque */
+    
+    /* Base background gradient. Darker base. */
+    linear-gradient(145deg, #D3C9BE 0%, #EFEAE2 100%);
+    
+  background-attachment: fixed;
+  background-size: cover;
+}
+/* Flip card styles */
+.flip-card {
+  background-color: transparent;
+  width: 100%;
+  perspective: 1000px; /* 3D effect */
+}
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transition: transform 0.8s;
+  transform-style: preserve-3d;
+}
+.flip-card:hover .flip-card-inner {
+  transform: rotateY(180deg);
+}
+.flip-card-front, .flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden; /* Safari */
+  backface-visibility: hidden;
+  border-radius: 0.75rem; /* Corresponds to rounded-xl */
+}
+.flip-card-back {
+  transform: rotateY(180deg);
+}
+/* Scroll Animation Styles */
+.scroll-animate {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s cubic-bezier(0.17, 0.55, 0.55, 1), transform 0.7s cubic-bezier(0.17, 0.55, 0.55, 1);
+}
+.scroll-animate.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react-router-dom": "https://aistudiocdn.com/react-router-dom@^7.9.4"
+  }
+}
+</script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+</head>
+<body class="text-brown-dark font-sans antialiased">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>

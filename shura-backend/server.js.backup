@@ -1,0 +1,233 @@
+// server.js — Shura Backend with PostgreSQL
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const http = require('http');
+const socketIo = require('socket.io');
+const rateLimit = require('express-rate-limit');
+const jwt = require('jsonwebtoken');
+const pool = require('./db'); // Import pool from db/index.js
+
+console.log('🚀 Starting Shura Backend...');
+console.log('Node version:', process.version);
+
+// Express setup
+const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    credentials: true,
+  }
+});
+
+// Socket.io authentication middleware
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token || socket.handshake.headers.authorization?.split(' ')[1];
+  
+  if (!token) {
+    return next(new Error('Authentication token required'));
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return next(new Error('Invalid token'));
+    }
+    socket.user = user; // Attach user info to socket
+    next();
+  });
+});
+
+// Middleware - parse JSON first
+app.use(express.json());
+
+// Middleware to preserve raw body for webhook signature verification (only for webhook routes)
+app.use('/api/payments/webhook', (req, res, next) => {
+  let rawBody = '';
+  req.on('data', chunk => {
+    rawBody += chunk.toString();
+  });
+  req.on('end', () => {
+    req.rawBody = rawBody;
+    next();
+  });
+});
+
+// CORS
+// Flexible CORS configuration
+const allowedOriginsEnv = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || '';
+const allowedOrigins = allowedOriginsEnv.split(',').map(s => s.trim()).filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow server-to-server requests or tools (curl) with no origin
+    if (!origin) return callback(null, true);
+
+    // Dev wildcard: set FRONTEND_URLS=*dev* in .env to allow any origin (DEV ONLY)
+    if (allowedOrigins.includes('*dev*')) return callback(null, true);
+
+    // Allow explicit origins
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    // Deny other origins
+    return callback(new Error('CORS not allowed by server'), false);
+  },
+  credentials: true,
+}));
+
+console.log('✅ CORS configured. Allowed origins:', allowedOrigins.length ? allowedOrigins : '(none - use FRONTEND_URL or FRONTEND_URLS)');
+
+// Rate limiting for sensitive endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts per window
+  message: { error: 'Too many login attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // 100 requests per window
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 payment requests per window
+  message: { error: 'Too many payment requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Routes
+const authRoutes = require('./routes/auth');
+app.use('/api/auth', authLimiter, authRoutes);
+
+const uploadRoutes = require('./routes/upload');
+app.use('/api/upload', generalLimiter, uploadRoutes);
+
+const newsletterRoutes = require('./routes/newsletter');
+app.use('/api/newsletter', generalLimiter, newsletterRoutes);
+
+const chatRoutes = require('./routes/chats');
+app.use('/api/chats', generalLimiter, chatRoutes);
+
+const paymentRoutes = require('./routes/payments');
+app.use('/api/payments', paymentLimiter, paymentRoutes);
+
+const callRoutes = require('./routes/calls');
+app.use('/api/calls', generalLimiter, callRoutes);
+
+// Root API endpoint
+app.get('/api', (req, res) => {
+  res.json({ status: 'OK', message: 'Shura API is running' });
+});
+
+// Health check endpoints
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Shura API is running' });
+});
+
+app.get('/ping', (req, res) => {
+  res.json({ ok: true, time: new Date().toISOString() });
+});
+
+app.get('/db-time', async (req, res) => {
+  try {
+    const r = await pool.query('SELECT NOW() AS now');
+    res.json({ ok: true, db_time: r.rows[0].now });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err.message);
+
+  // Handle CORS errors
+  if (err.message === 'CORS not allowed by server') {
+    return res.status(403).json({
+      error: 'CORS policy violation',
+      code: 'CORS_ERROR',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // Handle Socket.io authentication errors
+  if (err.message === 'Authentication token required' || err.message === 'Invalid token') {
+    return res.status(401).json({
+      error: err.message,
+      code: err.message === 'Authentication token required' ? 'TOKEN_REQUIRED' : 'INVALID_TOKEN',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error',
+    code: 'INTERNAL_ERROR',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Socket.io setup for real-time chat
+io.on('connection', (socket) => {
+  console.log(`📱 User connected: ${socket.id}`);
+
+  // Join a conversation room
+  socket.on('join_conversation', (conversationId) => {
+    socket.join(`conversation_${conversationId}`);
+    console.log(`✅ User ${socket.id} joined conversation ${conversationId}`);
+  });
+
+  // Handle incoming messages
+  socket.on('send_message', async (data) => {
+    const { conversation_id, message_id, content, file_url } = data;
+    // Broadcast message to all clients in the conversation room
+    io.to(`conversation_${conversation_id}`).emit('receive_message', {
+      message_id,
+      content,
+      file_url,
+      timestamp: new Date().toISOString()
+    });
+    console.log(`💬 Message sent in conversation ${conversation_id}`);
+  });
+
+  // Handle call initiation
+  socket.on('initiate_call', (data) => {
+    const { conversation_id, call_id, call_type } = data;
+    io.to(`conversation_${conversation_id}`).emit('incoming_call', {
+      call_id,
+      call_type,
+      timestamp: new Date().toISOString()
+    });
+    console.log(`📞 Call initiated in conversation ${conversation_id}`);
+  });
+
+  // Handle call status updates
+  socket.on('call_status_update', (data) => {
+    const { conversation_id, call_id, status } = data;
+    io.to(`conversation_${conversation_id}`).emit('call_status_changed', {
+      call_id,
+      status,
+      timestamp: new Date().toISOString()
+    });
+    console.log(`🔄 Call ${call_id} status: ${status}`);
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    console.log(`🚪 User disconnected: ${socket.id}`);
+  });
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`🌐 http://localhost:${PORT}/api/health`);
+  console.log(`🔌 WebSocket server running on port ${PORT}`);
+});

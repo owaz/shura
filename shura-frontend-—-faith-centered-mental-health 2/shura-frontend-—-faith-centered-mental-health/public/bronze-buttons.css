@@ -1,0 +1,9 @@
+/*
+  Add this to your global stylesheet to enable metallic bronze button hover effects.
+*/
+.metallic-bronze-btn:hover {
+  background: linear-gradient(135deg, #8a6842 0%, #b08a5c 40%, #a07a4c 60%, #7a5a30 100%) !important;
+}
+.light-metallic-bronze-btn:hover {
+  background: linear-gradient(135deg, #c49a6c 0%, #e2b07a 100%) !important;
+}

@@ -1,0 +1,124 @@
+
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
+import type { Therapist } from '../types';
+import { Logo } from '../components/Logo';
+import { ChevronLeftIcon } from '../components/Icons';
+
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
+}
+
+const PaymentPage: React.FC = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    
+    const { therapist, sessionType, price } = (location.state as { therapist: Therapist, sessionType: string, price: number }) || {};
+
+    useEffect(() => {
+        if (!therapist || !sessionType || !price) {
+            navigate('/therapists');
+        }
+    }, [therapist, sessionType, price, navigate]);
+    
+    const handlePayment = () => {
+        const options = {
+            key: 'rzp_test_1DP5mmOlF5G5ag', // Test key
+            amount: price * 100, // Amount in paisa
+            currency: 'INR',
+            name: 'Shura',
+            description: `Payment for ${sessionType}`,
+            image: '/logo.png', // Optional
+            handler: function (response: any) {
+                // Payment success
+                navigate(`/chat/${therapist.id}`);
+            },
+            prefill: {
+                name: 'User Name',
+                email: 'user@example.com',
+                contact: '9999999999'
+            },
+            notes: {
+                address: 'Shura Office'
+            },
+            theme: {
+                color: '#6B8A9A'
+            }
+        };
+        const rzp = new window.Razorpay(options);
+        rzp.open();
+    };
+
+    if (!therapist || !sessionType || !price) {
+        return null;
+    }
+
+    return (
+        <div className="min-h-screen bg-sand flex flex-col items-center justify-center p-6 relative">
+            <div className="absolute top-6 left-6">
+                <button
+                    onClick={() => navigate(-1)}
+                    className="inline-flex items-center gap-2 text-brown-soft hover:text-brown-dark transition-colors font-semibold group"
+                    aria-label="Go back to previous page"
+                >
+                    <ChevronLeftIcon className="h-5 w-5 transition-transform group-hover:-translate-x-1" />
+                    <span>Back</span>
+                </button>
+            </div>
+            
+            <div className="max-w-5xl w-full grid lg:grid-cols-5 gap-12 items-center">
+                
+                {/* Order Summary */}
+                <div className="lg:col-span-2 bg-ivory p-8 rounded-2xl shadow-lg animate-fade-in">
+                    <h2 className="text-3xl font-serif font-bold text-brown-dark mb-8">Order Summary</h2>
+                    <div className="flex items-center gap-4 mb-6">
+                        <img src={therapist.imageUrl} alt={therapist.name} className="w-20 h-20 rounded-full object-cover border-4 border-sand shadow-md"/>
+                        <div>
+                            <p className="text-sm text-taupe">You are booking with</p>
+                            <h3 className="text-2xl font-serif font-semibold text-brown-dark">{therapist.name}</h3>
+                            <p className="text-sm text-brown-soft">{therapist.title}</p>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-4 text-lg">
+                        <div className="flex justify-between items-center text-brown-soft border-b border-sand pb-4">
+                            <span>Service:</span>
+                            <span className="font-semibold text-brown-dark">{sessionType}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xl pt-4">
+                            <span className="font-bold text-brown-dark">Total Amount:</span>
+                            <span className="font-bold text-brown-soft font-serif text-2xl">₹{price.toLocaleString('en-IN')}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Payment Section */}
+                <div className="lg:col-span-3 bg-white p-8 rounded-2xl shadow-xl animate-fade-in" style={{ animationDelay: '150ms' }}>
+                    <div className="text-center mb-8">
+                        <Link to="/" className="inline-flex items-center justify-center gap-2 mb-2 group">
+                            <Logo className="h-8 w-8 text-brown-dark" />
+                            <h3 className="font-serif text-3xl font-bold text-brown-dark group-hover:text-brown-soft transition-colors">Shura</h3>
+                        </Link>
+                        <h1 className="text-2xl font-serif font-bold text-brown-dark mt-2">Secure Payment</h1>
+                        <p className="text-brown-soft text-sm">Complete your booking with Razorpay - safe and secure online payment.</p>
+                    </div>
+
+                    <div className="text-center">
+                        <button 
+                            onClick={handlePayment}
+                            className="bg-brown-soft text-white py-4 px-8 rounded-lg font-semibold hover:bg-opacity-90 transition-all duration-300 transform hover:scale-105 text-lg"
+                        >
+                            Pay ₹{price.toLocaleString('en-IN')} with Razorpay
+                        </button>
+                    </div>
+                    <p className="text-xs text-taupe text-center mt-6">All transactions are processed securely through Razorpay.</p>
+                </div>
+
+            </div>
+        </div>
+    );
+};
+
+export default PaymentPage;
