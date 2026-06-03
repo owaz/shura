@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../contexts/AuthContext';
+import { apiUrl } from '../config/api';
 
 const TherapistLoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -14,7 +15,7 @@ const TherapistLoginPage: React.FC = () => {
     e.preventDefault();
     if (email && password) {
       try {
-        const response = await fetch('http://localhost:5001/api/auth/therapist/login', {
+        const response = await fetch(apiUrl('/auth/therapist/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),

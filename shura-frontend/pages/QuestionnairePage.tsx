@@ -5,6 +5,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { ChevronLeftIcon, ChevronRightIcon, CheckIcon } from '../components/Icons';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../contexts/AuthContext';
+import { apiUrl } from '../config/api';
 
 const concernsList = ['Anxiety', 'Depression', 'Marital Counseling', 'Family Conflict', 'Trauma', 'Grief', 'Personal Growth', 'Self-Esteem', 'Parenting', 'Spirituality'];
 const genders = ['Female', 'Male', 'No Preference'];
@@ -59,9 +60,8 @@ const QuestionnairePage: React.FC = () => {
     // Send questionnaire data to backend
     if (userId) {
       try {
-        const API_URL = 'http://localhost:5001';
         console.log('📤 Sending questionnaire data to backend...');
-        const response = await fetch(`${API_URL}/api/auth/questionnaire`, {
+        const response = await fetch(apiUrl('/auth/questionnaire'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

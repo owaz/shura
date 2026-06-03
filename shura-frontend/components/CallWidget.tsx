@@ -1,7 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
-
-const BACKEND = 'http://localhost:5001';
+import { socketUrl } from '../config/api';
 
 interface CallWidgetProps {
   roomId?: string;
@@ -35,7 +34,7 @@ export default function CallWidget({ roomId: initialRoomId = 'test-room', audioO
 
   const ensureSocket = () => {
     if (socket) return socket;
-    const s = io(BACKEND, { transports: ['websocket'] });
+    const s = io(socketUrl(), { transports: ['websocket'] });
     setSocket(s);
     return s;
   };
