@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { Client, Conversation, Message } from '../../types';
+import { socketUrl } from '../../config/api';
 
 // MOCK DATA
 const mockClients: Client[] = [
@@ -120,11 +121,12 @@ const TherapistChatPage: React.FC = () => {
     // Initialize socket only when needed for calls
     const initializeSocket = () => {
         if (!socketRef.current) {
-            socketRef.current = io('http://localhost:5001', { 
+            socketRef.current = io(socketUrl(), {
                 transports: ['websocket'],
                 reconnection: true,
                 reconnectionDelay: 1000,
-                timeout: 10000
+                timeout: 10000,
+                withCredentials: true
             });
         }
         return socketRef.current;
