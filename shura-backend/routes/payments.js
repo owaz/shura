@@ -6,10 +6,15 @@ const Razorpay = require('razorpay');
 const crypto = require('crypto');
 
 // Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+const createRazorpayClient = () => {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+    throw new Error('Razorpay credentials are not configured');
+  }
+  return new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET
+  });
+};
 
 const auth = authenticateToken;
 
@@ -20,16 +25,19 @@ const auth = authenticateToken;
  */
 router.post('/create-order', auth, async (req, res) => {
   try {
-    const { booking_id, amount } = req.body;
+    const { booking_id } = req.body;
     const user_id = req.user.id;
 
-    if (!booking_id || !amount) {
-      return res.status(400).json({ error: 'booking_id and amount are required' });
+    if (!booking_id) {
+      return res.status(400).json({ error: 'booking_id is required' });
     }
 
     // Verify booking belongs to user
     const bookingResult = await pool.query(
-      'SELECT * FROM bookings WHERE id = $1 AND user_id = $2',
+      `SELECT b.*, t.rate_60min
+       FROM bookings b
+       JOIN therapists t ON t.id = b.therapist_id
+       WHERE b.id = $1 AND b.user_id = $2`,
       [booking_id, user_id]
     );
 
@@ -37,9 +45,15 @@ router.post('/create-order', auth, async (req, res) => {
       return res.status(404).json({ error: 'Booking not found' });
     }
 
+    const booking = bookingResult.rows[0];
+    const amountInPaise = Number(booking.amount_paise || booking.amount_cents || booking.rate_60min * 100);
+    if (!Number.isInteger(amountInPaise) || amountInPaise <= 0) {
+      return res.status(400).json({ error: 'Unable to determine booking amount' });
+    }
+
     // Create Razorpay order
     const orderOptions = {
-      amount: amount, // amount in paise
+      amount: amountInPaise,
       currency: 'INR',
       receipt: `booking_${booking_id}_${Date.now()}`,
       notes: {
@@ -48,14 +62,14 @@ router.post('/create-order', auth, async (req, res) => {
       }
     };
 
-    const razorpayOrder = await razorpay.orders.create(orderOptions);
+    const razorpayOrder = await createRazorpayClient().orders.create(orderOptions);
 
     // Save payment record in DB
     const payment = await pool.query(
-      `INSERT INTO payments (user_id, therapist_id, booking_id, amount, status, razorpay_order_id, created_at)
+      `INSERT INTO payments (client_id, therapist_id, booking_id, amount_cents, status, razorpay_order_id, created_at)
        VALUES ($1, $2, $3, $4, 'pending', $5, NOW())
        RETURNING id`,
-      [user_id, bookingResult.rows[0].therapist_id, booking_id, amount / 100, razorpayOrder.id]
+      [user_id, booking.therapist_id, booking_id, amountInPaise, razorpayOrder.id]
     );
 
     res.status(201).json({
@@ -90,7 +104,11 @@ router.post('/verify', auth, async (req, res) => {
     hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
     const calculatedSignature = hmac.digest('hex');
 
-    if (calculatedSignature !== razorpay_signature) {
+    const validSignature =
+      calculatedSignature.length === razorpay_signature.length &&
+      crypto.timingSafeEqual(Buffer.from(calculatedSignature), Buffer.from(razorpay_signature));
+
+    if (!validSignature) {
       return res.status(400).json({ error: 'Invalid payment signature' });
     }
 
@@ -98,7 +116,7 @@ router.post('/verify', auth, async (req, res) => {
     const paymentResult = await pool.query(
       `UPDATE payments 
        SET status = 'completed', razorpay_payment_id = $1, completed_at = NOW() 
-       WHERE razorpay_order_id = $2 AND user_id = $3
+       WHERE razorpay_order_id = $2 AND client_id = $3
        RETURNING *`,
       [razorpay_payment_id, razorpay_order_id, user_id]
     );
@@ -159,14 +177,21 @@ router.get('/status/:payment_id', auth, async (req, res) => {
 router.post('/webhook', async (req, res) => {
   try {
     const signature = req.headers['x-razorpay-signature'];
-    const body = req.rawBody; // Requires middleware to preserve raw body for signature verification
+    const body = req.rawBody;
+    if (!process.env.RAZORPAY_WEBHOOK_SECRET || !body || !signature) {
+      return res.status(400).json({ error: 'Webhook verification is not configured' });
+    }
 
     // Verify webhook signature
     const hmac = crypto.createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET);
     hmac.update(body);
     const calculatedSignature = hmac.digest('hex');
 
-    if (calculatedSignature !== signature) {
+    const validWebhookSignature =
+      calculatedSignature.length === signature.length &&
+      crypto.timingSafeEqual(Buffer.from(calculatedSignature), Buffer.from(signature));
+
+    if (!validWebhookSignature) {
       return res.status(400).json({ error: 'Invalid webhook signature' });
     }
 
@@ -180,7 +205,7 @@ router.post('/webhook', async (req, res) => {
       // Update payment status
       await pool.query(
         `UPDATE payments SET status = 'completed', completed_at = NOW() 
-         WHERE metadata->>'order_id' = $1`,
+         WHERE razorpay_order_id = $1`,
         [orderId]
       );
 
@@ -192,7 +217,7 @@ router.post('/webhook', async (req, res) => {
       const orderId = event.payload.payment.entity.order_id;
 
       await pool.query(
-        `UPDATE payments SET status = 'failed' WHERE metadata->>'order_id' = $1`,
+        `UPDATE payments SET status = 'failed' WHERE razorpay_order_id = $1`,
         [orderId]
       );
 
@@ -218,14 +243,14 @@ router.get('/my-payments', auth, async (req, res) => {
       `SELECT 
         p.id, 
         p.booking_id, 
-        p.amount, 
+        p.amount_cents, 
         p.status, 
         p.razorpay_order_id,
         p.razorpay_payment_id,
         p.created_at,
         p.completed_at
       FROM payments p
-      WHERE p.user_id = $1
+      WHERE p.client_id = $1
       ORDER BY p.created_at DESC`,
       [user_id]
     );
@@ -233,6 +258,61 @@ router.get('/my-payments', auth, async (req, res) => {
     return res.json({ payments: result.rows });
   } catch (err) {
     console.error('Get payments error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/payments/therapist/my-payments
+ * Get DB-backed payment history and earnings summary for logged-in therapist
+ */
+router.get('/therapist/my-payments', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'therapist') {
+      return res.status(403).json({ error: 'Therapist access required' });
+    }
+
+    const result = await pool.query(
+      `SELECT
+        p.id,
+        p.booking_id,
+        p.amount_cents,
+        p.status,
+        p.razorpay_order_id,
+        p.razorpay_payment_id,
+        p.created_at,
+        p.completed_at,
+        u.id as client_id,
+        u.full_name as client_name,
+        u.email as client_email,
+        b.date as booking_date,
+        b.time as booking_time,
+        b.session_type
+       FROM payments p
+       JOIN users u ON u.id = p.client_id
+       LEFT JOIN bookings b ON b.id = p.booking_id
+       WHERE p.therapist_id = $1
+       ORDER BY p.created_at DESC`,
+      [req.user.id]
+    );
+
+    const summary = result.rows.reduce((acc, payment) => {
+      const amount = Number(payment.amount_cents || 0);
+      const completedDate = payment.completed_at ? new Date(payment.completed_at) : null;
+      const now = new Date();
+      if (payment.status === 'completed') {
+        acc.totalEarningsCents += amount;
+        if (completedDate && completedDate.getMonth() === now.getMonth() && completedDate.getFullYear() === now.getFullYear()) {
+          acc.monthlyEarningsCents += amount;
+        }
+      }
+      if (payment.status === 'pending') acc.pendingPayments += 1;
+      return acc;
+    }, { totalEarningsCents: 0, monthlyEarningsCents: 0, pendingPayments: 0 });
+
+    return res.json({ payments: result.rows, summary });
+  } catch (err) {
+    console.error('Get therapist payments error:', err);
     return res.status(500).json({ error: err.message });
   }
 });

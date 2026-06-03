@@ -1,19 +1,114 @@
 const express = require('express');
 const argon2 = require('argon2');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../db'); // Properly import the pool
 const { sendTherapistApplicationNotification, sendClientSignupNotification } = require('../utils/emailService');
+const { autoAssignTherapist } = require('../utils/matchingService');
+const { authenticateToken } = require('../middleware/auth');
+const { clearAuthCookies, createSession, revokeSession, rotateSession } = require('../utils/sessionAuth');
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'shura_super_secret_jwt_key_2024';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be configured in production');
+  }
+  return secret || 'shura_dev_jwt_secret_change_me';
+};
 const SALT_ROUNDS = 10;
 
 const crypto = require('crypto');
 
+const toArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean);
+  return [];
+};
+
+const therapistToPublic = (therapist) => {
+  const specialties = toArray(therapist.specialties);
+  const sessionTypes = toArray(therapist.session_types).map((type) => {
+    const normalized = String(type).toLowerCase();
+    if (normalized === 'video') return 'Video';
+    if (normalized === 'audio') return 'Audio';
+    if (normalized === 'text') return 'Text';
+    return type;
+  });
+  const concerns = specialties.length ? specialties : ['Faith-Centered Support'];
+  const rate = Number(therapist.rate_60min || 0);
+
+  return {
+    id: therapist.id,
+    name: therapist.full_name,
+    title: therapist.specialization || 'Licensed Therapist',
+    experience: therapist.experience_years || therapist.years_experience || 0,
+    imageUrl: therapist.profile_image_url || 'https://picsum.photos/id/1005/400/400',
+    bioSnippet: therapist.bio || `Supports clients with ${concerns.slice(0, 3).join(', ')} through faith-centered care.`,
+    fullBio: therapist.bio || `Dr. ${therapist.full_name} provides compassionate, faith-centered support for clients seeking therapy.`,
+    specialties,
+    concerns,
+    gender: therapist.gender || 'Female',
+    language: Array.isArray(therapist.languages) ? therapist.languages.join(', ') : 'English',
+    location: therapist.location || 'Online',
+    sessionTypes: sessionTypes.length ? sessionTypes : ['Video', 'Audio', 'Text'],
+    rates: {
+      session60: rate || undefined,
+    },
+  };
+};
+
+const withDevToken = (payload, responseBody) => {
+  if (process.env.NODE_ENV === 'production') return responseBody;
+  return {
+    ...responseBody,
+    token: jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' }),
+  };
+};
+
+// --- Session routes ---
+router.get('/session', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role === 'therapist') {
+      const { rows } = await pool.query('SELECT id, email, full_name FROM therapists WHERE id = $1', [req.user.id]);
+      if (!rows.length) return res.status(404).json({ error: 'Therapist not found' });
+      return res.json({ user: { ...rows[0], role: 'therapist' } });
+    }
+
+    const { rows } = await pool.query('SELECT id, email, full_name FROM users WHERE id = $1', [req.user.id]);
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    return res.json({ user: { ...rows[0], role: 'client' } });
+  } catch (err) {
+    console.error('GET /session error', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/refresh', async (req, res) => {
+  try {
+    const session = await rotateSession(req, res);
+    if (!session) return res.status(401).json({ error: 'Refresh session invalid or expired' });
+    return res.json({ user: session.user, csrfToken: session.csrfToken });
+  } catch (err) {
+    console.error('POST /refresh error', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/logout', authenticateToken, async (req, res) => {
+  try {
+    await revokeSession(req.user.sid);
+    clearAuthCookies(res);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('POST /logout error', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // --- Profile routes for clients ---
 // Get current user's profile
-router.get('/profile', require('../middleware/auth').authenticateToken, async (req, res) => {
+router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const { rows } = await pool.query('SELECT id, email, full_name, phone, dob, profile_picture, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications, created_at FROM users WHERE id = $1', [userId]);
@@ -25,8 +120,48 @@ router.get('/profile', require('../middleware/auth').authenticateToken, async (r
   }
 });
 
+router.get('/therapists', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, full_name, specialization, experience_years, years_experience, specialties,
+              session_types, rate_60min, NULL::text as profile_image_url, NULL::text as bio,
+              NULL::text[] as languages, status
+       FROM therapists
+       WHERE status = 'approved'
+       ORDER BY full_name ASC`
+    );
+
+    return res.json({ therapists: rows.map(therapistToPublic) });
+  } catch (err) {
+    console.error('GET /therapists error', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/therapists/:id', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, full_name, specialization, experience_years, years_experience, specialties,
+              session_types, rate_60min, NULL::text as profile_image_url, NULL::text as bio,
+              NULL::text[] as languages, status
+       FROM therapists
+       WHERE id = $1 AND status = 'approved'`,
+      [req.params.id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Therapist not found' });
+    }
+
+    return res.json({ therapist: therapistToPublic(rows[0]) });
+  } catch (err) {
+    console.error('GET /therapists/:id error', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Update current user's profile
-router.put('/profile', require('../middleware/auth').authenticateToken, async (req, res) => {
+router.put('/profile', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const { full_name, phone, dob, profile_picture, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications } = req.body;
@@ -80,12 +215,12 @@ router.post('/signup', async (req, res) => {
       // Continue even if email fails
     }
 
-    // Generate JWT
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
-      expiresIn: '7d',
-    });
+    const session = await createSession(req, res, user, 'client');
 
-    return res.json({ user, token });
+    return res.json(withDevToken(
+      { id: user.id, email: user.email, role: 'client', sid: session.sessionId },
+      { user, csrfToken: session.csrfToken }
+    ));
   } catch (err) {
     console.error('AUTH signup error', err);
     return res.status(500).json({ error: err.message });
@@ -108,7 +243,7 @@ router.post('/dev/create-test-user', async (req, res) => {
     const user = rows[0];
 
     // Generate JWT
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, email: user.email, role: 'client' }, getJwtSecret(), { expiresIn: '7d' });
 
     return res.json({ user, token, password: devPassword });
   } catch (err) {
@@ -138,8 +273,19 @@ router.post('/questionnaire', async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Save questionnaire to database (you can create a table for this)
-    // For now, we'll just send the email notification
+    let assignment = null;
+    try {
+      assignment = await autoAssignTherapist(user.id, {
+        mainConcerns: Array.isArray(concerns) ? concerns.join(', ') : '',
+        anxietySymptoms: Array.isArray(concerns) && concerns.includes('Anxiety') ? ['Anxiety'] : [],
+        moodSymptoms: Array.isArray(concerns) && concerns.includes('Depression') ? ['Depression'] : [],
+        traumaHistory: Array.isArray(concerns) && concerns.includes('Trauma') ? ['Trauma'] : [],
+        suicidalThoughts: false,
+        concernSeverity: 'moderate',
+      });
+    } catch (assignError) {
+      console.error('Questionnaire auto-assignment failed:', assignError);
+    }
 
     // Send email notification with all client info + questionnaire
     try {
@@ -155,7 +301,18 @@ router.post('/questionnaire', async (req, res) => {
       console.error('Failed to send questionnaire notification:', emailError);
     }
 
-    return res.json({ success: true, message: 'Questionnaire submitted successfully' });
+    return res.json({
+      success: true,
+      message: 'Questionnaire submitted successfully',
+      autoAssigned: Boolean(assignment),
+      therapist: assignment?.therapist
+        ? {
+            id: assignment.therapist.id,
+            name: assignment.therapist.full_name,
+            email: assignment.therapist.email,
+          }
+        : null,
+    });
   } catch (err) {
     console.error('Questionnaire error', err);
     return res.status(500).json({ error: err.message });
@@ -190,19 +347,19 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Generate JWT
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
-      expiresIn: '7d',
-    });
+    const session = await createSession(req, res, user, 'client');
 
-    return res.json({
-      user: {
+    return res.json(withDevToken(
+      { id: user.id, email: user.email, role: 'client', sid: session.sessionId },
+      {
+        user: {
         id: user.id,
         email: user.email,
         full_name: user.full_name,
       },
-      token,
-    });
+        csrfToken: session.csrfToken,
+      }
+    ));
   } catch (err) {
     console.error('AUTH login error', err);
     return res.status(500).json({ error: err.message });
@@ -234,8 +391,10 @@ router.post('/request-password-reset', async (req, res) => {
       [email, token, expires]
     );
 
-    // NOTE: we return the token in the response for now so it can be used without email delivery.
-    return res.json({ message: 'Password reset token generated', token });
+    return res.json({
+      message: 'Password reset token generated',
+      ...(process.env.NODE_ENV === 'production' ? {} : { token })
+    });
   } catch (err) {
     console.error('request-password-reset error', err);
     return res.status(500).json({ error: err.message });
@@ -256,7 +415,7 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Token expired' });
     }
 
-    const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    const hashed = await argon2.hash(newPassword);
     await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE email = $2', [hashed, row.email]);
     await pool.query('DELETE FROM password_resets WHERE token = $1', [token]);
 
@@ -343,19 +502,19 @@ router.post('/therapist/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Generate JWT
-    const token = jwt.sign({ id: therapist.id, email: therapist.email, role: 'therapist' }, JWT_SECRET, {
-      expiresIn: '7d',
-    });
+    const session = await createSession(req, res, therapist, 'therapist');
 
-    return res.json({
-      therapist: {
+    return res.json(withDevToken(
+      { id: therapist.id, email: therapist.email, role: 'therapist', sid: session.sessionId },
+      {
+        therapist: {
         id: therapist.id,
         email: therapist.email,
         full_name: therapist.full_name,
       },
-      token,
-    });
+        csrfToken: session.csrfToken,
+      }
+    ));
   } catch (err) {
     console.error('THERAPIST login error', err);
     return res.status(500).json({ error: err.message });
@@ -364,7 +523,7 @@ router.post('/therapist/login', async (req, res) => {
 
 // --- Reflection routes ---
 // Save reflection
-router.post('/reflection', require('../middleware/auth').authenticateToken, async (req, res) => {
+router.post('/reflection', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const { reflection_text } = req.body;
@@ -386,7 +545,7 @@ router.post('/reflection', require('../middleware/auth').authenticateToken, asyn
 });
 
 // Get reflections for current user
-router.get('/reflections', require('../middleware/auth').authenticateToken, async (req, res) => {
+router.get('/reflections', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const { rows } = await pool.query(
@@ -402,7 +561,7 @@ router.get('/reflections', require('../middleware/auth').authenticateToken, asyn
 });
 
 // Delete reflection
-router.delete('/reflection/:id', require('../middleware/auth').authenticateToken, async (req, res) => {
+router.delete('/reflection/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const reflectionId = req.params.id;

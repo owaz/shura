@@ -51,9 +51,11 @@ async function findMatchingTherapists(intakeFormData) {
     // Score each therapist based on specialty match and workload
     const scoredTherapists = therapists.map(therapist => {
       let score = 0;
-      const therapistSpecialties = therapist.specialties 
-        ? therapist.specialties.split(',').map(s => s.trim()) 
-        : [];
+      const therapistSpecialties = Array.isArray(therapist.specialties)
+        ? therapist.specialties
+        : therapist.specialties
+          ? therapist.specialties.split(',').map(s => s.trim())
+          : [];
 
       // Match score: +10 for each matching specialty
       neededSpecialties.forEach(needed => {
@@ -115,7 +117,12 @@ async function autoAssignTherapist(userId, intakeFormData) {
 
     if (existingAssignment.rows.length > 0) {
       console.log(`Client ${userId} already assigned to therapist ${bestMatch.id}`);
-      return existingAssignment.rows[0];
+      return {
+        assignment: existingAssignment.rows[0],
+        therapist: bestMatch,
+        matchScore: bestMatch.score,
+        matchedSpecialties: bestMatch.matchedSpecialties
+      };
     }
 
     // Create auto-assignment

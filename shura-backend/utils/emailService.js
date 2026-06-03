@@ -14,7 +14,7 @@ const createTransporter = () => {
     });
   } else {
     // Using regular password - requires less secure app access or OAuth2
-    return nodemailer.createTransporter({
+    return nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 587,
       secure: false,

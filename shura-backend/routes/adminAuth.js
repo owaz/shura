@@ -1,10 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'shura_super_secret_jwt_key_2024';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be configured in production');
+  }
+  return secret || 'shura_dev_jwt_secret_change_me';
+};
 const { requireAdmin } = require('../middleware/auth');
 
 router.post('/login', async (req, res) => {
@@ -18,7 +24,7 @@ router.post('/login', async (req, res) => {
     const admin = rows[0];
     const isValid = await bcrypt.compare(password, admin.password_hash);
     if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ id: admin.id, email: admin.email, role: admin.role, type: 'admin' }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: admin.id, email: admin.email, role: admin.role, type: 'admin' }, getJwtSecret(), { expiresIn: '7d' });
     return res.json({ admin: { id: admin.id, email: admin.email, full_name: admin.full_name, role: admin.role }, token });
   } catch (err) {
     return res.status(500).json({ error: err.message });

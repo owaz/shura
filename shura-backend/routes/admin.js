@@ -278,11 +278,17 @@ router.get('/therapists/pending', requireAdmin, async (req, res) => {
       ORDER BY created_at DESC`
     );
 
+    const toList = (value) => {
+      if (Array.isArray(value)) return value;
+      if (typeof value === 'string') return value.split(',').map(item => item.trim()).filter(Boolean);
+      return [];
+    };
+
     const pending = result.rows.map(t => ({
       ...t,
-      specialties: Array.isArray(t.specialties) ? t.specialties : [],
-      session_types: Array.isArray(t.session_types) ? t.session_types : [],
-      availability: Array.isArray(t.availability) ? t.availability : []
+      specialties: toList(t.specialties),
+      session_types: toList(t.session_types),
+      availability: toList(t.availability)
     }));
 
     res.json({ therapists: pending });

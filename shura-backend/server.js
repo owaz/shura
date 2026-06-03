@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const pool = require('./db'); // Import pool from db/index.js
 const { authenticateToken } = require('./middleware/auth');
+const { ACCESS_COOKIE, getJwtSecret, parseCookies } = require('./utils/sessionAuth');
 
 console.log('🚀 Starting Shura Backend...');
 console.log('Node version:', process.version);
@@ -23,20 +24,48 @@ const io = new Server(server, {
     credentials: true,
   }
 });
+app.set('io', io);
 
-// Socket.io authentication middleware (optional token)
-io.use((socket, next) => {
-  const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split?.(' ')[1];
-  if (!token) return next(); // allow anonymous for now
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return next(new Error('Invalid token'));
+// Socket.io authentication middleware
+io.use(async (socket, next) => {
+  try {
+    const cookies = parseCookies(socket.handshake.headers?.cookie || '');
+    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split?.(' ')[1] || cookies[ACCESS_COOKIE];
+    if (!token) return next(new Error('Authentication required'));
+
+    const user = jwt.verify(token, getJwtSecret());
+    if (user.sid) {
+      const { rows } = await pool.query(
+        'SELECT id FROM auth_sessions WHERE id = $1 AND revoked_at IS NULL AND expires_at > NOW()',
+        [user.sid]
+      );
+      if (!rows.length) return next(new Error('Session expired or revoked'));
+    }
+
     socket.user = user;
     next();
-  });
+  } catch (err) {
+    next(new Error('Invalid token'));
+  }
 });
 
 // Middleware
-app.use(express.json());
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  next();
+});
+app.use(express.json({
+  limit: '1mb',
+  verify: (req, res, buf) => {
+    if (req.originalUrl === '/api/payments/webhook') {
+      req.rawBody = buf;
+    }
+  }
+}));
 
 
 // Improved CORS configuration
@@ -104,6 +133,15 @@ if (chatRoutes) app.use('/api/chats', generalLimiter, chatRoutes);
 const callRoutes = require('./routes/calls');
 if (callRoutes) app.use('/api/calls', generalLimiter, callRoutes);
 
+const bookingRoutes = require('./routes/bookings');
+if (bookingRoutes) app.use('/api/bookings', generalLimiter, bookingRoutes);
+
+const paymentRoutes = require('./routes/payments');
+if (paymentRoutes) app.use('/api/payments', generalLimiter, paymentRoutes);
+
+const calendarRoutes = require('./routes/calendar');
+if (calendarRoutes) app.use('/api/calendar', generalLimiter, calendarRoutes);
+
 // Health check endpoints
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Shura API is running' });
@@ -134,6 +172,9 @@ app.use((err, req, res, next) => {
 // Socket.io signaling handlers for WebRTC
 io.on('connection', (socket) => {
   console.log(`🔌 Socket connected: ${socket.id}`);
+
+  const userRoom = `user:${socket.user.role}:${socket.user.id}`;
+  socket.join(userRoom);
 
   // Therapist/Client call signaling
   socket.on('call-offer', ({ to, offer, callType }) => {
@@ -214,6 +255,80 @@ async function runStartupMigrations() {
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS focus_areas TEXT");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_notifications BOOLEAN DEFAULT true");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_notifications BOOLEAN DEFAULT false");
+    await pool.query("ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_role VARCHAR(20) DEFAULT 'client'");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS client_id INTEGER");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS amount_cents INTEGER");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255)");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(255)");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP");
+    await pool.query(`CREATE TABLE IF NOT EXISTS auth_sessions (
+      id VARCHAR(64) PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      role VARCHAR(20) NOT NULL CHECK (role IN ('client', 'therapist')),
+      refresh_token_hash TEXT NOT NULL,
+      csrf_token TEXT NOT NULL,
+      user_agent TEXT,
+      ip_address TEXT,
+      expires_at TIMESTAMP NOT NULL,
+      revoked_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      last_used_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_role ON auth_sessions(user_id, role)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_auth_sessions_valid ON auth_sessions(id) WHERE revoked_at IS NULL');
+    await pool.query(`CREATE TABLE IF NOT EXISTS therapist_availability_rules (
+      id SERIAL PRIMARY KEY,
+      therapist_id INTEGER NOT NULL REFERENCES therapists(id) ON DELETE CASCADE,
+      day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+      start_time TIME NOT NULL,
+      end_time TIME NOT NULL,
+      slot_minutes INTEGER NOT NULL DEFAULT 30 CHECK (slot_minutes BETWEEN 15 AND 240),
+      timezone VARCHAR(80) NOT NULL DEFAULT 'Asia/Kolkata',
+      is_active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(therapist_id, day_of_week)
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS therapist_blocked_times (
+      id SERIAL PRIMARY KEY,
+      therapist_id INTEGER NOT NULL REFERENCES therapists(id) ON DELETE CASCADE,
+      starts_at TIMESTAMPTZ NOT NULL,
+      ends_at TIMESTAMPTZ NOT NULL,
+      reason TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      CHECK (ends_at > starts_at)
+    )`);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_therapist_blocked_times_range ON therapist_blocked_times(therapist_id, starts_at, ends_at)');
+    await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_no_double_booking ON bookings(therapist_id, date, time) WHERE status != 'cancelled'");
+    await pool.query(`CREATE TABLE IF NOT EXISTS therapist_calendar_integrations (
+      id SERIAL PRIMARY KEY,
+      therapist_id INTEGER NOT NULL REFERENCES therapists(id) ON DELETE CASCADE,
+      provider VARCHAR(30) NOT NULL,
+      provider_account_id TEXT,
+      provider_account_email TEXT,
+      access_token_enc TEXT,
+      refresh_token_enc TEXT,
+      scopes TEXT,
+      expires_at TIMESTAMP,
+      status VARCHAR(30) DEFAULT 'connected',
+      last_error TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(therapist_id, provider)
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS booking_calendar_events (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      integration_id INTEGER NOT NULL REFERENCES therapist_calendar_integrations(id) ON DELETE CASCADE,
+      provider VARCHAR(30) NOT NULL,
+      provider_event_id TEXT,
+      provider_event_url TEXT,
+      sync_status VARCHAR(30) DEFAULT 'pending',
+      last_error TEXT,
+      synced_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(booking_id, integration_id)
+    )`);
     // Add other lightweight migration steps here if needed in future
     console.log('✅ Startup migrations applied');
   } catch (err) {
