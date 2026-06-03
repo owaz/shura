@@ -33,8 +33,7 @@ import TherapistChatPage from './pages/therapist-portal/TherapistChatPage';
 import TherapistIntakeFormsPage from './pages/therapist-portal/TherapistIntakeFormsPage';
 import IntakeFormPage from './pages/IntakeFormPage';
 import IntakeSuccessPage from './pages/IntakeSuccessPage';
-
-const API_URL = 'http://localhost:5001/api';
+import { apiUrl } from './config/api';
 
 const NewsletterSignup: React.FC = () => {
   const [name, setName] = useState('');
@@ -51,7 +50,7 @@ const NewsletterSignup: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch(`${API_URL}/newsletter/subscribe`, {
+      const response = await fetch(apiUrl('/newsletter/subscribe'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, name, optIn }),
