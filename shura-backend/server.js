@@ -113,28 +113,33 @@ app.use(cors({
 console.log('✅ CORS enabled for all localhost, 127.0.0.1, and custom env origins');
 
 // Rate limiting
-const generalLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 200 });
+const limiterDefaults = { standardHeaders: true, legacyHeaders: false };
+const generalLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, max: 200 });
+const authLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, max: 60 });
+const uploadLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 60 * 1000, max: 30 });
+const newsletterLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 60 * 1000, max: 20 });
+const intakeLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, max: 50 });
 
 // Routes
 const authRoutes = require('./routes/auth');
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 
 const uploadRoutes = require('./routes/upload');
-app.use('/api/upload', uploadRoutes);
+app.use('/api/upload', uploadLimiter, uploadRoutes);
 
 const newsletterRoutes = require('./routes/newsletter');
-app.use('/api/newsletter', newsletterRoutes);
+app.use('/api/newsletter', newsletterLimiter, newsletterRoutes);
 
 const intakeRoutes = require('./routes/intake');
 const therapistIntakeRoutes = require('./routes/therapist-intake');
-app.use('/api/intake', intakeRoutes);
+app.use('/api/intake', intakeLimiter, intakeRoutes);
 app.use('/api/therapist/intake', authenticateToken, therapistIntakeRoutes);
 
 const adminRoutes = require('./routes/admin');
 app.use('/api/admin', adminRoutes);
 
 const adminAuthRoutes = require('./routes/adminAuth');
-app.use('/api/admin/auth', adminAuthRoutes);
+app.use('/api/admin/auth', authLimiter, adminAuthRoutes);
 
 // Dev routes (local-only helpers)
 try {
