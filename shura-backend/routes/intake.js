@@ -4,14 +4,36 @@ const crypto = require('crypto');
 const pool = require('../db');
 const { sendIntakeFormLink, sendIntakeFormSubmission } = require('../utils/emailService');
 const { autoAssignTherapist } = require('../utils/matchingService');
+const { authenticateToken } = require('../middleware/auth');
+
+const frontendBaseUrl = () => (process.env.FRONTEND_URL || 'http://localhost:3006').replace(/\/$/, '');
+const isAdminUser = (user) => user?.role === 'admin' || user?.type === 'admin';
+
+const canIssueIntakeLink = async (requester, userId) => {
+  if (isAdminUser(requester)) return true;
+  if (requester?.role !== 'therapist') return false;
+
+  const { rows } = await pool.query(
+    `SELECT id FROM therapist_clients
+     WHERE therapist_id = $1 AND client_id = $2 AND status = 'active'
+     LIMIT 1`,
+    [requester.id, userId]
+  );
+  return rows.length > 0;
+};
 
 // Generate intake form link and send to client
-router.post('/generate-link', async (req, res) => {
+router.post('/generate-link', authenticateToken, async (req, res) => {
   try {
     const { userId } = req.body;
 
     if (!userId) {
       return res.status(400).json({ message: 'User ID is required' });
+    }
+
+    const allowed = await canIssueIntakeLink(req.user, userId);
+    if (!allowed) {
+      return res.status(403).json({ message: 'Not authorized to generate an intake link for this client' });
     }
 
     // Get user info
@@ -40,7 +62,7 @@ router.post('/generate-link', async (req, res) => {
     );
 
     // Send email with link
-    const intakeLink = `http://localhost:3000/intake/${token}`;
+    const intakeLink = `${frontendBaseUrl()}/intake/${token}`;
     await sendIntakeFormLink(user.email, user.full_name, intakeLink);
 
     res.json({ 
@@ -177,12 +199,15 @@ router.post('/submit', async (req, res) => {
 });
 
 // Get all intake forms for a therapist's clients
-router.get('/therapist/:therapistId', async (req, res) => {
+router.get('/therapist/:therapistId', authenticateToken, async (req, res) => {
   try {
     const { therapistId } = req.params;
 
-    // Get all completed intake forms with user info
-    // For now, get all forms (later we'll filter by therapist-client relationship)
+    if (req.user.role !== 'therapist' || Number(req.user.id) !== Number(therapistId)) {
+      return res.status(403).json({ message: 'Therapist access required' });
+    }
+
+    // Get completed intake forms for this therapist's active clients.
     const result = await pool.query(
       `SELECT 
         if.id,
@@ -223,8 +248,10 @@ router.get('/therapist/:therapistId', async (req, res) => {
         if.additional_info
        FROM intake_forms if
        JOIN users u ON if.user_id = u.id
+       JOIN therapist_clients tc ON tc.client_id = if.user_id
+       WHERE tc.therapist_id = $1 AND tc.status = 'active'
        ORDER BY if.submitted_at DESC`,
-      []
+      [therapistId]
     );
 
     res.json({ intakeForms: result.rows });
