@@ -29,16 +29,24 @@ const parseCookies = (cookieHeader = '') => {
 const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 const randomToken = () => crypto.randomBytes(32).toString('base64url');
 
+const getCookieSameSite = () => {
+  const configured = (process.env.COOKIE_SAME_SITE || '').toLowerCase();
+  if (['lax', 'strict', 'none'].includes(configured)) return configured;
+  return process.env.NODE_ENV === 'production' ? 'none' : 'lax';
+};
+
+const shouldUseSecureCookies = () => process.env.NODE_ENV === 'production' || getCookieSameSite() === 'none';
+
 const cookieOptions = (maxAge, httpOnly = true) => ({
   httpOnly,
-  secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  secure: shouldUseSecureCookies(),
+  sameSite: getCookieSameSite(),
   path: '/',
   maxAge,
 });
 
 const clearAuthCookies = (res) => {
-  const base = { path: '/', sameSite: 'lax', secure: process.env.NODE_ENV === 'production' };
+  const base = { path: '/', sameSite: getCookieSameSite(), secure: shouldUseSecureCookies() };
   res.clearCookie(ACCESS_COOKIE, { ...base, httpOnly: true });
   res.clearCookie(REFRESH_COOKIE, { ...base, httpOnly: true });
   res.clearCookie(CSRF_COOKIE, { ...base, httpOnly: false });
@@ -91,7 +99,9 @@ const rotateSession = async (req, res) => {
 
   const [sessionId, refreshToken] = refreshCookie.split('.', 2);
   const { rows } = await pool.query(
-    `SELECT s.*, COALESCE(u.email, t.email) as email
+    `SELECT s.*,
+            COALESCE(u.email, t.email) as email,
+            COALESCE(u.full_name, t.full_name) as full_name
      FROM auth_sessions s
      LEFT JOIN users u ON u.id = s.user_id AND s.role = 'client'
      LEFT JOIN therapists t ON t.id = s.user_id AND s.role = 'therapist'
@@ -117,7 +127,7 @@ const rotateSession = async (req, res) => {
   res.cookie(CSRF_COOKIE, nextCsrfToken, cookieOptions(refreshMaxAgeMs, false));
 
   return {
-    user: { id: session.user_id, email: session.email, role: session.role },
+    user: { id: session.user_id, email: session.email, full_name: session.full_name, role: session.role },
     csrfToken: nextCsrfToken,
     accessToken,
     sessionId,

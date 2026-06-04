@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, UserIcon } from '../../components/Icons';
+import { apiFetch } from '../../config/api';
 
 interface IntakeForm {
   id: number;
@@ -52,10 +53,15 @@ const TherapistIntakeFormsPage: React.FC = () => {
 
   const fetchIntakeForms = async () => {
     try {
-      // TODO: Get actual therapist ID from auth context
-      const therapistId = 1;
-      
-      const response = await fetch(`http://localhost:5001/api/intake/therapist/${therapistId}`);
+      const storedUser = localStorage.getItem('shura-current-user');
+      const therapistId = storedUser ? JSON.parse(storedUser).id : null;
+
+      if (!therapistId) {
+        setError('Therapist session not found. Please log in again.');
+        return;
+      }
+
+      const response = await apiFetch(`/intake/therapist/${therapistId}`);
       const data = await response.json();
 
       if (response.ok) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useParams } from 'react-router-dom';
 import { ChevronLeftIcon, ChevronRightIcon, CheckIcon } from '../components/Icons';
 import { Logo } from '../components/Logo';
+import { apiFetch } from '../config/api';
 
 const totalSteps = 3;
 
@@ -58,7 +59,7 @@ const IntakeFormPage: React.FC = () => {
     const verifyToken = async () => {
       try {
         console.log('Verifying token:', token);
-        const response = await fetch(`http://localhost:5001/api/intake/verify/${token}`, {
+        const response = await apiFetch(`/intake/verify/${token}`, {
           signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
@@ -157,7 +158,7 @@ const IntakeFormPage: React.FC = () => {
     };
 
     try {
-      const response = await fetch('http://localhost:5001/api/intake/submit', {
+      const response = await apiFetch('/intake/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData)

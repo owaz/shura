@@ -53,11 +53,11 @@ railway up
 
 ### Step 5: Run Database Migrations
 ```bash
-# Via Railway CLI
+# Via Railway CLI from shura-backend
 railway run npm run migrate
-
-# Or connect to Railway's PostgreSQL and run SQL files manually
 ```
+
+The migration runner applies every SQL file in `migrations/` once and stores applied file names in `schema_migrations`.
 
 ### Your Backend URL
 Railway will provide: `https://shura-backend.up.railway.app`
@@ -67,18 +67,10 @@ Railway will provide: `https://shura-backend.up.railway.app`
 ## Database Setup
 
 ### Create Tables
-Run these SQL commands in your production PostgreSQL:
+Run the checked-in migrations instead of manually copying table definitions:
 
-```sql
--- See ../database/schema.sql for full schema
--- Run each table creation in order:
--- 1. users
--- 2. therapists  
--- 3. admins
--- 4. intake_forms
--- 5. bookings
--- 6. payments
--- etc.
+```bash
+npm run migrate
 ```
 
 ### Seed Data (Optional)

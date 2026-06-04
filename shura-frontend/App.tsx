@@ -33,8 +33,7 @@ import TherapistChatPage from './pages/therapist-portal/TherapistChatPage';
 import TherapistIntakeFormsPage from './pages/therapist-portal/TherapistIntakeFormsPage';
 import IntakeFormPage from './pages/IntakeFormPage';
 import IntakeSuccessPage from './pages/IntakeSuccessPage';
-
-const API_URL = 'http://localhost:5001/api';
+import { apiFetch } from './config/api';
 
 const NewsletterSignup: React.FC = () => {
   const [name, setName] = useState('');
@@ -51,7 +50,7 @@ const NewsletterSignup: React.FC = () => {
     setError('');
 
     try {
-      const response = await fetch(`${API_URL}/newsletter/subscribe`, {
+      const response = await apiFetch('/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, name, optIn }),
@@ -207,7 +206,7 @@ const App: React.FC = () => {
           <Route path="/intake-success" element={<IntakeSuccessPage />} />
 
           {/* Therapist Portal Routes */}
-          <Route element={<ProtectedRoute />}>
+          <Route element={<ProtectedRoute allowedRoles={['therapist']} redirectTo="/therapist-login" />}>
             <Route element={<TherapistPortalLayout />}>
               <Route path="/therapist-portal/dashboard" element={<TherapistDashboardPage />} />
               <Route path="/therapist-portal/calendar" element={<TherapistCalendarPage />} />
