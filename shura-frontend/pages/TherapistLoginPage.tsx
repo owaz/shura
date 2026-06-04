@@ -8,26 +8,13 @@ const TherapistLoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { therapistLogin } = useAuth();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (email && password) {
       try {
-        const response = await fetch('http://localhost:5001/api/auth/therapist/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Login failed');
-        }
-        const data = await response.json();
-        // For now, just navigate; in full implementation, set auth context
-        localStorage.setItem('shura-auth-token', data.token);
-        localStorage.setItem('shura-current-user', JSON.stringify(data.therapist));
-        localStorage.setItem('shura-auth', 'true');
+        await therapistLogin(email, password);
         navigate('/therapist-portal/dashboard');
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Login failed. Please try again.');

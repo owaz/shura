@@ -42,9 +42,9 @@ const Header: React.FC = () => {
     navigate('/login-hub');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     closeAllMenus();
-    logout();
+    await logout();
     navigate('/');
   };
   

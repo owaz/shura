@@ -6,7 +6,7 @@ const pool = require('../db'); // Properly import the pool
 const { sendTherapistApplicationNotification, sendClientSignupNotification } = require('../utils/emailService');
 const { autoAssignTherapist } = require('../utils/matchingService');
 const { authenticateToken } = require('../middleware/auth');
-const { clearAuthCookies, createSession, revokeSession, rotateSession } = require('../utils/sessionAuth');
+const { CSRF_COOKIE, REFRESH_COOKIE, clearAuthCookies, createSession, parseCookies, revokeSession, rotateSession } = require('../utils/sessionAuth');
 const router = express.Router();
 
 const getJwtSecret = () => {
@@ -69,15 +69,19 @@ const withDevToken = (payload, responseBody) => {
 // --- Session routes ---
 router.get('/session', authenticateToken, async (req, res) => {
   try {
+    const csrfToken = req.user.sid
+      ? (await pool.query('SELECT csrf_token FROM auth_sessions WHERE id = $1', [req.user.sid])).rows[0]?.csrf_token
+      : null;
+
     if (req.user.role === 'therapist') {
       const { rows } = await pool.query('SELECT id, email, full_name FROM therapists WHERE id = $1', [req.user.id]);
       if (!rows.length) return res.status(404).json({ error: 'Therapist not found' });
-      return res.json({ user: { ...rows[0], role: 'therapist' } });
+      return res.json({ user: { ...rows[0], role: 'therapist' }, csrfToken });
     }
 
     const { rows } = await pool.query('SELECT id, email, full_name FROM users WHERE id = $1', [req.user.id]);
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    return res.json({ user: { ...rows[0], role: 'client' } });
+    return res.json({ user: { ...rows[0], role: 'client' }, csrfToken });
   } catch (err) {
     console.error('GET /session error', err);
     return res.status(500).json({ error: err.message });
@@ -95,13 +99,23 @@ router.post('/refresh', async (req, res) => {
   }
 });
 
-router.post('/logout', authenticateToken, async (req, res) => {
+router.post('/logout', async (req, res) => {
   try {
-    await revokeSession(req.user.sid);
+    const cookies = parseCookies(req.headers.cookie || '');
+    const csrfHeader = req.headers['x-csrf-token'];
+    if (cookies[CSRF_COOKIE] && csrfHeader !== cookies[CSRF_COOKIE]) {
+      return res.status(403).json({ error: 'Invalid CSRF token' });
+    }
+
+    const refreshCookie = cookies[REFRESH_COOKIE];
+    const refreshSessionId = refreshCookie?.includes('.') ? refreshCookie.split('.', 1)[0] : null;
+
+    await revokeSession(refreshSessionId);
     clearAuthCookies(res);
     return res.json({ success: true });
   } catch (err) {
     console.error('POST /logout error', err);
+    clearAuthCookies(res);
     return res.status(500).json({ error: err.message });
   }
 });

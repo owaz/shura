@@ -15,12 +15,34 @@ console.log('Node version:', process.version);
 
 // Express setup
 const app = express();
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 const server = http.createServer(app);
+
+const configuredOrigins = () => {
+  const envOrigins = [
+    process.env.FRONTEND_URLS,
+    process.env.FRONTEND_URL,
+    process.env.ALLOWED_ORIGINS,
+  ]
+    .filter(Boolean)
+    .flatMap((value) => value.split(',').map((origin) => origin.trim()).filter(Boolean));
+
+  return [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3003',
+    'http://localhost:3005',
+    'http://localhost:3006',
+    ...envOrigins,
+  ];
+};
 
 // Socket.io setup
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:3001', 'http://localhost:3003', 'http://localhost:3005', process.env.FRONTEND_URL].filter(Boolean),
+    origin: configuredOrigins(),
     credentials: true,
   }
 });
@@ -80,8 +102,7 @@ app.use(cors({
     }
 
     // Allow custom origins from env
-    const allowedOriginsEnv = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || '';
-    const allowedOrigins = allowedOriginsEnv.split(',').map(s => s.trim()).filter(Boolean);
+    const allowedOrigins = configuredOrigins();
     if (allowedOrigins.includes(origin)) return callback(null, true);
 
     return callback(new Error('CORS not allowed by server'), false);
