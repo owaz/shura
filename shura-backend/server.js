@@ -354,6 +354,9 @@ async function runStartupMigrations() {
     console.log('✅ Startup migrations applied');
   } catch (err) {
     console.error('Startup migration error:', err);
+    if (process.env.NODE_ENV === 'production') {
+      throw err;
+    }
     // Don't crash the server for migration failures in dev; continue and let endpoints handle errors
   }
 }

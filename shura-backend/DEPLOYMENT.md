@@ -44,8 +44,11 @@ FRONTEND_URL=https://your-frontend-domain.com
 
 2. **Run migrations:**
    ```bash
-   psql -U postgres -d shura_production < intake_schema.sql
+   npm install
+   npm run migrate
    ```
+
+   The migration runner applies SQL files from `migrations/` in filename order and records completed files in `schema_migrations`.
 
 3. **Backup strategy:**
    - Set up automated daily backups
@@ -130,8 +133,7 @@ app.use(cors({
 
 6. **Run migrations:**
    ```bash
-   heroku run bash
-   psql $DATABASE_URL < intake_schema.sql
+   heroku run npm run migrate
    ```
 
 ### Option C: DigitalOcean Droplet
