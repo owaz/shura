@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDownIcon, ChevronUpIcon, UserIcon } from '../../components/Icons';
-import { apiUrl } from '../../config/api';
+import { apiFetch } from '../../config/api';
 
 interface IntakeForm {
   id: number;
@@ -61,7 +61,7 @@ const TherapistIntakeFormsPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch(apiUrl(`/intake/therapist/${therapistId}`));
+      const response = await apiFetch(`/intake/therapist/${therapistId}`);
       const data = await response.json();
 
       if (response.ok) {

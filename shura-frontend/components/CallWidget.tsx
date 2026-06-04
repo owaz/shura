@@ -34,7 +34,7 @@ export default function CallWidget({ roomId: initialRoomId = 'test-room', audioO
 
   const ensureSocket = () => {
     if (socket) return socket;
-    const s = io(socketUrl(), { transports: ['websocket'] });
+    const s = io(socketUrl(), { transports: ['websocket'], withCredentials: true });
     setSocket(s);
     return s;
   };

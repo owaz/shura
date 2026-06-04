@@ -125,7 +125,8 @@ const TherapistChatPage: React.FC = () => {
                 transports: ['websocket'],
                 reconnection: true,
                 reconnectionDelay: 1000,
-                timeout: 10000
+                timeout: 10000,
+                withCredentials: true
             });
         }
         return socketRef.current;

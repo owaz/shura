@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ChevronLeftIcon, ChevronRightIcon, CheckIcon } from '../components/Icons';
 import { Logo } from '../components/Logo';
-import { apiUrl } from '../config/api';
+import { apiFetch } from '../config/api';
 
 const totalSteps = 4;
 const sessionTypesOptions = ['Video', 'Audio', 'Text'];
@@ -59,7 +59,7 @@ const TherapistOnboardingPage: React.FC = () => {
       return;
     }
     try {
-      const response = await fetch(apiUrl('/auth/therapist/apply'), {
+      const response = await apiFetch('/auth/therapist/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
