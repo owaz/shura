@@ -1,5 +1,30 @@
 const nodemailer = require('nodemailer');
 
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
+
+const textOrFallback = (value, fallback = 'N/A') => {
+  if (value === undefined || value === null || value === '') return fallback;
+  return escapeHtml(value);
+};
+
+const listOrFallback = (value, fallback = 'None selected') => {
+  if (!Array.isArray(value) || value.length === 0) return fallback;
+  return value.map((item) => escapeHtml(item)).join(', ');
+};
+
+const multilineOrFallback = (value, fallback = 'Not provided') => {
+  if (value === undefined || value === null || value === '') return fallback;
+  return escapeHtml(value).replace(/\n/g, '<br/>');
+};
+
+const frontendBaseUrl = () => (process.env.FRONTEND_URL || 'http://localhost:3006').replace(/\/$/, '');
+const frontendUrl = (path = '/') => `${frontendBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
+
 // Create reusable transporter
 const createTransporter = () => {
   // Check if we're using App Password or regular Gmail
@@ -50,39 +75,39 @@ const sendTherapistApplicationNotification = async (therapistData) => {
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
               <tr style="background-color: #f8f5f0;">
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Full Name:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${therapistData.fullName}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.fullName)}</td>
               </tr>
               <tr>
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Email:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${therapistData.email}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.email)}</td>
               </tr>
               <tr style="background-color: #f8f5f0;">
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Phone:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${therapistData.phone || 'N/A'}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.phone)}</td>
               </tr>
               <tr>
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">License Number:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${therapistData.licenseNumber || 'N/A'}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.licenseNumber)}</td>
               </tr>
               <tr style="background-color: #f8f5f0;">
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Experience:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${therapistData.experience} years</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.experience)} years</td>
               </tr>
               <tr>
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Specialties:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${therapistData.specialties || 'N/A'}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.specialties)}</td>
               </tr>
               <tr style="background-color: #f8f5f0;">
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Session Types:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${therapistData.sessionTypes ? therapistData.sessionTypes.join(', ') : 'N/A'}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${Array.isArray(therapistData.sessionTypes) && therapistData.sessionTypes.length > 0 ? listOrFallback(therapistData.sessionTypes, 'N/A') : 'N/A'}</td>
               </tr>
               <tr>
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Rate (60 min):</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">₹${therapistData.rate60min || 'N/A'}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">₹${textOrFallback(therapistData.rate60min)}</td>
               </tr>
               <tr style="background-color: #f8f5f0;">
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Availability:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${therapistData.availability || 'N/A'}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.availability)}</td>
               </tr>
               <tr>
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Applied On:</td>
@@ -95,8 +120,8 @@ const sendTherapistApplicationNotification = async (therapistData) => {
               <p style="color: #555; line-height: 1.6;">
                 1. Log in to your PostgreSQL database<br>
                 2. Review the application details<br>
-                3. To approve: <code style="background: #fff; padding: 2px 6px; border-radius: 3px;">UPDATE therapists SET status = 'approved' WHERE email = '${therapistData.email}';</code><br>
-                4. To reject: <code style="background: #fff; padding: 2px 6px; border-radius: 3px;">UPDATE therapists SET status = 'rejected' WHERE email = '${therapistData.email}';</code>
+                3. To approve: <code style="background: #fff; padding: 2px 6px; border-radius: 3px;">UPDATE therapists SET status = 'approved' WHERE email = '${textOrFallback(therapistData.email)}';</code><br>
+                4. To reject: <code style="background: #fff; padding: 2px 6px; border-radius: 3px;">UPDATE therapists SET status = 'rejected' WHERE email = '${textOrFallback(therapistData.email)}';</code>
               </p>
             </div>
           </div>
@@ -133,7 +158,7 @@ const sendTherapistApprovalEmail = async (therapistEmail, therapistName) => {
           </div>
           
           <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #333;">Dear ${therapistName},</p>
+            <p style="font-size: 16px; color: #333;">Dear ${textOrFallback(therapistName)},</p>
             
             <p style="font-size: 16px; color: #333; line-height: 1.6;">
               Congratulations! Your application to join Shura's therapist network has been <strong style="color: #8B7355;">approved</strong>. 
@@ -151,7 +176,7 @@ const sendTherapistApprovalEmail = async (therapistEmail, therapistName) => {
             </div>
             
             <div style="text-align: center; margin: 30px 0;">
-              <a href="http://localhost:3000/therapist-login" style="display: inline-block; background-color: #8B7355; color: #ffffff; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+              <a href="${frontendUrl('/therapist-login')}" style="display: inline-block; background-color: #8B7355; color: #ffffff; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
                 Login to Your Portal
               </a>
             </div>
@@ -205,15 +230,15 @@ const sendClientSignupNotification = async (clientData) => {
             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
               <tr style="background-color: #f8f5f0;">
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Full Name:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${clientData.fullName || 'Not provided'}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(clientData.fullName, 'Not provided')}</td>
               </tr>
               <tr>
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Email:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${clientData.email}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(clientData.email)}</td>
               </tr>
               <tr style="background-color: #f8f5f0;">
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">User ID:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">#${clientData.userId}</td>
+                <td style="padding: 12px; border: 1px solid #ddd;">#${textOrFallback(clientData.userId)}</td>
               </tr>
               <tr>
                 <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Signed Up On:</td>
@@ -227,17 +252,17 @@ const sendClientSignupNotification = async (clientData) => {
               
               <div style="margin-bottom: 15px;">
                 <strong style="color: #8B7355;">Primary Concerns:</strong><br>
-                <span style="color: #555;">${clientData.concerns.join(', ')}</span>
+                <span style="color: #555;">${listOrFallback(clientData.concerns)}</span>
               </div>
               
               <div style="margin-bottom: 15px;">
                 <strong style="color: #8B7355;">Therapist Gender Preference:</strong><br>
-                <span style="color: #555;">${clientData.genderPreference}</span>
+                <span style="color: #555;">${textOrFallback(clientData.genderPreference, 'Not provided')}</span>
               </div>
               
               <div>
                 <strong style="color: #8B7355;">Additional Notes:</strong><br>
-                <span style="color: #555; white-space: pre-wrap;">${clientData.additionalNotes}</span>
+                <span style="color: #555; white-space: pre-wrap;">${textOrFallback(clientData.additionalNotes, 'Not provided')}</span>
               </div>
             </div>
             ` : `
@@ -266,7 +291,7 @@ const sendClientSignupNotification = async (clientData) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`✅ Client signup notification sent to admin for: ${clientData.email}`);
+    console.log(`✅ Client signup notification sent to admin for: ${textOrFallback(clientData.email)}`);
     return { success: true };
   } catch (error) {
     console.error('❌ Error sending client signup email:', error);
@@ -290,7 +315,7 @@ const sendIntakeFormLink = async (clientEmail, clientName, intakeLink) => {
           </div>
           
           <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #333;">Dear ${clientName},</p>
+            <p style="font-size: 16px; color: #333;">Dear ${textOrFallback(clientName)},</p>
             
             <p style="color: #555; line-height: 1.6;">
               Thank you for choosing Shura for your mental health journey. To help us provide you with the best possible care, 
@@ -302,7 +327,7 @@ const sendIntakeFormLink = async (clientEmail, clientName, intakeLink) => {
             </p>
             
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${intakeLink}" 
+              <a href="${escapeHtml(intakeLink)}" 
                  style="background-color: #8B7355; color: #ffffff; padding: 15px 40px; text-decoration: none; 
                         border-radius: 8px; font-weight: bold; display: inline-block; font-size: 16px;">
                 Complete Intake Form
@@ -347,7 +372,7 @@ const sendIntakeFormSubmission = async (clientEmail, clientName, formData) => {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.ADMIN_EMAIL,
-      subject: `📋 Intake Form Completed - ${clientName}`,
+      subject: `📋 Intake Form Completed - ${String(clientName || 'Client')}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
           <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -356,54 +381,54 @@ const sendIntakeFormSubmission = async (clientEmail, clientName, formData) => {
           
           <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
             <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px;">Client Information</h2>
-            <p><strong>Name:</strong> ${clientName}</p>
-            <p><strong>Email:</strong> ${clientEmail}</p>
+            <p><strong>Name:</strong> ${textOrFallback(clientName)}</p>
+            <p><strong>Email:</strong> ${textOrFallback(clientEmail)}</p>
             
             <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Personal & Background</h2>
-            <p><strong>Marital Status:</strong> ${formData.maritalStatus || 'Not provided'}</p>
-            <p><strong>Children:</strong> ${formData.hasChildren === 'Yes' ? `Yes - ${formData.childrenDetails}` : formData.hasChildren || 'Not provided'}</p>
-            <p><strong>Living Situation:</strong> ${formData.livingSituation || 'Not provided'}</p>
-            <p><strong>Religious Practice:</strong> ${formData.religiousPractice || 'Not provided'}</p>
-            <p><strong>Prayer Frequency:</strong> ${formData.prayerFrequency || 'Not provided'}</p>
-            <p><strong>Quran Engagement:</strong> ${formData.quranEngagement || 'Not provided'}</p>
-            <p><strong>Community Involvement:</strong> ${formData.communityInvolvement || 'Not provided'}</p>
+            <p><strong>Marital Status:</strong> ${textOrFallback(formData.maritalStatus, 'Not provided')}</p>
+            <p><strong>Children:</strong> ${formData.hasChildren === 'Yes' ? `Yes - ${textOrFallback(formData.childrenDetails, 'Not provided')}` : textOrFallback(formData.hasChildren, 'Not provided')}</p>
+            <p><strong>Living Situation:</strong> ${textOrFallback(formData.livingSituation, 'Not provided')}</p>
+            <p><strong>Religious Practice:</strong> ${textOrFallback(formData.religiousPractice, 'Not provided')}</p>
+            <p><strong>Prayer Frequency:</strong> ${textOrFallback(formData.prayerFrequency, 'Not provided')}</p>
+            <p><strong>Quran Engagement:</strong> ${textOrFallback(formData.quranEngagement, 'Not provided')}</p>
+            <p><strong>Community Involvement:</strong> ${textOrFallback(formData.communityInvolvement, 'Not provided')}</p>
             
             <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Mental Health Concerns</h2>
-            <p><strong>Main Concerns:</strong><br/>${formData.mainConcerns?.replace(/\n/g, '<br/>') || 'Not provided'}</p>
-            <p><strong>Duration:</strong> ${formData.concernDuration || 'Not provided'}</p>
-            <p><strong>Severity:</strong> ${formData.concernSeverity || 'Not provided'}/10</p>
-            <p><strong>Therapy Goals:</strong><br/>${formData.therapyGoals?.replace(/\n/g, '<br/>') || 'Not provided'}</p>
+            <p><strong>Main Concerns:</strong><br/>${multilineOrFallback(formData.mainConcerns)}</p>
+            <p><strong>Duration:</strong> ${textOrFallback(formData.concernDuration, 'Not provided')}</p>
+            <p><strong>Severity:</strong> ${textOrFallback(formData.concernSeverity, 'Not provided')}/10</p>
+            <p><strong>Therapy Goals:</strong><br/>${multilineOrFallback(formData.therapyGoals)}</p>
             
-            <p><strong>Mood Symptoms:</strong> ${formData.moodSymptoms?.length > 0 ? formData.moodSymptoms.join(', ') : 'None selected'}</p>
-            <p><strong>Anxiety Symptoms:</strong> ${formData.anxietySymptoms?.length > 0 ? formData.anxietySymptoms.join(', ') : 'None selected'}</p>
-            <p><strong>Sleep Issues:</strong> ${formData.sleepIssues?.length > 0 ? formData.sleepIssues.join(', ') : 'None selected'}</p>
+            <p><strong>Mood Symptoms:</strong> ${listOrFallback(formData.moodSymptoms)}</p>
+            <p><strong>Anxiety Symptoms:</strong> ${listOrFallback(formData.anxietySymptoms)}</p>
+            <p><strong>Sleep Issues:</strong> ${listOrFallback(formData.sleepIssues)}</p>
             
             <p style="background-color: ${formData.suicidalThoughts === 'Yes, currently' ? '#ffebee' : '#f5f5f5'}; padding: 10px; border-radius: 5px;">
-              <strong>Suicidal Thoughts:</strong> ${formData.suicidalThoughts || 'Not provided'}
-              ${formData.suicidalDetails ? `<br/><strong>Details:</strong> ${formData.suicidalDetails}` : ''}
+              <strong>Suicidal Thoughts:</strong> ${textOrFallback(formData.suicidalThoughts, 'Not provided')}
+              ${formData.suicidalDetails ? `<br/><strong>Details:</strong> ${textOrFallback(formData.suicidalDetails)}` : ''}
             </p>
             
             <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Health & Support</h2>
-            <p><strong>Trauma History:</strong> ${formData.traumaHistory?.length > 0 ? formData.traumaHistory.join(', ') : 'None selected'}</p>
-            <p><strong>Relationship Quality:</strong> ${formData.relationshipQuality || 'Not provided'}</p>
-            <p><strong>Relationship Difficulties:</strong> ${formData.relationshipDifficulties?.length > 0 ? formData.relationshipDifficulties.join(', ') : 'None selected'}</p>
-            <p><strong>Social Support:</strong> ${formData.socialSupport || 'Not provided'}</p>
+            <p><strong>Trauma History:</strong> ${listOrFallback(formData.traumaHistory)}</p>
+            <p><strong>Relationship Quality:</strong> ${textOrFallback(formData.relationshipQuality, 'Not provided')}</p>
+            <p><strong>Relationship Difficulties:</strong> ${listOrFallback(formData.relationshipDifficulties)}</p>
+            <p><strong>Social Support:</strong> ${textOrFallback(formData.socialSupport, 'Not provided')}</p>
             
-            <p><strong>Physical Health:</strong> ${formData.physicalHealth || 'Not provided'}</p>
-            <p><strong>Medical Conditions:</strong> ${formData.medicalConditions || 'Not provided'}</p>
-            <p><strong>Current Medications:</strong> ${formData.currentMedications || 'Not provided'}</p>
+            <p><strong>Physical Health:</strong> ${textOrFallback(formData.physicalHealth, 'Not provided')}</p>
+            <p><strong>Medical Conditions:</strong> ${textOrFallback(formData.medicalConditions, 'Not provided')}</p>
+            <p><strong>Current Medications:</strong> ${textOrFallback(formData.currentMedications, 'Not provided')}</p>
             
-            <p><strong>Previous Therapy:</strong> ${formData.previousTherapy || 'Not provided'}
-              ${formData.previousTherapyDetails ? `<br/>${formData.previousTherapyDetails}` : ''}
+            <p><strong>Previous Therapy:</strong> ${textOrFallback(formData.previousTherapy, 'Not provided')}
+              ${formData.previousTherapyDetails ? `<br/>${textOrFallback(formData.previousTherapyDetails)}` : ''}
             </p>
             
             <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Spiritual & Coping</h2>
-            <p><strong>Coping Mechanisms:</strong> ${formData.copingMechanisms?.length > 0 ? formData.copingMechanisms.join(', ') : 'None selected'}</p>
-            <p><strong>Spiritual Connection:</strong> ${formData.spiritualConnection || 'Not provided'}</p>
+            <p><strong>Coping Mechanisms:</strong> ${listOrFallback(formData.copingMechanisms)}</p>
+            <p><strong>Spiritual Connection:</strong> ${textOrFallback(formData.spiritualConnection, 'Not provided')}</p>
             
             ${formData.additionalInfo ? `
               <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Additional Information</h2>
-              <p>${formData.additionalInfo.replace(/\n/g, '<br/>')}</p>
+              <p>${multilineOrFallback(formData.additionalInfo)}</p>
             ` : ''}
           </div>
           
