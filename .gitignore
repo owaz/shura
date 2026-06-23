@@ -1,2 +1,39 @@
-shura-backend/*.exe
-shura-backend/*.exe
+# OS metadata
+.DS_Store
+
+# Local environment files and secrets
+.env
+.env.*
+*.env
+*.env.*
+.env*.txt
+!.env.example
+!.env.production.example
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+nohup.out
+
+# Dependencies and build artifacts
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+
+# Runtime uploads and temporary files
+shura-backend/uploads/
+*.tmp
+*.temp
+
+# Local database/tool binaries
+*.exe
+
+# Editor/system files
+.vscode/
+.idea/
+*.swp
