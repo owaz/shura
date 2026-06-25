@@ -214,6 +214,8 @@ CREATE TABLE IF NOT EXISTS newsletter (
   subscribed BOOLEAN DEFAULT true,
   opt_in BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
+  subscribed_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
   unsubscribed_at TIMESTAMP
 );
 
