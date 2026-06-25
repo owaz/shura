@@ -46,13 +46,16 @@ CREATE TABLE IF NOT EXISTS newsletter (
   email VARCHAR(255) UNIQUE NOT NULL,
   name VARCHAR(255),
   opt_in BOOLEAN DEFAULT false,
+  subscribed BOOLEAN DEFAULT true,
   subscribed_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
+  updated_at TIMESTAMP DEFAULT NOW(),
+  unsubscribed_at TIMESTAMP
 );
 
 -- Create index on email for faster queries
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_newsletter_email ON newsletter(email);
+CREATE INDEX IF NOT EXISTS idx_newsletter_subscribed ON newsletter(subscribed);
 
 -- Admins table for admin portal authentication
 CREATE TABLE IF NOT EXISTS admins (

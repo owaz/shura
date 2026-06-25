@@ -20,6 +20,15 @@ const SALT_ROUNDS = 10;
 
 const crypto = require('crypto');
 
+
+const RESET_TOKEN_BYTES = 32;
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+const MIN_PASSWORD_LENGTH = 8;
+
+const normalizeEmail = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
+const hashResetToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+const resetResponse = () => ({ message: 'If that email is registered, password reset instructions will be sent.' });
+
 const toArray = (value) => {
   if (Array.isArray(value)) return value;
   if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean);
@@ -380,63 +389,78 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Request password reset (generates a token and stores it; in production this should be emailed)
+// Request password reset without exposing account existence or raw stored tokens.
 router.post('/request-password-reset', async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = normalizeEmail(req.body?.email);
     if (!email) return res.status(400).json({ error: 'Email required' });
 
-    // ensure password_resets table exists
-    await pool.query(`CREATE TABLE IF NOT EXISTS password_resets (
-      email VARCHAR(255) PRIMARY KEY,
-      token VARCHAR(255) NOT NULL,
-      expires_at TIMESTAMPTZ NOT NULL
-    )`);
+    const { rows } = await pool.query('SELECT id, email FROM users WHERE email = $1', [email]);
+    if (!rows.length) return res.json(resetResponse());
 
-    const r = await pool.query('SELECT id, email FROM users WHERE email = $1', [email]);
-    if (!r.rows.length) return res.status(404).json({ error: 'No user with that email' });
-
-    const token = crypto.randomBytes(20).toString('hex');
-    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const token = crypto.randomBytes(RESET_TOKEN_BYTES).toString('hex');
+    const tokenHash = hashResetToken(token);
+    const expires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
     await pool.query(
-      `INSERT INTO password_resets (email, token, expires_at) VALUES ($1, $2, $3)
-       ON CONFLICT (email) DO UPDATE SET token = $2, expires_at = $3`,
-      [email, token, expires]
+      `INSERT INTO password_resets (email, token_hash, expires_at) VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO UPDATE SET token_hash = $2, expires_at = $3`,
+      [email, tokenHash, expires]
     );
 
+    // TODO: Send the reset link by email when the mail template/provider is available.
     return res.json({
-      message: 'Password reset token generated',
+      ...resetResponse(),
       ...(process.env.NODE_ENV === 'production' ? {} : { token })
     });
   } catch (err) {
     console.error('request-password-reset error', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Unable to request password reset' });
   }
 });
 
 // Reset password using token
 router.post('/reset-password', async (req, res) => {
+  const client = await pool.connect();
   try {
-    const { token, newPassword } = req.body;
+    const { token, newPassword } = req.body || {};
     if (!token || !newPassword) return res.status(400).json({ error: 'token and newPassword required' });
+    if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    }
 
-    const r = await pool.query('SELECT email, expires_at FROM password_resets WHERE token = $1', [token]);
-    if (!r.rows.length) return res.status(400).json({ error: 'Invalid token' });
+    const tokenHash = hashResetToken(String(token));
+    await client.query('BEGIN');
 
-    const row = r.rows[0];
+    const { rows } = await client.query(
+      'SELECT email, expires_at FROM password_resets WHERE token_hash = $1 FOR UPDATE',
+      [tokenHash]
+    );
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Invalid or expired token' });
+    }
+
+    const row = rows[0];
     if (new Date(row.expires_at) < new Date()) {
-      return res.status(400).json({ error: 'Token expired' });
+      await client.query('DELETE FROM password_resets WHERE token_hash = $1', [tokenHash]);
+      await client.query('COMMIT');
+      return res.status(400).json({ error: 'Invalid or expired token' });
     }
 
     const hashed = await argon2.hash(newPassword);
-    await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE email = $2', [hashed, row.email]);
-    await pool.query('DELETE FROM password_resets WHERE token = $1', [token]);
+    await client.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE email = $2', [hashed, row.email]);
+    await client.query('DELETE FROM password_resets WHERE email = $1', [row.email]);
+    await client.query('UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = (SELECT id FROM users WHERE email = $1) AND role = $2 AND revoked_at IS NULL', [row.email, 'client']);
+    await client.query('COMMIT');
 
     return res.json({ message: 'Password updated successfully' });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('reset-password error', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Unable to reset password' });
+  } finally {
+    client.release();
   }
 });
 
