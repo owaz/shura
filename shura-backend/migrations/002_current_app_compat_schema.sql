@@ -51,11 +51,11 @@ CREATE INDEX IF NOT EXISTS idx_auth_sessions_valid ON auth_sessions(id) WHERE re
 
 CREATE TABLE IF NOT EXISTS password_resets (
   email VARCHAR(255) PRIMARY KEY,
-  token VARCHAR(255) NOT NULL,
+  token_hash VARCHAR(64) NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token);
+CREATE INDEX IF NOT EXISTS idx_password_resets_token_hash ON password_resets(token_hash);
 
 -- ==================== INTAKE TOKENS / FORMS ====================
 ALTER TABLE intake_tokens ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP;
