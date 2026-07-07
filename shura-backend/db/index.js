@@ -14,6 +14,7 @@ const connectionConfig = process.env.DATABASE_URL
       database: process.env.DB_NAME || 'shura',
       password: process.env.DB_PASSWORD || '',
       port: parseInt(process.env.DB_PORT || '5432', 10),
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     };
 
 const pool = new Pool(connectionConfig);
