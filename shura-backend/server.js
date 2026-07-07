@@ -192,7 +192,8 @@ if (process.env.NODE_ENV === 'production') {
   const publicPath = path.join(__dirname, 'public');
   app.use(express.static(publicPath));
   // SPA fallback — serve index.html for non-API routes
-  app.get('*', (req, res, next) => {
+  // Express 5 requires named params: {*splat} instead of bare *
+  app.get('{*splat}', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
     res.sendFile(path.join(publicPath, 'index.html'));
   });
