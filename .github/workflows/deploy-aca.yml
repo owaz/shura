@@ -84,6 +84,7 @@ jobs:
             CLOUD_NAME=secretref:cloudinary-name
             CLOUD_API_KEY=secretref:cloudinary-key
             CLOUD_API_SECRET=secretref:cloudinary-secret
+            APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-conn
 
   deploy-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -117,3 +118,4 @@ jobs:
             CLOUD_NAME=secretref:cloudinary-name
             CLOUD_API_KEY=secretref:cloudinary-key
             CLOUD_API_SECRET=secretref:cloudinary-secret
+            APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-conn
