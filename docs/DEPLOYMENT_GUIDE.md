@@ -290,6 +290,18 @@ Before running this, add a CNAME record in your DNS:
 app.yoursite.com  →  <app-name>.<region>.azurecontainerapps.io
 ```
 
+After adding a custom domain, update CORS allow-list env vars to include both apex and `www` domains:
+
+```bash
+az containerapp update \
+  --resource-group $RESOURCE_GROUP \
+  --name $ACA_APP \
+  --set-env-vars \
+    FRONTEND_URL=https://shura.life \
+    FRONTEND_URLS=https://shura.life,https://www.shura.life \
+    ALLOWED_ORIGINS=https://shura.life,https://www.shura.life
+```
+
 ### 5.3 Add remaining secrets (Cloudinary, Email, Razorpay)
 
 ```bash
