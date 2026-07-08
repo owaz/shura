@@ -30,10 +30,45 @@ CREATE TABLE IF NOT EXISTS bookings (
 );
 
 -- Indexes for bookings
-CREATE INDEX IF NOT EXISTS idx_bookings_client ON bookings(client_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_therapist ON bookings(therapist_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(booking_date);
-CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'bookings' AND column_name = 'client_id'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_bookings_client ON bookings(client_id)';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'bookings' AND column_name = 'therapist_id'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_bookings_therapist ON bookings(therapist_id)';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'bookings' AND column_name = 'booking_date'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(booking_date)';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'bookings' AND column_name = 'status'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings(status)';
+  END IF;
+END $$;
 
 -- ==================== PAYMENTS TABLE ====================
 CREATE TABLE IF NOT EXISTS payments (
@@ -71,10 +106,45 @@ CREATE TABLE IF NOT EXISTS payments (
 );
 
 -- Indexes for payments
-CREATE INDEX IF NOT EXISTS idx_payments_booking ON payments(booking_id);
-CREATE INDEX IF NOT EXISTS idx_payments_client ON payments(client_id);
-CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
-CREATE INDEX IF NOT EXISTS idx_payments_razorpay_order ON payments(razorpay_order_id);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'payments' AND column_name = 'booking_id'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_payments_booking ON payments(booking_id)';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'payments' AND column_name = 'client_id'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_payments_client ON payments(client_id)';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'payments' AND column_name = 'status'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'payments' AND column_name = 'razorpay_order_id'
+  ) THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_payments_razorpay_order ON payments(razorpay_order_id)';
+  END IF;
+END $$;
 
 -- ==================== THERAPIST AVAILABILITY TABLE ====================
 CREATE TABLE IF NOT EXISTS therapist_availability (
