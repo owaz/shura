@@ -4,9 +4,10 @@ const unsafeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 export const CSRF_STORAGE_KEY = 'shura-csrf-token';
 const CSRF_COOKIE_NAME = 'shura_csrf_token';
+const runtimeOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5001';
 
 export const API_BASE_URL = trimTrailingSlashes(
-  import.meta.env.VITE_API_URL || 'http://localhost:5001'
+  import.meta.env.VITE_API_URL || runtimeOrigin
 );
 
 export const WS_BASE_URL = trimTrailingSlashes(

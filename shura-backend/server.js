@@ -39,10 +39,33 @@ const configuredOrigins = () => {
   ];
 };
 
+const normalizeOrigin = (origin) => origin.replace(/\/+$/, '');
+const isAzureContainerAppsOrigin = (origin) =>
+  /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.azurecontainerapps\.io$/i.test(origin);
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalizedOrigin)) {
+    return true;
+  }
+
+  if (isAzureContainerAppsOrigin(normalizedOrigin)) {
+    return true;
+  }
+
+  const allowedOrigins = configuredOrigins().map(normalizeOrigin);
+  return allowedOrigins.includes(normalizedOrigin);
+};
+
 // Socket.io setup
 const io = new Server(server, {
   cors: {
-    origin: configuredOrigins(),
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) return callback(null, true);
+      return callback(new Error('CORS not allowed by server'), false);
+    },
     credentials: true,
   }
 });
@@ -93,24 +116,14 @@ app.use(express.json({
 // Improved CORS configuration
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-
-    // Allow all localhost and 127.0.0.1 ports in development
-    if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-      return callback(null, true);
-    }
-
-    // Allow custom origins from env
-    const allowedOrigins = configuredOrigins();
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (isAllowedOrigin(origin)) return callback(null, true);
 
     return callback(new Error('CORS not allowed by server'), false);
   },
   credentials: true,
 }));
 
-console.log('✅ CORS enabled for all localhost, 127.0.0.1, and custom env origins');
+console.log('✅ CORS enabled for localhost, configured env origins, and Azure Container Apps domains');
 
 // Rate limiting
 const limiterDefaults = { standardHeaders: true, legacyHeaders: false };
