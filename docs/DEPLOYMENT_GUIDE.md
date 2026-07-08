@@ -315,7 +315,43 @@ az containerapp update \
     EMAIL_PASSWORD=secretref:email-password
 ```
 
-### 5.4 Initialize database schema
+### 5.4 Enable Azure Application Insights
+
+```bash
+# Create an Application Insights resource (workspace-based)
+APPINSIGHTS_NAME="shura-ai"
+LOG_ANALYTICS_NAME="shura-logs"
+
+az monitor log-analytics workspace create \
+  --resource-group $RESOURCE_GROUP \
+  --workspace-name $LOG_ANALYTICS_NAME \
+  --location $LOCATION
+
+az monitor app-insights component create \
+  --app $APPINSIGHTS_NAME \
+  --location $LOCATION \
+  --resource-group $RESOURCE_GROUP \
+  --workspace $LOG_ANALYTICS_NAME
+
+# Get connection string
+APPINSIGHTS_CONN=$(az monitor app-insights component show \
+  --app $APPINSIGHTS_NAME \
+  --resource-group $RESOURCE_GROUP \
+  --query connectionString -o tsv)
+
+# Set secret + env var on Container App
+az containerapp secret set \
+  --resource-group $RESOURCE_GROUP \
+  --name $ACA_APP \
+  --secrets appinsights-conn="$APPINSIGHTS_CONN"
+
+az containerapp update \
+  --resource-group $RESOURCE_GROUP \
+  --name $ACA_APP \
+  --set-env-vars APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-conn
+```
+
+### 5.5 Initialize database schema
 
 ```bash
 # Connect to PostgreSQL and run your schema

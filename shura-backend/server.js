@@ -1,5 +1,6 @@
 // server.js — Shura Backend with PostgreSQL
 require('dotenv').config();
+const { useAzureMonitor } = require('@azure/monitor-opentelemetry');
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -9,6 +10,11 @@ const jwt = require('jsonwebtoken');
 const pool = require('./db'); // Import pool from db/index.js
 const { authenticateToken } = require('./middleware/auth');
 const { ACCESS_COOKIE, getJwtSecret, parseCookies } = require('./utils/sessionAuth');
+
+if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
+  useAzureMonitor();
+  console.log('✅ Azure Application Insights enabled');
+}
 
 console.log('🚀 Starting Shura Backend...');
 console.log('Node version:', process.version);
