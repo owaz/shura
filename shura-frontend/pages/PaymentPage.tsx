@@ -4,6 +4,7 @@ import { useLocation, useNavigate, Link } from 'react-router-dom';
 import type { Therapist } from '../types';
 import { Logo } from '../components/Logo';
 import { ChevronLeftIcon } from '../components/Icons';
+import { apiFetch } from '../config/api';
 
 declare global {
   interface Window {
@@ -14,44 +15,98 @@ declare global {
 const PaymentPage: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [paymentError, setPaymentError] = useState('');
     
-    const { therapist, sessionType, price } = (location.state as { therapist: Therapist, sessionType: string, price: number }) || {};
+    const { therapist, sessionType, price, bookingSelection } = (location.state as {
+      therapist: Therapist,
+      sessionType: string,
+      price: number,
+      bookingSelection?: {
+        therapist_id: number;
+        date: string;
+        time: string;
+        session_type: 'video' | 'audio' | 'text' | 'intro';
+        amount_cents: number;
+      };
+    }) || {};
 
     useEffect(() => {
-        if (!therapist || !sessionType || !price) {
+        if (!therapist || !sessionType || !price || !bookingSelection) {
             navigate('/therapists');
         }
-    }, [therapist, sessionType, price, navigate]);
+    }, [therapist, sessionType, price, bookingSelection, navigate]);
     
-    const handlePayment = () => {
-        const options = {
-            key: 'rzp_test_1DP5mmOlF5G5ag', // Test key
-            amount: price * 100, // Amount in paisa
-            currency: 'INR',
-            name: 'Shura',
-            description: `Payment for ${sessionType}`,
-            image: '/logo.png', // Optional
-            handler: function (response: any) {
-                // Payment success
-                navigate(`/chat/${therapist.id}`);
-            },
-            prefill: {
-                name: 'User Name',
-                email: 'user@example.com',
-                contact: '9999999999'
-            },
-            notes: {
-                address: 'Shura Office'
-            },
-            theme: {
-                color: '#6B8A9A'
+    const handlePayment = async () => {
+        if (!bookingSelection) return;
+        setIsProcessing(true);
+        setPaymentError('');
+        try {
+            const createOrderResponse = await apiFetch('/payments/create-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(bookingSelection),
+            });
+            const createOrderData = await createOrderResponse.json();
+            if (!createOrderResponse.ok) {
+                throw new Error(createOrderData.error || 'Unable to start payment');
             }
-        };
-        const rzp = new window.Razorpay(options);
-        rzp.open();
+
+            const options = {
+                key: createOrderData.key_id || 'rzp_test_1DP5mmOlF5G5ag',
+                amount: createOrderData.amount || (price * 100),
+                currency: createOrderData.currency || 'INR',
+                name: 'Shura',
+                description: `Payment for ${sessionType}`,
+                order_id: createOrderData.order_id,
+                image: '/logo.png',
+                handler: async (response: any) => {
+                    try {
+                        const verifyResponse = await apiFetch('/payments/verify-and-finalize-booking', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_signature: response.razorpay_signature,
+                            }),
+                        });
+                        const verifyData = await verifyResponse.json();
+                        if (!verifyResponse.ok) {
+                            throw new Error(verifyData.error || 'Payment verification failed');
+                        }
+                        navigate(`/chat/${therapist.id}`);
+                    } catch (error) {
+                        setPaymentError(error instanceof Error ? error.message : 'Payment verification failed');
+                    } finally {
+                        setIsProcessing(false);
+                    }
+                },
+                prefill: {
+                    name: 'Shura Client',
+                },
+                notes: {
+                    therapist_id: bookingSelection.therapist_id,
+                    date: bookingSelection.date,
+                    time: bookingSelection.time,
+                },
+                theme: {
+                    color: '#6B8A9A'
+                }
+            };
+            const rzp = new window.Razorpay(options);
+            rzp.on('payment.failed', (resp: any) => {
+                setPaymentError(resp?.error?.description || 'Payment failed. Please try again.');
+                setIsProcessing(false);
+            });
+            rzp.open();
+        } catch (error) {
+            setPaymentError(error instanceof Error ? error.message : 'Unable to start payment');
+            setIsProcessing(false);
+        }
     };
 
-    if (!therapist || !sessionType || !price) {
+    if (!therapist || !sessionType || !price || !bookingSelection) {
         return null;
     }
 
@@ -108,11 +163,15 @@ const PaymentPage: React.FC = () => {
                     <div className="text-center">
                         <button 
                             onClick={handlePayment}
-                            className="bg-brown-soft text-white py-4 px-8 rounded-lg font-semibold hover:bg-opacity-90 transition-all duration-300 transform hover:scale-105 text-lg"
+                            disabled={isProcessing}
+                            className="bg-brown-soft text-white py-4 px-8 rounded-lg font-semibold hover:bg-opacity-90 transition-all duration-300 transform hover:scale-105 text-lg disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                            Pay ₹{price.toLocaleString('en-IN')} with Razorpay
+                            {isProcessing ? 'Processing...' : `Pay ₹${price.toLocaleString('en-IN')} with Razorpay`}
                         </button>
                     </div>
+                    {paymentError && (
+                        <p className="text-sm text-red-600 text-center mt-4">{paymentError}</p>
+                    )}
                     <p className="text-xs text-taupe text-center mt-6">All transactions are processed securely through Razorpay.</p>
                 </div>
 

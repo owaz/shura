@@ -7,6 +7,7 @@ import { mockTherapists } from '../data/therapists';
 import TherapistCard from '../components/TherapistCard';
 import { ChevronLeftIcon, ChevronRightIcon } from '../components/Icons';
 import ScrollAnimationWrapper from '../components/ScrollAnimationWrapper';
+import { apiFetch } from '../config/api';
 
 
 // Interface for therapists with a matching score
@@ -187,12 +188,33 @@ const TherapistsPage: React.FC = () => {
   const navigate = useNavigate();
 
   const isMatching = location.state && location.state.concerns;
+  const [therapists, setTherapists] = useState<Therapist[]>(mockTherapists);
   const [scoredTherapists, setScoredTherapists] = useState<ScoredTherapist[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadTherapists = async () => {
+      try {
+        const response = await apiFetch('/auth/therapists');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (isMounted && Array.isArray(data.therapists) && data.therapists.length) {
+          setTherapists(data.therapists);
+        }
+      } catch (error) {
+        console.error('Failed to load therapists:', error);
+      }
+    };
+    loadTherapists();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (isMatching) {
       const { concerns, gender } = location.state;
-      const scored = mockTherapists.map(therapist => {
+      const scored = therapists.map(therapist => {
         let score = 0;
         therapist.concerns.forEach(c => {
           if (concerns.includes(c)) score += 2;
@@ -205,7 +227,7 @@ const TherapistsPage: React.FC = () => {
       
       setScoredTherapists(scored);
     }
-  }, [isMatching, location.state]);
+  }, [isMatching, location.state, therapists]);
 
   return (
     <>
@@ -317,7 +339,7 @@ const TherapistsPage: React.FC = () => {
             {therapyTopics.map(topic => (
                <ScrollAnimationWrapper key={topic.name}>
                  <TherapistCarousel
-                      therapists={mockTherapists.filter(topic.filterFn)}
+                      therapists={therapists.filter(topic.filterFn)}
                       title={topic.title}
                       description={topic.description}
                   />

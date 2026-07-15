@@ -189,6 +189,25 @@ CREATE INDEX IF NOT EXISTS idx_payments_client_id ON payments(client_id);
 CREATE INDEX IF NOT EXISTS idx_payments_therapist_id ON payments(therapist_id);
 CREATE INDEX IF NOT EXISTS idx_payments_razorpay_order_id ON payments(razorpay_order_id);
 
+CREATE TABLE IF NOT EXISTS payment_booking_intents (
+  id SERIAL PRIMARY KEY,
+  order_id VARCHAR(255) UNIQUE NOT NULL,
+  client_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  therapist_id INTEGER NOT NULL REFERENCES therapists(id) ON DELETE CASCADE,
+  booking_date DATE NOT NULL,
+  booking_time VARCHAR(10) NOT NULL,
+  session_type VARCHAR(50) NOT NULL DEFAULT 'video',
+  amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+  booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+  payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL,
+  status VARCHAR(30) NOT NULL DEFAULT 'initiated',
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_booking_intents_client ON payment_booking_intents(client_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_booking_intents_status ON payment_booking_intents(status);
+
 -- ==================== THERAPIST AVAILABILITY / CALENDAR SYNC ====================
 CREATE TABLE IF NOT EXISTS therapist_availability_rules (
   id SERIAL PRIMARY KEY,

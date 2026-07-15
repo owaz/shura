@@ -26,6 +26,14 @@ const getDayOfWeek = (date) => {
   return parsed.getDay();
 };
 
+const findMatchingRuleForTime = (rules, requestedTime) => {
+  const requestedMinutes = toMinutes(String(requestedTime).slice(0, 5));
+  return rules.find((rule) => {
+    const slotMinutes = Number(rule.slot_minutes || 30);
+    return requestedMinutes >= toMinutes(rule.start_time) && requestedMinutes + slotMinutes <= toMinutes(rule.end_time);
+  });
+};
+
 const slotOverlapsBlock = (date, slot, slotMinutes, block) => {
   const start = new Date(`${date}T${slot}:00+05:30`);
   const end = new Date(start.getTime() + slotMinutes * 60 * 1000);
@@ -115,6 +123,59 @@ router.put('/therapist/availability', authenticateToken, async (req, res) => {
   }
 });
 
+router.post('/therapist/blocked-times', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'therapist') {
+      return res.status(403).json({ error: 'Therapist access required' });
+    }
+
+    const { starts_at, ends_at, reason } = req.body || {};
+    if (!starts_at || !ends_at) {
+      return res.status(400).json({ error: 'starts_at and ends_at are required' });
+    }
+
+    const startsAt = new Date(starts_at);
+    const endsAt = new Date(ends_at);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+      return res.status(400).json({ error: 'Invalid blocked time range' });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO therapist_blocked_times (therapist_id, starts_at, ends_at, reason)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, starts_at, ends_at, reason`,
+      [req.user.id, startsAt.toISOString(), endsAt.toISOString(), reason || null]
+    );
+
+    res.status(201).json({ blockedTime: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/therapist/blocked-times/:id', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'therapist') {
+      return res.status(403).json({ error: 'Therapist access required' });
+    }
+
+    const result = await pool.query(
+      `DELETE FROM therapist_blocked_times
+       WHERE id = $1 AND therapist_id = $2
+       RETURNING id`,
+      [req.params.id, req.user.id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Blocked time not found' });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Get available time slots for a therapist
 router.get('/therapist/:therapistId/slots', async (req, res) => {
   try {
@@ -190,11 +251,9 @@ router.post('/', authenticateToken, async (req, res) => {
       [therapist_id, getDayOfWeek(date)]
     );
     const requestedTime = String(time).slice(0, 5);
-    const isWithinAvailability = slotsResponse.rows.some((rule) => {
-      const minutes = toMinutes(requestedTime);
-      const slotMinutes = Number(rule.slot_minutes || 30);
-      return minutes >= toMinutes(rule.start_time) && minutes + slotMinutes <= toMinutes(rule.end_time);
-    });
+    const matchingRule = findMatchingRuleForTime(slotsResponse.rows, requestedTime);
+    const requestedSlotMinutes = Number(matchingRule?.slot_minutes || 30);
+    const isWithinAvailability = Boolean(matchingRule);
     if (!isWithinAvailability) {
       return res.status(400).json({ error: 'Requested time is outside therapist availability' });
     }
@@ -203,10 +262,10 @@ router.post('/', authenticateToken, async (req, res) => {
       `SELECT id
        FROM therapist_blocked_times
        WHERE therapist_id = $1
-         AND starts_at < ($2::date + $3::time + interval '30 minutes')
-         AND ends_at > ($2::date + $3::time)
+        AND starts_at < ($2::date + $3::time + ($4::text || ' minutes')::interval)
+        AND ends_at > ($2::date + $3::time)
        LIMIT 1`,
-      [therapist_id, date, requestedTime]
+      [therapist_id, date, requestedTime, requestedSlotMinutes]
     );
     if (blocked.rows.length) {
       return res.status(409).json({ error: 'Requested time is blocked by therapist' });
