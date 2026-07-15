@@ -319,6 +319,7 @@ async function runStartupMigrations() {
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS razorpay_order_id VARCHAR(255)");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(255)");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP");
+    await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()");
     await pool.query(`CREATE TABLE IF NOT EXISTS auth_sessions (
       id VARCHAR(64) PRIMARY KEY,
       user_id INTEGER NOT NULL,
@@ -387,6 +388,23 @@ async function runStartupMigrations() {
       created_at TIMESTAMP DEFAULT NOW(),
       UNIQUE(booking_id, integration_id)
     )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS payment_booking_intents (
+      id SERIAL PRIMARY KEY,
+      order_id VARCHAR(255) UNIQUE NOT NULL,
+      client_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      therapist_id INTEGER NOT NULL REFERENCES therapists(id) ON DELETE CASCADE,
+      booking_date DATE NOT NULL,
+      booking_time VARCHAR(10) NOT NULL,
+      session_type VARCHAR(50) NOT NULL DEFAULT 'video',
+      amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+      booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+      payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL,
+      status VARCHAR(30) NOT NULL DEFAULT 'initiated',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_payment_booking_intents_client ON payment_booking_intents(client_id, created_at DESC)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_payment_booking_intents_status ON payment_booking_intents(status)');
     // Add other lightweight migration steps here if needed in future
     console.log('✅ Startup migrations applied');
   } catch (err) {

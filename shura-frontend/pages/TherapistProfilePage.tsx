@@ -1,11 +1,12 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { mockTherapists } from '../data/therapists';
 import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeftIcon, LocationIcon, GlobeIcon } from '../components/Icons';
 import ScrollAnimationWrapper from '../components/ScrollAnimationWrapper';
 import type { Therapist } from '../types';
+import { apiFetch } from '../config/api';
 
 // Slider component for Personality section
 const ProfileSlider: React.FC<{ value: number; minLabel: string; maxLabel: string }> = ({ value, minLabel, maxLabel }) => (
@@ -54,40 +55,154 @@ const BookingCard: React.FC<BookingCardProps> = ({ duration, description, price,
 };
 
 
+type BookingSelection = {
+    displaySessionType: string;
+    backendSessionType: 'video' | 'audio' | 'text' | 'intro';
+    price: number;
+    isFree: boolean;
+};
+
 const TherapistProfilePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { state } = useLocation();
-  const therapist = mockTherapists.find(t => t.id === Number(id));
+  const [therapist, setTherapist] = useState<Therapist | null>(() => mockTherapists.find(t => t.id === Number(id)) || null);
+  const [isLoadingTherapist, setIsLoadingTherapist] = useState(false);
+  const [bookingSelection, setBookingSelection] = useState<BookingSelection | null>(null);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
+  const [bookingError, setBookingError] = useState('');
+  const [bookingSuccess, setBookingSuccess] = useState('');
 
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   const isBestMatch = state?.isBestMatch || false;
 
+  useEffect(() => {
+    let isMounted = true;
+    const therapistId = Number(id);
+    if (!Number.isInteger(therapistId)) return;
+
+    const loadTherapist = async () => {
+      setIsLoadingTherapist(true);
+      try {
+        const response = await apiFetch(`/auth/therapists/${therapistId}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (isMounted && data.therapist) {
+          setTherapist(data.therapist);
+        }
+      } catch (error) {
+        console.error('Failed to load therapist profile:', error);
+      } finally {
+        if (isMounted) {
+          setIsLoadingTherapist(false);
+        }
+      }
+    };
+    loadTherapist();
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
+
   if (!therapist) {
     return <Navigate to="/therapists" replace />;
   }
 
-  const handleFreeBooking = () => {
-    if (isAuthenticated) {
-      navigate(`/chat/${therapist.id}`);
-    } else {
-      navigate('/login', { state: { redirectTo: `/chat/${therapist.id}` } });
+  const resetBookingModal = () => {
+    setBookingSelection(null);
+    setSelectedDate('');
+    setAvailableSlots([]);
+    setSelectedSlot(null);
+    setBookingError('');
+    setBookingSuccess('');
+  };
+
+  const openBookingModal = (selection: BookingSelection) => {
+    setBookingSelection(selection);
+    setSelectedDate('');
+    setAvailableSlots([]);
+    setSelectedSlot(null);
+    setBookingError('');
+    setBookingSuccess('');
+  };
+
+  const loadSlotsForDate = async (date: string) => {
+    if (!therapist) return;
+    setSelectedDate(date);
+    setSelectedSlot(null);
+    setBookingError('');
+    setBookingSuccess('');
+    setIsLoadingSlots(true);
+    try {
+      const response = await apiFetch(`/bookings/therapist/${therapist.id}/slots?date=${encodeURIComponent(date)}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load available slots');
+      }
+      setAvailableSlots(Array.isArray(data.slots) ? data.slots : []);
+    } catch (error) {
+      setAvailableSlots([]);
+      setBookingError(error instanceof Error ? error.message : 'Failed to load available slots');
+    } finally {
+      setIsLoadingSlots(false);
     }
   };
 
-  const handlePaidBooking = (sessionType: string, price: number) => {
-    if (isAuthenticated) {
-      navigate('/payment', {
-        state: {
-          therapist,
-          sessionType,
-          price,
-        },
-      });
-    } else {
-      navigate('/login', { state: { redirectTo: '/payment', paymentData: { therapist, sessionType, price } } });
+  const handleConfirmBooking = async () => {
+    if (!bookingSelection || !selectedDate || !selectedSlot) {
+      setBookingError('Please select date and time slot.');
+      return;
     }
+    if (!isAuthenticated) {
+      navigate('/login', { state: { redirectTo: `/therapist/${therapist.id}` } });
+      return;
+    }
+
+    setBookingError('');
+    setBookingSuccess('');
+
+    if (bookingSelection.isFree) {
+      try {
+        const response = await apiFetch('/bookings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            therapist_id: therapist.id,
+            date: selectedDate,
+            time: selectedSlot,
+            session_type: bookingSelection.backendSessionType,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Unable to confirm booking');
+        }
+        setBookingSuccess('Free trial booked successfully.');
+        navigate(`/chat/${therapist.id}`);
+      } catch (error) {
+        setBookingError(error instanceof Error ? error.message : 'Unable to confirm booking');
+      }
+      return;
+    }
+
+    navigate('/payment', {
+      state: {
+        therapist,
+        sessionType: bookingSelection.displaySessionType,
+        price: bookingSelection.price,
+        bookingSelection: {
+          therapist_id: therapist.id,
+          date: selectedDate,
+          time: selectedSlot,
+          session_type: bookingSelection.backendSessionType,
+          amount_cents: Math.round(bookingSelection.price * 100),
+        },
+      },
+    });
   };
 
 
@@ -106,6 +221,9 @@ const TherapistProfilePage: React.FC = () => {
             <ChevronLeftIcon className="h-5 w-5 transition-transform group-hover:-translate-x-1" />
             <span>Back to Therapists</span>
           </button>
+          {isLoadingTherapist && (
+            <p className="text-sm text-brown-soft mb-4">Refreshing therapist profile...</p>
+          )}
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mt-16">
             {/* Left Sidebar */}
@@ -217,14 +335,24 @@ const TherapistProfilePage: React.FC = () => {
                             duration="20-Min Intro" 
                             description="Meet & greet to ensure a good fit." 
                             isFree={true} 
-                            onClick={handleFreeBooking}
+                            onClick={() => openBookingModal({
+                              displaySessionType: '20-Min Intro',
+                              backendSessionType: 'intro',
+                              price: 0,
+                              isFree: true,
+                            })}
                         />
                         {therapist.rates.session60 && (
                             <BookingCard 
                                 duration="60-Min Session" 
                                 description="Standard individual session." 
                                 price={therapist.rates.session60} 
-                                onClick={() => handlePaidBooking('60-Min Session', therapist.rates.session60)} 
+                                onClick={() => openBookingModal({
+                                  displaySessionType: '60-Min Session',
+                                  backendSessionType: 'video',
+                                  price: therapist.rates.session60 || 0,
+                                  isFree: false,
+                                })} 
                             />
                         )}
                         {therapist.rates.session90 && (
@@ -232,7 +360,12 @@ const TherapistProfilePage: React.FC = () => {
                                 duration="90-Min Session" 
                                 description="Extended individual session." 
                                 price={therapist.rates.session90} 
-                                onClick={() => handlePaidBooking('90-Min Session', therapist.rates.session90)} 
+                                onClick={() => openBookingModal({
+                                  displaySessionType: '90-Min Session',
+                                  backendSessionType: 'video',
+                                  price: therapist.rates.session90 || 0,
+                                  isFree: false,
+                                })} 
                             />
                         )}
                         {monthlyPackage && (
@@ -240,7 +373,12 @@ const TherapistProfilePage: React.FC = () => {
                                 duration="Monthly Support"
                                 description={`${monthlyPackage.sessions} sessions for consistent progress.`}
                                 price={monthlyPackage.price}
-                                onClick={() => handlePaidBooking('Monthly Support', monthlyPackage.price)}
+                                onClick={() => openBookingModal({
+                                  displaySessionType: 'Monthly Support',
+                                  backendSessionType: 'video',
+                                  price: monthlyPackage.price,
+                                  isFree: false,
+                                })}
                                 isPackage
                             />
                         )}
@@ -252,6 +390,90 @@ const TherapistProfilePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {bookingSelection && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-2xl font-serif font-bold text-brown-dark">Book with {therapist.name}</h3>
+                <p className="text-brown-soft mt-1">{bookingSelection.displaySessionType}</p>
+                <p className="text-brown-soft text-sm mt-1">
+                  {bookingSelection.isFree ? 'Free trial will be booked immediately on confirmation.' : 'Paid slot will be booked after successful payment.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-brown-soft hover:text-brown-dark"
+                onClick={resetBookingModal}
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-brown-soft mb-2" htmlFor="booking-date">Select Date</label>
+              <input
+                id="booking-date"
+                type="date"
+                min={new Date().toISOString().slice(0, 10)}
+                value={selectedDate}
+                onChange={(e) => loadSlotsForDate(e.target.value)}
+                className="w-full bg-ivory border-sand rounded-lg py-2 px-3 focus:ring-2 focus:ring-brown-soft/50 focus:border-brown-soft"
+              />
+            </div>
+
+            <div className="mt-4">
+              <p className="text-sm font-medium text-brown-soft mb-2">Available Slots</p>
+              {isLoadingSlots && <p className="text-sm text-brown-soft">Loading slots...</p>}
+              {!isLoadingSlots && selectedDate && availableSlots.length === 0 && (
+                <p className="text-sm text-brown-soft">No slots available for the selected date.</p>
+              )}
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-52 overflow-y-auto">
+                {availableSlots.map((slot) => (
+                  <button
+                    type="button"
+                    key={slot}
+                    onClick={() => setSelectedSlot(slot)}
+                    className={`px-3 py-2 rounded-lg text-sm border transition-colors ${
+                      selectedSlot === slot
+                        ? 'bg-brown-soft text-white border-brown-soft'
+                        : 'bg-white text-brown-dark border-sand hover:border-brown-soft'
+                    }`}
+                  >
+                    {slot}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {bookingError && (
+              <p className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 px-3 py-2 rounded-lg">{bookingError}</p>
+            )}
+            {bookingSuccess && (
+              <p className="mt-4 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg">{bookingSuccess}</p>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={resetBookingModal}
+                className="px-4 py-2 rounded-lg border border-sand text-brown-soft hover:bg-ivory"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBooking}
+                disabled={!selectedDate || !selectedSlot || isLoadingSlots}
+                className="px-5 py-2 rounded-lg bg-brown-soft text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bookingSelection.isFree ? 'Confirm Slot' : 'Proceed to Payment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
