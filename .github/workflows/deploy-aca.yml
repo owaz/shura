@@ -22,19 +22,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker-container
-
       - name: Log in to Azure Container Registry
-        if: github.event_name == 'push'
+        if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: azure/docker-login@v2
         with:
           login-server: ${{ env.REGISTRY_URL }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
 
       - name: Extract metadata
         id: meta
@@ -49,7 +49,7 @@ jobs:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
           file: ./Dockerfile
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
           tags: |
             ${{ steps.meta.outputs.sha_tag }}
             ${{ steps.meta.outputs.latest_tag }}
