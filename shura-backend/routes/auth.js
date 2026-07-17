@@ -35,6 +35,48 @@ const toArray = (value) => {
   return [];
 };
 
+const normalizeTextList = (value) => [...new Set(toArray(value).map((item) => String(item).trim()).filter(Boolean))];
+
+const normalizeSessionTypes = (value) => {
+  const allowed = new Set(['video', 'audio', 'text']);
+  return [...new Set(
+    toArray(value)
+      .map((item) => String(item).trim().toLowerCase())
+      .filter((item) => allowed.has(item))
+  )];
+};
+
+const toNullableInt = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.floor(parsed);
+};
+
+const getTherapistsColumnTypeMap = async (columnNames) => {
+  const { rows } = await pool.query(
+    `SELECT column_name, data_type, udt_name
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'therapists'
+       AND column_name = ANY($1::text[])`,
+    [columnNames]
+  );
+
+  return Object.fromEntries(rows.map((row) => [row.column_name, row]));
+};
+
+const isArrayColumn = (columnTypeMap, columnName) => {
+  const meta = columnTypeMap[columnName];
+  return Boolean(meta && (meta.data_type === 'ARRAY' || meta.udt_name === '_text'));
+};
+
+const toDbTextList = (value, columnTypeMap, columnName) => {
+  const normalized = normalizeTextList(value);
+  if (!normalized.length) return null;
+  return isArrayColumn(columnTypeMap, columnName) ? normalized : normalized.join(', ');
+};
+
 const therapistToPublic = (therapist) => {
   const specialties = toArray(therapist.specialties);
   const sessionTypes = toArray(therapist.session_types).map((type) => {
@@ -46,6 +88,7 @@ const therapistToPublic = (therapist) => {
   });
   const concerns = specialties.length ? specialties : ['Faith-Centered Support'];
   const rate = Number(therapist.rate_60min || 0);
+  const languages = toArray(therapist.languages);
 
   return {
     id: therapist.id,
@@ -58,7 +101,7 @@ const therapistToPublic = (therapist) => {
     specialties,
     concerns,
     gender: therapist.gender || 'Female',
-    language: Array.isArray(therapist.languages) ? therapist.languages.join(', ') : 'English',
+    language: languages.length ? languages.join(', ') : 'English',
     location: therapist.location || 'Online',
     sessionTypes: sessionTypes.length ? sessionTypes : ['Video', 'Audio', 'Text'],
     rates: {
@@ -66,6 +109,22 @@ const therapistToPublic = (therapist) => {
     },
   };
 };
+
+const therapistToEditableProfile = (therapist) => ({
+  id: therapist.id,
+  email: therapist.email,
+  full_name: therapist.full_name || '',
+  specialization: therapist.specialization || '',
+  experience_years: therapist.experience_years || therapist.years_experience || 0,
+  specialties: normalizeTextList(therapist.specialties),
+  session_types: normalizeSessionTypes(therapist.session_types),
+  rate_60min: Number(therapist.rate_60min || 0),
+  bio: therapist.bio || '',
+  profile_image_url: therapist.profile_image_url || '',
+  languages: normalizeTextList(therapist.languages),
+  gender: therapist.gender || '',
+  location: therapist.location || '',
+});
 
 const withDevToken = (payload, responseBody) => {
   if (process.env.NODE_ENV === 'production') return responseBody;
@@ -147,8 +206,8 @@ router.get('/therapists', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, full_name, specialization, experience_years, years_experience, specialties,
-              session_types, rate_60min, NULL::text as profile_image_url, NULL::text as bio,
-              NULL::text[] as languages, status
+              session_types, rate_60min, profile_image_url, bio,
+              languages, gender, location, status
        FROM therapists
        WHERE status = 'approved'
        ORDER BY full_name ASC`
@@ -165,8 +224,8 @@ router.get('/therapists/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, full_name, specialization, experience_years, years_experience, specialties,
-              session_types, rate_60min, NULL::text as profile_image_url, NULL::text as bio,
-              NULL::text[] as languages, status
+              session_types, rate_60min, profile_image_url, bio,
+              languages, gender, location, status
        FROM therapists
        WHERE id = $1 AND status = 'approved'`,
       [req.params.id]
@@ -179,6 +238,112 @@ router.get('/therapists/:id', async (req, res) => {
     return res.json({ therapist: therapistToPublic(rows[0]) });
   } catch (err) {
     console.error('GET /therapists/:id error', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/therapist/profile', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'therapist') {
+      return res.status(403).json({ error: 'Therapist access required' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT id, email, full_name, specialization, experience_years, years_experience,
+              specialties, session_types, rate_60min, bio, profile_image_url,
+              languages, gender, location, status
+       FROM therapists
+       WHERE id = $1`,
+      [req.user.id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Therapist profile not found' });
+    }
+
+    return res.json({
+      profile: therapistToEditableProfile(rows[0]),
+      therapist: therapistToPublic(rows[0]),
+    });
+  } catch (err) {
+    console.error('GET /therapist/profile error', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/therapist/profile', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'therapist') {
+      return res.status(403).json({ error: 'Therapist access required' });
+    }
+
+    const payload = req.body || {};
+    const fullName = typeof payload.full_name === 'string' ? payload.full_name.trim() : '';
+    const specialization = typeof payload.specialization === 'string' ? payload.specialization.trim() : '';
+    const bio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
+    const profileImageUrl = typeof payload.profile_image_url === 'string' ? payload.profile_image_url.trim() : '';
+    const gender = typeof payload.gender === 'string' ? payload.gender.trim() : '';
+    const location = typeof payload.location === 'string' ? payload.location.trim() : '';
+    const experienceYears = toNullableInt(payload.experience_years);
+    const rate60min = toNullableInt(payload.rate_60min);
+
+    if (!fullName) {
+      return res.status(400).json({ error: 'full_name is required' });
+    }
+
+    const columnTypeMap = await getTherapistsColumnTypeMap(['specialties', 'session_types', 'languages']);
+    const dbSpecialties = toDbTextList(payload.specialties, columnTypeMap, 'specialties');
+    const normalizedSessionTypes = normalizeSessionTypes(payload.session_types);
+    const dbSessionTypes = normalizedSessionTypes.length
+      ? (isArrayColumn(columnTypeMap, 'session_types') ? normalizedSessionTypes : normalizedSessionTypes.join(', '))
+      : null;
+    const dbLanguages = toDbTextList(payload.languages, columnTypeMap, 'languages');
+
+    const { rows } = await pool.query(
+      `UPDATE therapists
+       SET full_name = $1,
+           specialization = $2,
+           experience_years = $3,
+           specialties = $4,
+           session_types = $5,
+           rate_60min = $6,
+           bio = $7,
+           profile_image_url = $8,
+           languages = $9,
+           gender = $10,
+           location = $11,
+           updated_at = NOW()
+       WHERE id = $12
+       RETURNING id, email, full_name, specialization, experience_years, years_experience,
+                 specialties, session_types, rate_60min, bio, profile_image_url,
+                 languages, gender, location, status`,
+      [
+        fullName,
+        specialization || null,
+        experienceYears,
+        dbSpecialties,
+        dbSessionTypes,
+        rate60min,
+        bio || null,
+        profileImageUrl || null,
+        dbLanguages,
+        gender || null,
+        location || null,
+        req.user.id,
+      ]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Therapist profile not found' });
+    }
+
+    return res.json({
+      message: 'Therapist profile updated successfully',
+      profile: therapistToEditableProfile(rows[0]),
+      therapist: therapistToPublic(rows[0]),
+    });
+  } catch (err) {
+    console.error('PUT /therapist/profile error', err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -467,10 +632,25 @@ router.post('/reset-password', async (req, res) => {
 // Therapist application route
 router.post('/therapist/apply', async (req, res) => {
   try {
-    const { fullName, email, phone, licenseNumber, experience, specialties, sessionTypes, rate60min, availability, password } = req.body;
-    const normalizedSpecialties = toArray(specialties);
-    const normalizedSessionTypes = toArray(sessionTypes);
-    const normalizedAvailability = toArray(availability);
+    const {
+      fullName,
+      email,
+      phone,
+      licenseNumber,
+      experience,
+      specialties,
+      sessionTypes,
+      rate60min,
+      availability,
+      password,
+      languages,
+      gender,
+      location,
+    } = req.body;
+    const normalizedSpecialties = normalizeTextList(specialties);
+    const normalizedSessionTypes = normalizeSessionTypes(sessionTypes);
+    const normalizedAvailability = normalizeTextList(availability);
+    const normalizedLanguages = normalizeTextList(languages);
 
     // Validation
     if (!email || !password || !fullName) {
@@ -495,28 +675,30 @@ router.post('/therapist/apply', async (req, res) => {
     // Hash password
     const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 
-    const { rows: columnRows } = await pool.query(
-      `SELECT column_name, data_type, udt_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public'
-         AND table_name = 'therapists'
-         AND column_name = ANY($1::text[])`,
-      [['specialties', 'session_types', 'availability']]
-    );
-    const columnType = Object.fromEntries(columnRows.map((row) => [row.column_name, row]));
-    const isArrayColumn = (columnName) => {
-      const meta = columnType[columnName];
-      return meta && (meta.data_type === 'ARRAY' || meta.udt_name === '_text');
-    };
-
-    const dbSpecialties = isArrayColumn('specialties') ? normalizedSpecialties : normalizedSpecialties.join(', ');
-    const dbSessionTypes = isArrayColumn('session_types') ? normalizedSessionTypes : normalizedSessionTypes.join(', ');
-    const dbAvailability = isArrayColumn('availability') ? normalizedAvailability : normalizedAvailability.join(', ');
+    const columnTypeMap = await getTherapistsColumnTypeMap(['specialties', 'session_types', 'availability', 'languages']);
+    const dbSpecialties = toDbTextList(normalizedSpecialties, columnTypeMap, 'specialties');
+    const dbSessionTypes = isArrayColumn(columnTypeMap, 'session_types') ? normalizedSessionTypes : normalizedSessionTypes.join(', ');
+    const dbAvailability = toDbTextList(normalizedAvailability, columnTypeMap, 'availability');
+    const dbLanguages = toDbTextList(normalizedLanguages, columnTypeMap, 'languages');
 
     // Create therapist application (status defaults to 'pending' in database)
-    const q = `INSERT INTO therapists (email, password_hash, full_name, phone, license_number, experience_years, specialties, session_types, rate_60min, availability) 
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, email, full_name`;
-    const { rows } = await pool.query(q, [email, hashed, fullName, phone, licenseNumber, parseInt(experience), dbSpecialties, dbSessionTypes, parseInt(rate60min), dbAvailability]);
+    const q = `INSERT INTO therapists (email, password_hash, full_name, phone, license_number, experience_years, specialties, session_types, rate_60min, availability, languages, gender, location) 
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, email, full_name`;
+    const { rows } = await pool.query(q, [
+      email,
+      hashed,
+      fullName,
+      phone,
+      licenseNumber,
+      toNullableInt(experience),
+      dbSpecialties,
+      dbSessionTypes,
+      toNullableInt(rate60min),
+      dbAvailability,
+      dbLanguages,
+      typeof gender === 'string' ? gender.trim() || null : null,
+      typeof location === 'string' ? location.trim() || null : null,
+    ]);
     const therapist = rows[0];
 
     // Send email notification to admin (non-blocking)

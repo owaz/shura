@@ -2,6 +2,13 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 
+router.use((req, res, next) => {
+  if (req.user?.role !== 'therapist') {
+    return res.status(403).json({ error: 'Therapist access required' });
+  }
+  return next();
+});
+
 // Get all intake forms for therapist's clients
 router.get('/forms', async (req, res) => {
   try {

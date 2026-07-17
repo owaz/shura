@@ -313,6 +313,11 @@ async function runStartupMigrations() {
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS focus_areas TEXT");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS email_notifications BOOLEAN DEFAULT true");
     await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_notifications BOOLEAN DEFAULT false");
+    await pool.query("ALTER TABLE therapists ADD COLUMN IF NOT EXISTS profile_image_url TEXT");
+    await pool.query("ALTER TABLE therapists ADD COLUMN IF NOT EXISTS bio TEXT");
+    await pool.query("ALTER TABLE therapists ADD COLUMN IF NOT EXISTS languages TEXT[]");
+    await pool.query("ALTER TABLE therapists ADD COLUMN IF NOT EXISTS gender VARCHAR(20)");
+    await pool.query("ALTER TABLE therapists ADD COLUMN IF NOT EXISTS location VARCHAR(255)");
     await pool.query("ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_role VARCHAR(20) DEFAULT 'client'");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS client_id INTEGER");
     await pool.query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS amount_cents INTEGER");
