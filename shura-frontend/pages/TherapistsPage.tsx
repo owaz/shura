@@ -18,6 +18,19 @@ interface ScoredTherapist extends Therapist {
 // Define Therapy Topics and their filtering logic
 type TherapyTopic = 'Individual' | 'Couples' | 'Family' | 'Child';
 
+const normalizeKeyword = (value: string) => value.trim().toLowerCase();
+
+const therapistMatchesKeywords = (therapist: Therapist, keywords: string[]) => {
+    const normalizedKeywords = keywords.map(normalizeKeyword);
+    const therapistValues = [...therapist.concerns, ...therapist.specialties]
+        .map(normalizeKeyword)
+        .filter(Boolean);
+
+    return therapistValues.some((value) =>
+        normalizedKeywords.some((keyword) => value === keyword || value.includes(keyword) || keyword.includes(value))
+    );
+};
+
 const therapyTopics: {
     name: TherapyTopic;
     title: string;
@@ -30,7 +43,7 @@ const therapyTopics: {
         description: 'Human soul is fragile and it should be treated gently. Our therapists do it professionally.',
         filterFn: (therapist) => {
             const individualKeywords = ['Anxiety', 'Depression', 'Personal Growth', 'Grief', 'Trauma', 'Self-Esteem', 'Spirituality', 'Lifestyle Changes', 'ADHD', 'Anger Management', 'Bipolar Disorder', 'Eating Disorders', 'Pregnancy/Prenatal/Postpartum', 'Cognitive Behavioural Therapy (CBT)', 'Person-Centered Therapy', 'Faith-Centered Approach'];
-            return therapist.concerns.some(c => individualKeywords.includes(c)) || therapist.specialties.some(s => individualKeywords.includes(s));
+            return therapistMatchesKeywords(therapist, individualKeywords);
         }
     },
     {
@@ -39,7 +52,7 @@ const therapyTopics: {
         description: 'Strengthen your bond, improve communication, and navigate relationship challenges together.',
         filterFn: (therapist) => {
             const couplesKeywords = ['Marital', 'Couples Therapy', 'Gottman Method', 'Imago', 'Infidelity'];
-            return therapist.concerns.some(c => couplesKeywords.includes(c)) || therapist.specialties.some(s => couplesKeywords.includes(s));
+            return therapistMatchesKeywords(therapist, couplesKeywords);
         }
     },
     {
@@ -48,7 +61,7 @@ const therapyTopics: {
         description: 'Heal relationships and improve dynamics within the family with guided, compassionate support.',
         filterFn: (therapist) => {
             const familyKeywords = ['Family Conflict', 'Family Therapy', 'Family Systems Therapy', 'Structural Family Therapy'];
-            return therapist.concerns.some(c => familyKeywords.includes(c)) || therapist.specialties.some(s => familyKeywords.includes(s));
+            return therapistMatchesKeywords(therapist, familyKeywords);
         }
     },
     {
@@ -57,7 +70,7 @@ const therapyTopics: {
         description: 'A safe and supportive space for young minds to express themselves and build resilience.',
         filterFn: (therapist) => {
             const childKeywords = ['Child issues', 'Parenting', 'Play Therapy', 'Parent-Child Interaction Therapy (PCIT)', 'Autism', 'Behavioral Issues'];
-            return therapist.concerns.some(c => childKeywords.includes(c)) || therapist.specialties.some(s => childKeywords.includes(s));
+            return therapistMatchesKeywords(therapist, childKeywords);
         }
     }
 ];
@@ -229,6 +242,12 @@ const TherapistsPage: React.FC = () => {
     }
   }, [isMatching, location.state, therapists]);
 
+  const categorizedTherapists = therapyTopics.map((topic) => ({
+    ...topic,
+    therapists: therapists.filter(topic.filterFn),
+  }));
+  const hasCategoryMatches = categorizedTherapists.some((topic) => topic.therapists.length > 0);
+
   return (
     <>
       {isMatching ? (
@@ -336,10 +355,19 @@ const TherapistsPage: React.FC = () => {
           </div>
         ) : (
           <div className="bg-cream">
-            {therapyTopics.map(topic => (
+            {!hasCategoryMatches && therapists.length > 0 && (
+              <ScrollAnimationWrapper>
+                <TherapistCarousel
+                  therapists={therapists}
+                  title="Meet Our Therapists"
+                  description="Browse all available therapists and choose the right fit for your journey."
+                />
+              </ScrollAnimationWrapper>
+            )}
+            {categorizedTherapists.map(topic => (
                <ScrollAnimationWrapper key={topic.name}>
                  <TherapistCarousel
-                      therapists={therapists.filter(topic.filterFn)}
+                      therapists={topic.therapists}
                       title={topic.title}
                       description={topic.description}
                   />
