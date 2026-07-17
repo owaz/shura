@@ -92,7 +92,7 @@ const TherapistOnboardingPage: React.FC = () => {
         return !formData.fullName || !formData.email || !formData.phone;
     }
     if (currentStep === 2) {
-        return !formData.licenseNumber || !formData.experience || !formData.specialties;
+        return !formData.experience || !formData.specialties;
     }
     if (currentStep === 3) {
         return formData.sessionTypes.length === 0 || !formData.rate60min || !formData.availability;
@@ -134,8 +134,8 @@ const TherapistOnboardingPage: React.FC = () => {
             <p className="text-brown-soft mb-6">Tell us about your qualifications and expertise.</p>
              <div className="space-y-4">
               <div>
-                <label htmlFor="licenseNumber" className="block text-sm font-medium text-brown-soft">License Type & Number</label>
-                <input type="text" name="licenseNumber" value={formData.licenseNumber} onChange={handleChange} className="mt-1 block w-full bg-white border-sand rounded-md shadow-sm py-3 px-4 focus:ring-brown-soft focus:border-brown-soft" placeholder="e.g., RCI A12345" required />
+                <label htmlFor="licenseNumber" className="block text-sm font-medium text-brown-soft">License Type & Number (Optional)</label>
+                <input type="text" name="licenseNumber" value={formData.licenseNumber} onChange={handleChange} className="mt-1 block w-full bg-white border-sand rounded-md shadow-sm py-3 px-4 focus:ring-brown-soft focus:border-brown-soft" placeholder="e.g., RCI A12345" />
               </div>
               <div>
                 <label htmlFor="experience" className="block text-sm font-medium text-brown-soft">Years of Experience</label>
