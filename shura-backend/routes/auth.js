@@ -470,6 +470,7 @@ router.post('/therapist/apply', async (req, res) => {
     const { fullName, email, phone, licenseNumber, experience, specialties, sessionTypes, rate60min, availability, password } = req.body;
     const normalizedSpecialties = toArray(specialties);
     const normalizedSessionTypes = toArray(sessionTypes);
+    const normalizedAvailability = toArray(availability);
 
     // Validation
     if (!email || !password || !fullName) {
@@ -481,6 +482,9 @@ router.post('/therapist/apply', async (req, res) => {
     if (!normalizedSessionTypes.length) {
       return res.status(400).json({ error: 'At least one session type is required' });
     }
+    if (!normalizedAvailability.length) {
+      return res.status(400).json({ error: 'Availability is required' });
+    }
 
     // Check if therapist already exists
     const exists = await pool.query('SELECT id FROM therapists WHERE email = $1', [email]);
@@ -491,10 +495,28 @@ router.post('/therapist/apply', async (req, res) => {
     // Hash password
     const hashed = await bcrypt.hash(password, SALT_ROUNDS);
 
+    const { rows: columnRows } = await pool.query(
+      `SELECT column_name, data_type, udt_name
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'therapists'
+         AND column_name = ANY($1::text[])`,
+      [['specialties', 'session_types', 'availability']]
+    );
+    const columnType = Object.fromEntries(columnRows.map((row) => [row.column_name, row]));
+    const isArrayColumn = (columnName) => {
+      const meta = columnType[columnName];
+      return meta && (meta.data_type === 'ARRAY' || meta.udt_name === '_text');
+    };
+
+    const dbSpecialties = isArrayColumn('specialties') ? normalizedSpecialties : normalizedSpecialties.join(', ');
+    const dbSessionTypes = isArrayColumn('session_types') ? normalizedSessionTypes : normalizedSessionTypes.join(', ');
+    const dbAvailability = isArrayColumn('availability') ? normalizedAvailability : normalizedAvailability.join(', ');
+
     // Create therapist application (status defaults to 'pending' in database)
     const q = `INSERT INTO therapists (email, password_hash, full_name, phone, license_number, experience_years, specialties, session_types, rate_60min, availability) 
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, email, full_name`;
-    const { rows } = await pool.query(q, [email, hashed, fullName, phone, licenseNumber, parseInt(experience), normalizedSpecialties, normalizedSessionTypes, parseInt(rate60min), availability]);
+    const { rows } = await pool.query(q, [email, hashed, fullName, phone, licenseNumber, parseInt(experience), dbSpecialties, dbSessionTypes, parseInt(rate60min), dbAvailability]);
     const therapist = rows[0];
 
     // Send email notification to admin (non-blocking)
@@ -507,7 +529,7 @@ router.post('/therapist/apply', async (req, res) => {
       specialties: normalizedSpecialties,
       sessionTypes: normalizedSessionTypes,
       rate60min,
-      availability,
+      availability: normalizedAvailability,
     }).catch(err => console.error('Email notification failed:', err));
 
     return res.json({ therapist, message: 'Application submitted successfully. You will be notified once approved.' });
