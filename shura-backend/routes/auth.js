@@ -31,7 +31,7 @@ const resetResponse = () => ({ message: 'If that email is registered, password r
 
 const toArray = (value) => {
   if (Array.isArray(value)) return value;
-  if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean);
+  if (typeof value === 'string') return value.split(/[,\n]/).map((item) => item.trim()).filter(Boolean);
   return [];
 };
 
@@ -468,10 +468,18 @@ router.post('/reset-password', async (req, res) => {
 router.post('/therapist/apply', async (req, res) => {
   try {
     const { fullName, email, phone, licenseNumber, experience, specialties, sessionTypes, rate60min, availability, password } = req.body;
+    const normalizedSpecialties = toArray(specialties);
+    const normalizedSessionTypes = toArray(sessionTypes);
 
     // Validation
     if (!email || !password || !fullName) {
       return res.status(400).json({ error: 'Email, password, and full name are required' });
+    }
+    if (!normalizedSpecialties.length) {
+      return res.status(400).json({ error: 'Specialties are required' });
+    }
+    if (!normalizedSessionTypes.length) {
+      return res.status(400).json({ error: 'At least one session type is required' });
     }
 
     // Check if therapist already exists
@@ -486,7 +494,7 @@ router.post('/therapist/apply', async (req, res) => {
     // Create therapist application (status defaults to 'pending' in database)
     const q = `INSERT INTO therapists (email, password_hash, full_name, phone, license_number, experience_years, specialties, session_types, rate_60min, availability) 
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id, email, full_name`;
-    const { rows } = await pool.query(q, [email, hashed, fullName, phone, licenseNumber, parseInt(experience), specialties, sessionTypes, parseInt(rate60min), availability]);
+    const { rows } = await pool.query(q, [email, hashed, fullName, phone, licenseNumber, parseInt(experience), normalizedSpecialties, normalizedSessionTypes, parseInt(rate60min), availability]);
     const therapist = rows[0];
 
     // Send email notification to admin (non-blocking)
@@ -496,8 +504,8 @@ router.post('/therapist/apply', async (req, res) => {
       phone,
       licenseNumber,
       experience,
-      specialties,
-      sessionTypes,
+      specialties: normalizedSpecialties,
+      sessionTypes: normalizedSessionTypes,
       rate60min,
       availability,
     }).catch(err => console.error('Email notification failed:', err));
