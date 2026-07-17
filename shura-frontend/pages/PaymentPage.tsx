@@ -12,6 +12,46 @@ declare global {
   }
 }
 
+const RAZORPAY_CHECKOUT_SRC = 'https://checkout.razorpay.com/v1/checkout.js';
+const RAZORPAY_CHECKOUT_SCRIPT_ID = 'razorpay-checkout-script';
+let razorpayScriptPromise: Promise<void> | null = null;
+
+const loadRazorpayCheckoutScript = async (): Promise<void> => {
+    if (window.Razorpay) {
+        return;
+    }
+
+    if (razorpayScriptPromise) {
+        return razorpayScriptPromise;
+    }
+
+    razorpayScriptPromise = new Promise<void>((resolve, reject) => {
+        const existingScript = document.getElementById(RAZORPAY_CHECKOUT_SCRIPT_ID) as HTMLScriptElement | null;
+
+        if (existingScript) {
+            existingScript.addEventListener('load', () => resolve(), { once: true });
+            existingScript.addEventListener('error', () => {
+                razorpayScriptPromise = null;
+                reject(new Error('Unable to load Razorpay checkout. Please try again.'));
+            }, { once: true });
+            return;
+        }
+
+        const script = document.createElement('script');
+        script.id = RAZORPAY_CHECKOUT_SCRIPT_ID;
+        script.src = RAZORPAY_CHECKOUT_SRC;
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => {
+            razorpayScriptPromise = null;
+            reject(new Error('Unable to load Razorpay checkout. Please try again.'));
+        };
+        document.body.appendChild(script);
+    });
+
+    return razorpayScriptPromise;
+};
+
 const PaymentPage: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -42,6 +82,11 @@ const PaymentPage: React.FC = () => {
         setIsProcessing(true);
         setPaymentError('');
         try {
+            await loadRazorpayCheckoutScript();
+            if (!window.Razorpay) {
+                throw new Error('Razorpay checkout is unavailable right now. Please try again.');
+            }
+
             const createOrderResponse = await apiFetch('/payments/create-order', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
