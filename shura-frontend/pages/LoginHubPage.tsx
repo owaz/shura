@@ -46,6 +46,11 @@ const LoginHubPage: React.FC = () => {
             </span>
           </Link>
         </div>
+        <div className="text-center mt-8">
+          <Link to="/admin/login" className="text-brown-soft font-semibold hover:text-brown-dark hover:underline">
+            Admin Login &rarr;
+          </Link>
+        </div>
       </div>
     </div>
   );

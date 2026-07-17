@@ -33,6 +33,8 @@ import TherapistChatPage from './pages/therapist-portal/TherapistChatPage';
 import TherapistIntakeFormsPage from './pages/therapist-portal/TherapistIntakeFormsPage';
 import IntakeFormPage from './pages/IntakeFormPage';
 import IntakeSuccessPage from './pages/IntakeSuccessPage';
+import AdminLoginPage from './pages/AdminLoginPage';
+import AdminTherapistApprovalsPage from './pages/AdminTherapistApprovalsPage';
 import { apiFetch } from './config/api';
 
 const NewsletterSignup: React.FC = () => {
@@ -204,6 +206,8 @@ const App: React.FC = () => {
           <Route path="/call" element={<CallPage />} />
           <Route path="/intake/:token" element={<IntakeFormPage />} />
           <Route path="/intake-success" element={<IntakeSuccessPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/admin/therapists/pending" element={<AdminTherapistApprovalsPage />} />
 
           {/* Therapist Portal Routes */}
           <Route element={<ProtectedRoute allowedRoles={['therapist']} redirectTo="/therapist-login" />}>
