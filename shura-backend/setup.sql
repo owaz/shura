@@ -35,6 +35,11 @@ CREATE TABLE IF NOT EXISTS therapists (
   session_types TEXT[], -- array of session types
   rate_60min INTEGER,
   availability TEXT,
+  profile_image_url TEXT,
+  bio TEXT,
+  languages TEXT[],
+  gender VARCHAR(20),
+  location VARCHAR(255),
   status VARCHAR(50) DEFAULT 'pending', -- pending, approved, rejected
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()

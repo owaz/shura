@@ -1,382 +1,266 @@
-
-
-import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { Therapist } from '../types';
 import { mockTherapists } from '../data/therapists';
 import TherapistCard from '../components/TherapistCard';
-import { ChevronLeftIcon, ChevronRightIcon } from '../components/Icons';
+import { ChevronLeftIcon } from '../components/Icons';
 import ScrollAnimationWrapper from '../components/ScrollAnimationWrapper';
 import { apiFetch } from '../config/api';
 
-
-// Interface for therapists with a matching score
 interface ScoredTherapist extends Therapist {
-    score: number;
+  score: number;
 }
 
-// Define Therapy Topics and their filtering logic
-type TherapyTopic = 'Individual' | 'Couples' | 'Family' | 'Child';
+type TherapyType = 'All' | 'Individual' | 'Couples' | 'Family' | 'Child';
+type PriceRange = 'all' | 'low' | 'mid' | 'high';
 
-const normalizeKeyword = (value: string) => value.trim().toLowerCase();
-
-const therapistMatchesKeywords = (therapist: Therapist, keywords: string[]) => {
-    const normalizedKeywords = keywords.map(normalizeKeyword);
-    const therapistValues = [...therapist.concerns, ...therapist.specialties]
-        .map(normalizeKeyword)
-        .filter(Boolean);
-
-    return therapistValues.some((value) =>
-        normalizedKeywords.some((keyword) => value === keyword || value.includes(keyword) || keyword.includes(value))
-    );
+const THERAPY_KEYWORDS: Record<Exclude<TherapyType, 'All'>, string[]> = {
+  Individual: ['Anxiety', 'Depression', 'Personal Growth', 'Grief', 'Trauma', 'Self-Esteem', 'Spirituality', 'Lifestyle Changes', 'ADHD', 'Anger Management', 'Bipolar Disorder', 'Eating Disorders', 'Pregnancy/Prenatal/Postpartum', 'Cognitive Behavioural Therapy (CBT)', 'Person-Centered Therapy', 'Faith-Centered Approach'],
+  Couples: ['Marital', 'Couples Therapy', 'Gottman Method', 'Imago', 'Infidelity'],
+  Family: ['Family Conflict', 'Family Therapy', 'Family Systems Therapy', 'Structural Family Therapy'],
+  Child: ['Child issues', 'Parenting', 'Play Therapy', 'Parent-Child Interaction Therapy (PCIT)', 'Autism', 'Behavioral Issues'],
 };
 
-const therapyTopics: {
-    name: TherapyTopic;
-    title: string;
-    description: string;
-    filterFn: (therapist: Therapist) => boolean;
-}[] = [
-    {
-        name: 'Individual',
-        title: 'Our Specialists in Individual Therapy',
-        description: 'Human soul is fragile and it should be treated gently. Our therapists do it professionally.',
-        filterFn: (therapist) => {
-            const individualKeywords = ['Anxiety', 'Depression', 'Personal Growth', 'Grief', 'Trauma', 'Self-Esteem', 'Spirituality', 'Lifestyle Changes', 'ADHD', 'Anger Management', 'Bipolar Disorder', 'Eating Disorders', 'Pregnancy/Prenatal/Postpartum', 'Cognitive Behavioural Therapy (CBT)', 'Person-Centered Therapy', 'Faith-Centered Approach'];
-            return therapistMatchesKeywords(therapist, individualKeywords);
-        }
-    },
-    {
-        name: 'Couples',
-        title: 'Our Specialists in Couples Therapy',
-        description: 'Strengthen your bond, improve communication, and navigate relationship challenges together.',
-        filterFn: (therapist) => {
-            const couplesKeywords = ['Marital', 'Couples Therapy', 'Gottman Method', 'Imago', 'Infidelity'];
-            return therapistMatchesKeywords(therapist, couplesKeywords);
-        }
-    },
-    {
-        name: 'Family',
-        title: 'Our Specialists in Family Therapy',
-        description: 'Heal relationships and improve dynamics within the family with guided, compassionate support.',
-        filterFn: (therapist) => {
-            const familyKeywords = ['Family Conflict', 'Family Therapy', 'Family Systems Therapy', 'Structural Family Therapy'];
-            return therapistMatchesKeywords(therapist, familyKeywords);
-        }
-    },
-    {
-        name: 'Child',
-        title: 'Our Specialists in Child & Teen Therapy',
-        description: 'A safe and supportive space for young minds to express themselves and build resilience.',
-        filterFn: (therapist) => {
-            const childKeywords = ['Child issues', 'Parenting', 'Play Therapy', 'Parent-Child Interaction Therapy (PCIT)', 'Autism', 'Behavioral Issues'];
-            return therapistMatchesKeywords(therapist, childKeywords);
-        }
-    }
-];
+const normalize = (value: string) => value.trim().toLowerCase();
 
-// Carousel component with integrated flip-card functionality
-const TherapistCarousel: React.FC<{ therapists: Therapist[]; title: string; description: string }> = ({ therapists, title, description }) => {
-    const [currentIndex, setCurrentIndex] = useState(0);
-
-    const handlePrev = () => {
-        setCurrentIndex(prev => Math.max(0, prev - 1));
-    };
-
-    const handleNext = () => {
-        setCurrentIndex(prev => Math.min(therapists.length - 1, prev + 1));
-    };
-
-    if (therapists.length === 0) {
-        return null;
-    }
-
-    // A therapist "slot" is 192px (card) wide + 32px for gap
-    const itemSlotWidth = 192 + 32;
-
-    return (
-        <section className="py-16 relative">
-            <div className="absolute top-1/4 left-1/4 w-3 h-3 bg-gold/30 rounded-full animate-pulse"></div>
-            <div className="absolute bottom-1/4 right-1/4 w-4 h-4 bg-gold/30 rounded-full animate-pulse delay-500"></div>
-            
-            <div className="container mx-auto px-6">
-                <div className="text-center mb-12 max-w-3xl mx-auto">
-                    <h2 className="text-3xl md:text-4xl font-serif font-bold text-brown-dark">{title}</h2>
-                    <p className="text-lg text-brown-soft mt-2">{description}</p>
-                </div>
-
-                <div className="relative">
-                    {/* Carousel Viewport */}
-                    <div className="h-56 overflow-hidden relative">
-                        {/* Movable Track */}
-                        <div
-                            className="flex items-center h-full absolute"
-                            style={{
-                                left: '50%',
-                                transform: `translateX(-${(currentIndex * itemSlotWidth) + (itemSlotWidth / 2)}px)`,
-                                transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                            }}
-                        >
-                            {therapists.map((therapist, index) => {
-                                const isActive = index === currentIndex;
-                                return (
-                                    <div
-                                        key={therapist.id}
-                                        className="flex-shrink-0 flex items-center justify-center"
-                                        style={{ width: `${itemSlotWidth}px` }}
-                                    >
-                                        <div
-                                            className={`flip-card w-[192px] h-[192px]`}
-                                            style={{
-                                                transform: isActive ? 'scale(1)' : 'scale(0.8)',
-                                                opacity: 1,
-                                                transition: 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-                                            }}
-                                        >
-                                            <div className="flip-card-inner">
-                                                {/* Front Card */}
-                                                <div className="flip-card-front bg-ivory shadow-lg overflow-hidden flex flex-col justify-end">
-                                                    <img src={therapist.imageUrl} alt={therapist.name} className="absolute inset-0 w-full h-full object-cover"/>
-                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-transparent"></div>
-                                                    <div className="relative p-3 text-white text-left">
-                                                        <h3 className="font-serif font-semibold text-base leading-tight drop-shadow-sm">{therapist.name}</h3>
-                                                        <p className="text-xs opacity-90 drop-shadow-sm">{therapist.title}</p>
-                                                    </div>
-                                                </div>
-                                                {/* Back Card */}
-                                                <div className="flip-card-back bg-sand shadow-lg p-3 flex flex-col items-center justify-center text-brown-dark text-center">
-                                                    <h4 className="font-serif font-semibold text-sm mb-2">Specialization</h4>
-                                                    <div className="flex flex-wrap justify-center gap-1 mb-3">
-                                                        {therapist.concerns.slice(0, 3).map(concern => (
-                                                            <span key={concern} className="bg-ivory text-brown-soft text-[10px] font-medium px-2 py-0.5 rounded-full">{concern}</span>
-                                                        ))}
-                                                    </div>
-                                                    <p className="flex items-center text-xs text-taupe mb-4">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" /></svg>
-                                                        {therapist.location}
-                                                    </p>
-                                                    <Link 
-                                                        to={`/therapist/${therapist.id}`} 
-                                                        className="mt-auto block w-full text-center bg-brown-soft text-white px-3 py-2 rounded-lg hover:bg-brown-dark transition-colors duration-300 text-xs font-semibold"
-                                                        aria-label={`View profile of ${therapist.name}`}
-                                                    >
-                                                        View Profile
-                                                    </Link>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                    
-                    {/* Navigation Buttons */}
-                    <button 
-                        onClick={handlePrev} 
-                        disabled={currentIndex === 0} 
-                        className="absolute top-1/2 left-0 md:-left-4 transform -translate-y-1/2 p-2 rounded-full hover:bg-sand disabled:opacity-20 transition-colors z-10"
-                        aria-label="Previous therapist"
-                    >
-                        <ChevronLeftIcon className="h-10 w-10 text-taupe" />
-                    </button>
-                    <button 
-                        onClick={handleNext} 
-                        disabled={currentIndex === therapists.length - 1} 
-                        className="absolute top-1/2 right-0 md:-right-4 transform -translate-y-1/2 p-2 rounded-full hover:bg-sand disabled:opacity-20 transition-colors z-10"
-                        aria-label="Next therapist"
-                    >
-                        <ChevronRightIcon className="h-10 w-10 text-taupe" />
-                    </button>
-                </div>
-            </div>
-        </section>
-    );
+const containsKeyword = (value: string, keyword: string) => {
+  const normalizedValue = normalize(value);
+  const normalizedKeyword = normalize(keyword);
+  return normalizedValue === normalizedKeyword
+    || normalizedValue.includes(normalizedKeyword)
+    || normalizedKeyword.includes(normalizedValue);
 };
 
+const matchesAnyKeyword = (therapist: Therapist, keywords: string[]) => {
+  const searchable = [...therapist.concerns, ...therapist.specialties];
+  return searchable.some((value) => keywords.some((keyword) => containsKeyword(value, keyword)));
+};
 
-// Main TherapistsPage Component
+const deriveTherapyTypes = (therapist: Therapist): Exclude<TherapyType, 'All'>[] => {
+  const matched = (Object.keys(THERAPY_KEYWORDS) as Exclude<TherapyType, 'All'>[])
+    .filter((type) => matchesAnyKeyword(therapist, THERAPY_KEYWORDS[type]));
+  return matched.length ? matched : ['Individual'];
+};
+
+const passesPriceRange = (therapist: Therapist, range: PriceRange) => {
+  if (range === 'all') return true;
+  const price = therapist.rates.session60 || 0;
+  if (range === 'low') return price > 0 && price <= 1500;
+  if (range === 'mid') return price > 1500 && price <= 3000;
+  return price > 3000;
+};
+
+const splitLanguages = (therapist: Therapist) =>
+  therapist.language.split(',').map((value) => value.trim()).filter(Boolean);
+
 const TherapistsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const isMatching = Boolean(location.state?.concerns);
 
-  const isMatching = location.state && location.state.concerns;
   const [therapists, setTherapists] = useState<Therapist[]>(mockTherapists);
-  const [scoredTherapists, setScoredTherapists] = useState<ScoredTherapist[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [therapyType, setTherapyType] = useState<TherapyType>('All');
+  const [specialty, setSpecialty] = useState('All');
+  const [language, setLanguage] = useState('All');
+  const [sessionType, setSessionType] = useState('All');
+  const [priceRange, setPriceRange] = useState<PriceRange>('all');
 
   useEffect(() => {
     let isMounted = true;
     const loadTherapists = async () => {
+      setIsLoading(true);
       try {
         const response = await apiFetch('/auth/therapists');
         if (!response.ok) return;
         const data = await response.json();
-        if (isMounted && Array.isArray(data.therapists) && data.therapists.length) {
+        if (isMounted && Array.isArray(data.therapists)) {
           setTherapists(data.therapists);
         }
       } catch (error) {
         console.error('Failed to load therapists:', error);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     };
+
     loadTherapists();
     return () => {
       isMounted = false;
     };
   }, []);
 
-  useEffect(() => {
-    if (isMatching) {
-      const { concerns, gender } = location.state;
-      const scored = therapists.map(therapist => {
-        let score = 0;
-        therapist.concerns.forEach(c => {
-          if (concerns.includes(c)) score += 2;
-        });
-        if (gender !== 'No Preference' && therapist.gender === gender) {
-          score += 5;
-        }
-        return { ...therapist, score };
-      }).sort((a, b) => b.score - a.score);
-      
-      setScoredTherapists(scored);
-    }
+  const specialtyOptions = useMemo(() => {
+    const options = new Set<string>();
+    therapists.forEach((therapist) => {
+      [...therapist.concerns, ...therapist.specialties].forEach((value) => options.add(value));
+    });
+    return ['All', ...Array.from(options).sort((a, b) => a.localeCompare(b))];
+  }, [therapists]);
+
+  const languageOptions = useMemo(() => {
+    const options = new Set<string>();
+    therapists.forEach((therapist) => splitLanguages(therapist).forEach((lang) => options.add(lang)));
+    return ['All', ...Array.from(options).sort((a, b) => a.localeCompare(b))];
+  }, [therapists]);
+
+  const sessionTypeOptions = useMemo(() => {
+    const options = new Set<string>();
+    therapists.forEach((therapist) => therapist.sessionTypes.forEach((type) => options.add(type)));
+    return ['All', ...Array.from(options)];
+  }, [therapists]);
+
+  const filteredTherapists = useMemo(() => {
+    return therapists.filter((therapist) => {
+      if (therapyType !== 'All' && !deriveTherapyTypes(therapist).includes(therapyType)) return false;
+
+      if (specialty !== 'All') {
+        const hasSpecialty = [...therapist.concerns, ...therapist.specialties]
+          .some((value) => containsKeyword(value, specialty));
+        if (!hasSpecialty) return false;
+      }
+
+      if (language !== 'All') {
+        const hasLanguage = splitLanguages(therapist).some((value) => normalize(value) === normalize(language));
+        if (!hasLanguage) return false;
+      }
+
+      if (sessionType !== 'All' && !therapist.sessionTypes.includes(sessionType as 'Video' | 'Audio' | 'Text')) {
+        return false;
+      }
+
+      if (!passesPriceRange(therapist, priceRange)) return false;
+
+      if (searchQuery.trim()) {
+        const q = normalize(searchQuery);
+        const searchable = [
+          therapist.name,
+          therapist.title,
+          therapist.location,
+          therapist.language,
+          ...therapist.concerns,
+          ...therapist.specialties,
+        ].map(normalize);
+        if (!searchable.some((value) => value.includes(q))) return false;
+      }
+
+      return true;
+    });
+  }, [language, priceRange, searchQuery, sessionType, specialty, therapists, therapyType]);
+
+  const scoredTherapists = useMemo(() => {
+    if (!isMatching) return [];
+    const { concerns, gender } = location.state as { concerns: string[]; gender: string };
+    return therapists.map((therapist) => {
+      let score = 0;
+      therapist.concerns.forEach((concern) => {
+        if (concerns.includes(concern)) score += 2;
+      });
+      if (gender !== 'No Preference' && therapist.gender === gender) score += 5;
+      return { ...therapist, score };
+    }).sort((a, b) => b.score - a.score);
   }, [isMatching, location.state, therapists]);
 
-  const categorizedTherapists = therapyTopics.map((topic) => ({
-    ...topic,
-    therapists: therapists.filter(topic.filterFn),
-  }));
-  const hasCategoryMatches = categorizedTherapists.some((topic) => topic.therapists.length > 0);
+  const activeList: (Therapist | ScoredTherapist)[] = isMatching ? scoredTherapists : filteredTherapists;
+
+  const resetFilters = () => {
+    setSearchQuery('');
+    setTherapyType('All');
+    setSpecialty('All');
+    setLanguage('All');
+    setSessionType('All');
+    setPriceRange('all');
+  };
 
   return (
-    <>
-      {isMatching ? (
-        <section className="bg-sand py-12 text-center">
-          <div className="container mx-auto px-6 max-w-3xl">
-            <h1 className="text-4xl md:text-5xl font-serif font-bold text-brown-dark mb-4">Here Are Your Recommended Therapists</h1>
-            <p className="text-lg text-brown-soft">Based on your preferences, we believe these professionals would be a great fit for your journey.</p>
-            <button
+    <div className="bg-cream min-h-screen">
+      <section className="bg-sand py-12">
+        <div className="container mx-auto px-6 max-w-5xl text-center">
+          {isMatching ? (
+            <>
+              <h1 className="text-4xl md:text-5xl font-serif font-bold text-brown-dark mb-4">Here Are Your Recommended Therapists</h1>
+              <p className="text-lg text-brown-soft">Based on your preferences, we believe these professionals would be a great fit for your journey.</p>
+              <button
                 onClick={() => navigate('/questionnaire')}
                 className="mt-6 inline-flex items-center gap-2 text-brown-soft hover:text-brown-dark transition-colors font-semibold group"
-            >
+              >
                 <ChevronLeftIcon className="h-5 w-5 transition-transform group-hover:-translate-x-1" />
                 <span>Change Preferences</span>
-            </button>
+              </button>
+            </>
+          ) : (
+            <>
+              <h1 className="text-4xl md:text-5xl font-serif font-bold text-brown-dark mb-4">Find Your Therapist</h1>
+              <p className="text-lg text-brown-soft">Browse all available therapists, apply filters, and choose the right fit for your healing journey.</p>
+            </>
+          )}
+        </div>
+      </section>
+
+      {!isMatching && (
+        <section className="py-8 border-b border-sand/70 bg-ivory/40">
+          <div className="container mx-auto px-6 max-w-6xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+              <input
+                type="text"
+                placeholder="Search therapist, concern, or location"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="xl:col-span-2 bg-white border border-sand rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brown-soft/40 focus:border-brown-soft"
+              />
+              <select value={therapyType} onChange={(e) => setTherapyType(e.target.value as TherapyType)} className="bg-white border border-sand rounded-lg px-3 py-2 text-sm">
+                <option value="All">Therapy Type: All</option>
+                <option value="Individual">Individual</option>
+                <option value="Couples">Couples</option>
+                <option value="Family">Family</option>
+                <option value="Child">Child & Teen</option>
+              </select>
+              <select value={specialty} onChange={(e) => setSpecialty(e.target.value)} className="bg-white border border-sand rounded-lg px-3 py-2 text-sm">
+                {specialtyOptions.map((option) => <option key={option} value={option}>{option === 'All' ? 'Concern/Specialty: All' : option}</option>)}
+              </select>
+              <select value={language} onChange={(e) => setLanguage(e.target.value)} className="bg-white border border-sand rounded-lg px-3 py-2 text-sm">
+                {languageOptions.map((option) => <option key={option} value={option}>{option === 'All' ? 'Language: All' : option}</option>)}
+              </select>
+              <select value={sessionType} onChange={(e) => setSessionType(e.target.value)} className="bg-white border border-sand rounded-lg px-3 py-2 text-sm">
+                {sessionTypeOptions.map((option) => <option key={option} value={option}>{option === 'All' ? 'Session Type: All' : option}</option>)}
+              </select>
+              <select value={priceRange} onChange={(e) => setPriceRange(e.target.value as PriceRange)} className="bg-white border border-sand rounded-lg px-3 py-2 text-sm">
+                <option value="all">Price: Any</option>
+                <option value="low">Up to ₹1,500</option>
+                <option value="mid">₹1,501 - ₹3,000</option>
+                <option value="high">Above ₹3,000</option>
+              </select>
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-brown-soft">{filteredTherapists.length} therapist{filteredTherapists.length === 1 ? '' : 's'} found</p>
+              <button onClick={resetFilters} className="text-sm font-semibold text-brown-soft hover:text-brown-dark transition-colors">Reset filters</button>
+            </div>
           </div>
         </section>
-      ) : (
-        <section
-            className="relative min-h-[300px] md:min-h-[428px] flex items-center justify-center p-6 text-center"
-            style={{
-                backgroundImage: `url('https://res.cloudinary.com/dyqspp2ud/image/upload/v1762938141/neutral_toned_hand_painted_watercolour_background_2404_pgyc6e.jpg')`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-            }}
-        >
-            <div className="relative container mx-auto px-6 max-w-5xl">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                    {/* Left: Text Content */}
-                    <div className="text-left">
-                        <h1 
-                            className="text-4xl md:text-5xl lg:text-6xl font-serif font-bold text-brown-dark mb-6"
-                            style={{textShadow: '1px 1px 3px rgba(253, 251, 245, 0.7)'}}
-                        >
-                            Find Your Therapist
-                        </h1>
-                        <div className="max-w-lg">
-                            <p 
-                                className="text-brown-dark text-lg md:text-xl font-serif italic"
-                                style={{textShadow: '1px 1px 3px rgba(253, 251, 245, 0.7)'}}
-                            >
-                                "Healing begins with the right guide - we help you find yours"
-                            </p>
-                        </div>
-                    </div>
-                    
-                    {/* Right: Illustration with themed frame & pop effect */}
-                    <div className="flex justify-center items-center">
-                        <div className="relative w-72 h-72 md:w-96 md:h-96 group" aria-hidden="false">
-                            {/* soft gradient frame that matches site palette */}
-                            <div className="absolute -inset-1 rounded-xl bg-gradient-to-br from-ivory to-sand opacity-95 transform transition-transform group-hover:scale-105" />
+      )}
 
-                            <div
-                                className="relative w-full h-full p-4 rounded-xl border border-gold/20 shadow-lg overflow-hidden"
-                                style={{
-                                    backgroundImage: `url('https://res.cloudinary.com/dyqspp2ud/image/upload/v1762938141/neutral_toned_hand_painted_watercolour_background_2404_pgyc6e.jpg')`,
-                                    backgroundSize: 'cover',
-                                    backgroundPosition: 'center',
-                                    backgroundRepeat: 'no-repeat',
-                                }}
-                            >
-                                {/* subtle ivory panel on top of the watercolor so image still reads clearly */}
-                                <div className="absolute inset-2 md:inset-3 rounded-md bg-[rgba(251,247,243,0.86)] p-2 flex items-center justify-center">
-                                    <img
-                                        src="https://res.cloudinary.com/dyqspp2ud/image/upload/v1762438809/pd1d3bsjfxetkq4rtvah.png"
-                                        alt="Therapeutic illustration: person receiving support"
-                                        className="w-full h-full object-contain rounded-md transition-transform duration-300 group-hover:scale-105"
-                                        style={{ filter: 'sepia(0.18) hue-rotate(-10deg) saturate(0.95) brightness(0.98) contrast(0.98)' }}
-                                    />
-                                </div>
-
-                                {/* warm blend overlay to match header palette (brown/gold/ivory) */}
-                                <div
-                                    aria-hidden="true"
-                                    className="absolute inset-0 rounded-xl pointer-events-none"
-                                    style={{
-                                        background: 'linear-gradient(135deg, rgba(250,244,238,0) 0%, rgba(178,137,95,0.12) 50%, rgba(145,100,58,0.18) 100%)',
-                                        mixBlendMode: 'multiply',
-                                    }}
-                                />
-                            </div>
-
-                            {/* Decorative accent removed to prevent visual clutter */}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-      ) }
-
-      <main>
-        {isMatching ? (
-          <div className="bg-cream">
-            <div className="container mx-auto px-6 py-16">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {scoredTherapists.map((therapist, index) => (
-                  <ScrollAnimationWrapper key={therapist.id} delay={100 * (index % 3)}>
-                    <TherapistCard 
-                      therapist={therapist} 
-                      isBestMatch={index === 0} 
-                    />
-                  </ScrollAnimationWrapper>
-                ))}
-              </div>
-            </div>
+      <main className="container mx-auto px-6 py-10 max-w-6xl">
+        {isLoading && <p className="text-sm text-brown-soft mb-4">Loading therapists...</p>}
+        {activeList.length === 0 ? (
+          <div className="bg-ivory border border-sand rounded-xl p-8 text-center">
+            <h2 className="text-2xl font-serif font-semibold text-brown-dark">No therapists match your filters</h2>
+            <p className="text-brown-soft mt-2">Try changing your filters to see more therapists.</p>
           </div>
         ) : (
-          <div className="bg-cream">
-            {!hasCategoryMatches && therapists.length > 0 && (
-              <ScrollAnimationWrapper>
-                <TherapistCarousel
-                  therapists={therapists}
-                  title="Meet Our Therapists"
-                  description="Browse all available therapists and choose the right fit for your journey."
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {activeList.map((therapist, index) => (
+              <ScrollAnimationWrapper key={therapist.id} delay={100 * (index % 3)}>
+                <TherapistCard
+                  therapist={therapist as Therapist}
+                  isBestMatch={isMatching && index === 0}
                 />
               </ScrollAnimationWrapper>
-            )}
-            {categorizedTherapists.map(topic => (
-               <ScrollAnimationWrapper key={topic.name}>
-                 <TherapistCarousel
-                      therapists={topic.therapists}
-                      title={topic.title}
-                      description={topic.description}
-                  />
-               </ScrollAnimationWrapper>
             ))}
           </div>
         )}
       </main>
-    </>
+    </div>
   );
 };
 
