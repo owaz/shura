@@ -7,6 +7,7 @@ import { apiFetch } from '../config/api';
 
 const totalSteps = 4;
 const sessionTypesOptions = ['Video', 'Audio', 'Text'];
+const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
 const TherapistOnboardingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -89,7 +90,7 @@ const TherapistOnboardingPage: React.FC = () => {
 
   const isNextDisabled = () => {
     if (currentStep === 1) {
-        return !formData.fullName || !formData.email || !formData.phone;
+        return !formData.fullName.trim() || !isValidEmail(formData.email) || !formData.phone.trim();
     }
     if (currentStep === 2) {
         return !formData.experience || !formData.specialties;
