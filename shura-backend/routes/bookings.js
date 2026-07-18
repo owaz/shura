@@ -10,6 +10,17 @@ const {
 } = require('../utils/emailService');
 const { syncBookingToConnectedCalendars } = require('../utils/calendarIntegrations');
 
+const dispatchBookingNotifications = (emailData) => {
+  void Promise.allSettled([
+    Promise.resolve().then(() => sendBookingConfirmation(emailData)),
+    Promise.resolve().then(() => sendBookingNotificationToTherapist(emailData)),
+  ]).then((results) => {
+    results
+      .filter((result) => result.status === 'rejected')
+      .forEach((result) => console.error('Booking email dispatch error:', result.reason));
+  });
+};
+
 const toMinutes = (time) => {
   const [hours, minutes] = String(time).slice(0, 5).split(':').map(Number);
   return hours * 60 + minutes;
@@ -300,9 +311,7 @@ router.post('/', authenticateToken, async (req, res) => {
         sessionType: booking.session_type,
       };
       
-      // Send confirmation emails (non-blocking)
-      sendBookingConfirmation(emailData).catch(err => console.error('Email error:', err));
-      sendBookingNotificationToTherapist(emailData).catch(err => console.error('Email error:', err));
+      dispatchBookingNotifications(emailData);
     }
 
     syncBookingToConnectedCalendars(booking.id).catch(err => {

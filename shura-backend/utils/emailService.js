@@ -448,10 +448,92 @@ const sendIntakeFormSubmission = async (clientEmail, clientName, formData) => {
   }
 };
 
+const formatBookingDate = (value) => {
+  if (!value) return 'your selected date';
+  const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+  return Number.isNaN(parsed.getTime())
+    ? escapeHtml(value)
+    : parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
+const sendBookingConfirmation = async (bookingData) => {
+  try {
+    const transporter = createTransporter();
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: bookingData.clientEmail,
+      subject: 'Your Shura session is booked',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
+          <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0;">Your Session Is Confirmed</h1>
+          </div>
+          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
+            <p style="font-size: 16px; color: #333;">Dear ${textOrFallback(bookingData.clientName)},</p>
+            <p style="color: #555; line-height: 1.6;">Your session with ${textOrFallback(bookingData.therapistName)} has been booked successfully.</p>
+            <div style="margin: 24px 0; padding: 16px; background-color: #f8f5f0; border-radius: 8px;">
+              <p style="margin: 6px 0; color: #555;"><strong>Session:</strong> ${textOrFallback(bookingData.sessionType)}</p>
+              <p style="margin: 6px 0; color: #555;"><strong>Date:</strong> ${formatBookingDate(bookingData.date)}</p>
+              <p style="margin: 6px 0; color: #555;"><strong>Time:</strong> ${textOrFallback(String(bookingData.time || '').slice(0, 5))}</p>
+            </div>
+            <p style="color: #555; line-height: 1.6;">We look forward to supporting you on your healing journey.</p>
+            <p style="color: #555;">Warm regards,<br/><strong>The Shura Team</strong></p>
+          </div>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Booking confirmation sent to: ${bookingData.clientEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error sending booking confirmation email:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+const sendBookingNotificationToTherapist = async (bookingData) => {
+  try {
+    const transporter = createTransporter();
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: bookingData.therapistEmail,
+      subject: 'New Shura session booking',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
+          <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0;">New Session Booking</h1>
+          </div>
+          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
+            <p style="font-size: 16px; color: #333;">Dear ${textOrFallback(bookingData.therapistName)},</p>
+            <p style="color: #555; line-height: 1.6;">${textOrFallback(bookingData.clientName)} has booked a session with you.</p>
+            <div style="margin: 24px 0; padding: 16px; background-color: #f8f5f0; border-radius: 8px;">
+              <p style="margin: 6px 0; color: #555;"><strong>Client:</strong> ${textOrFallback(bookingData.clientName)} (${textOrFallback(bookingData.clientEmail)})</p>
+              <p style="margin: 6px 0; color: #555;"><strong>Session:</strong> ${textOrFallback(bookingData.sessionType)}</p>
+              <p style="margin: 6px 0; color: #555;"><strong>Date:</strong> ${formatBookingDate(bookingData.date)}</p>
+              <p style="margin: 6px 0; color: #555;"><strong>Time:</strong> ${textOrFallback(String(bookingData.time || '').slice(0, 5))}</p>
+            </div>
+            <p style="color: #555;">Please review your calendar for the updated appointment.</p>
+          </div>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`✅ Booking notification sent to therapist: ${bookingData.therapistEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error sending therapist booking notification:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendTherapistApplicationNotification,
   sendTherapistApprovalEmail,
   sendClientSignupNotification,
   sendIntakeFormLink,
   sendIntakeFormSubmission,
+  sendBookingConfirmation,
+  sendBookingNotificationToTherapist,
 };
