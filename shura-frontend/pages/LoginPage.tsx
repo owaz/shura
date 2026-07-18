@@ -12,6 +12,7 @@ const LoginPage: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const sessionExpired = Boolean(location.state?.sessionExpired);
 
   // Email validation
   const isValidEmail = (email: string) => {
@@ -59,6 +60,12 @@ const LoginPage: React.FC = () => {
             <h1 className="text-3xl font-serif font-bold text-brown-dark mt-2">Welcome Back</h1>
             <p className="text-brown-soft mt-1">Please sign in to continue.</p>
           </div>
+
+          {sessionExpired && !error && (
+            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-amber-700 text-sm">Your session expired. Please sign in again to continue your payment.</p>
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">

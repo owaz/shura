@@ -202,12 +202,15 @@ const App: React.FC = () => {
           <Route path="/questionnaire" element={<QuestionnairePage />} />
           <Route path="/join-as-therapist" element={<TherapistOnboardingPage />} />
           <Route path="/chat/:therapistId" element={<ClientChatPage />} />
-          <Route path="/payment" element={<PaymentPage />} />
           <Route path="/call" element={<CallPage />} />
           <Route path="/intake/:token" element={<IntakeFormPage />} />
           <Route path="/intake-success" element={<IntakeSuccessPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin/therapists/pending" element={<AdminTherapistApprovalsPage />} />
+
+          <Route element={<ProtectedRoute allowedRoles={['client']} redirectTo="/login" />}>
+            <Route path="/payment" element={<PaymentPage />} />
+          </Route>
 
           {/* Therapist Portal Routes */}
           <Route element={<ProtectedRoute allowedRoles={['therapist']} redirectTo="/therapist-login" />}>

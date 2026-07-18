@@ -20,7 +20,17 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles, redirectT
   }
 
   if (!isAuthenticated || !currentUser) {
-    return <Navigate to={redirectTo} replace state={{ from: location }} />;
+    return (
+      <Navigate
+        to={redirectTo}
+        replace
+        state={{
+          from: location,
+          redirectTo: `${location.pathname}${location.search}${location.hash}`,
+          paymentData: location.state,
+        }}
+      />
+    );
   }
 
   if (allowedRoles?.length && !allowedRoles.includes(currentUser.role)) {

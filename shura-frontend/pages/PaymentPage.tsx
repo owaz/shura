@@ -5,6 +5,7 @@ import type { Therapist } from '../types';
 import { Logo } from '../components/Logo';
 import { ChevronLeftIcon } from '../components/Icons';
 import { apiFetch } from '../config/api';
+import { useAuth } from '../contexts/AuthContext';
 
 declare global {
   interface Window {
@@ -55,6 +56,7 @@ const loadRazorpayCheckoutScript = async (): Promise<void> => {
 const PaymentPage: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
+    const { refreshSession, logout } = useAuth();
     const [isProcessing, setIsProcessing] = useState(false);
     const [paymentError, setPaymentError] = useState('');
     
@@ -87,14 +89,36 @@ const PaymentPage: React.FC = () => {
                 throw new Error('Razorpay checkout is unavailable right now. Please try again.');
             }
 
-            const createOrderResponse = await apiFetch('/payments/create-order', {
+            const createOrderRequest = () => apiFetch('/payments/create-order', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(bookingSelection),
             });
+
+            let createOrderResponse = await createOrderRequest();
+            if (createOrderResponse.status === 401) {
+                const refreshedUser = await refreshSession();
+                if (!refreshedUser) {
+                    await logout();
+                    navigate('/login', {
+                        replace: true,
+                        state: {
+                            redirectTo: '/payment',
+                            paymentData: location.state,
+                            sessionExpired: true,
+                        },
+                    });
+                    return;
+                }
+                createOrderResponse = await createOrderRequest();
+            }
             const createOrderData = await createOrderResponse.json();
             if (!createOrderResponse.ok) {
-                throw new Error(createOrderData.error || 'Unable to start payment');
+                throw new Error(
+                    createOrderResponse.status === 401
+                        ? 'Your session expired. Please sign in again.'
+                        : createOrderData.error || 'Unable to start payment'
+                );
             }
 
             const options = {
