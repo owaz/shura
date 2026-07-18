@@ -65,8 +65,16 @@ type BookingSelection = {
 const TherapistProfilePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { state } = useLocation();
-  const [therapist, setTherapist] = useState<Therapist | null>(() => mockTherapists.find(t => t.id === Number(id)) || null);
-  const [isLoadingTherapist, setIsLoadingTherapist] = useState(false);
+  const [therapist, setTherapist] = useState<Therapist | null>(() => {
+    if (!id) return null;
+    const numericId = Number(id);
+    if (Number.isInteger(numericId)) {
+      return mockTherapists.find((t) => t.id === numericId) || null;
+    }
+    return null;
+  });
+  const [isLoadingTherapist, setIsLoadingTherapist] = useState(true);
+  const [hasLoadedTherapist, setHasLoadedTherapist] = useState(false);
   const [bookingSelection, setBookingSelection] = useState<BookingSelection | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
@@ -82,13 +90,16 @@ const TherapistProfilePage: React.FC = () => {
 
   useEffect(() => {
     let isMounted = true;
-    const therapistId = Number(id);
-    if (!Number.isInteger(therapistId)) return;
+    if (!id) {
+      setIsLoadingTherapist(false);
+      setHasLoadedTherapist(true);
+      return;
+    }
 
     const loadTherapist = async () => {
       setIsLoadingTherapist(true);
       try {
-        const response = await apiFetch(`/auth/therapists/${therapistId}`);
+        const response = await apiFetch(`/auth/therapists/${encodeURIComponent(id)}`);
         if (!response.ok) return;
         const data = await response.json();
         if (isMounted && data.therapist) {
@@ -99,6 +110,7 @@ const TherapistProfilePage: React.FC = () => {
       } finally {
         if (isMounted) {
           setIsLoadingTherapist(false);
+          setHasLoadedTherapist(true);
         }
       }
     };
@@ -108,7 +120,7 @@ const TherapistProfilePage: React.FC = () => {
     };
   }, [id]);
 
-  if (!therapist) {
+  if (hasLoadedTherapist && !therapist) {
     return <Navigate to="/therapists" replace />;
   }
 
