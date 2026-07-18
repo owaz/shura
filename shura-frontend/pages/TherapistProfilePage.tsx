@@ -75,6 +75,7 @@ const TherapistProfilePage: React.FC = () => {
   });
   const [isLoadingTherapist, setIsLoadingTherapist] = useState(true);
   const [hasLoadedTherapist, setHasLoadedTherapist] = useState(false);
+  const [therapistLoadError, setTherapistLoadError] = useState('');
   const [bookingSelection, setBookingSelection] = useState<BookingSelection | null>(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
@@ -98,15 +99,21 @@ const TherapistProfilePage: React.FC = () => {
 
     const loadTherapist = async () => {
       setIsLoadingTherapist(true);
+      setTherapistLoadError('');
       try {
         const response = await apiFetch(`/auth/therapists/${encodeURIComponent(id)}`);
-        if (!response.ok) return;
         const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Unable to load this therapist profile');
+        }
         if (isMounted && data.therapist) {
           setTherapist(data.therapist);
         }
       } catch (error) {
         console.error('Failed to load therapist profile:', error);
+        if (isMounted) {
+          setTherapistLoadError(error instanceof Error ? error.message : 'Unable to load this therapist profile');
+        }
       } finally {
         if (isMounted) {
           setIsLoadingTherapist(false);
@@ -121,7 +128,31 @@ const TherapistProfilePage: React.FC = () => {
   }, [id]);
 
   if (hasLoadedTherapist && !therapist) {
-    return <Navigate to="/therapists" replace />;
+    return (
+      <div className="bg-sand min-h-screen py-16">
+        <div className="container mx-auto px-6 max-w-2xl text-center">
+          <h1 className="text-3xl font-serif font-bold text-brown-dark">Therapist profile unavailable</h1>
+          <p className="text-brown-soft mt-3">{therapistLoadError || 'This therapist is no longer available.'}</p>
+          <button
+            type="button"
+            onClick={() => navigate('/therapists')}
+            className="mt-6 bg-brown-soft text-white px-5 py-2 rounded-lg font-semibold hover:bg-brown-dark transition-colors"
+          >
+            Back to Therapists
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!therapist) {
+    return (
+      <div className="bg-sand min-h-screen py-16">
+        <div className="container mx-auto px-6 max-w-2xl text-center">
+          <p className="text-brown-soft">Loading therapist profile...</p>
+        </div>
+      </div>
+    );
   }
 
   const resetBookingModal = () => {
