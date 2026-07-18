@@ -165,6 +165,11 @@ const TherapistProfilePage: React.FC = () => {
   };
 
   const openBookingModal = (selection: BookingSelection) => {
+    if (!isAuthenticated) {
+      navigate('/login', { state: { redirectTo: `/therapist/${therapist.id}` } });
+      return;
+    }
+
     setBookingSelection(selection);
     setSelectedDate('');
     setAvailableSlots([]);

@@ -27,6 +27,8 @@ type TherapistBooking = {
   client_email: string;
 };
 
+const formatDateOnly = (value: string) => String(value || '').slice(0, 10);
+
 const dayLabels = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const defaultRuleForDay = (day: number): AvailabilityRule => ({
@@ -283,7 +285,7 @@ const TherapistCalendarPage: React.FC = () => {
               <div>
                 <p className="font-medium text-brown-dark">{booking.client_name}</p>
                 <p className="text-sm text-brown-soft">
-                  {booking.date} @ {String(booking.time).slice(0, 5)} ({booking.session_type})
+                  {formatDateOnly(booking.date)} @ {String(booking.time).slice(0, 5)} ({booking.session_type})
                 </p>
               </div>
               <span className="text-xs px-2 py-1 rounded-full bg-sand text-brown-soft font-semibold">{booking.status}</span>
