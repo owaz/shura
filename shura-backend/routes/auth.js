@@ -209,7 +209,7 @@ router.get('/therapists', async (req, res) => {
               session_types, rate_60min, profile_image_url, bio,
               languages, gender, location, status
        FROM therapists
-       WHERE status = 'approved'
+       WHERE LOWER(COALESCE(status, '')) = 'approved'
        ORDER BY full_name ASC`
     );
 
@@ -227,7 +227,7 @@ router.get('/therapists/:id', async (req, res) => {
               session_types, rate_60min, profile_image_url, bio,
               languages, gender, location, status
        FROM therapists
-       WHERE id = $1 AND status = 'approved'`,
+       WHERE id = $1 AND LOWER(COALESCE(status, '')) = 'approved'`,
       [req.params.id]
     );
 

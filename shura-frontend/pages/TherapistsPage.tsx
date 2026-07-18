@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { Therapist } from '../types';
-import { mockTherapists } from '../data/therapists';
 import TherapistCard from '../components/TherapistCard';
 import { ChevronLeftIcon } from '../components/Icons';
 import ScrollAnimationWrapper from '../components/ScrollAnimationWrapper';
@@ -58,7 +57,7 @@ const TherapistsPage: React.FC = () => {
   const navigate = useNavigate();
   const isMatching = Boolean(location.state?.concerns);
 
-  const [therapists, setTherapists] = useState<Therapist[]>(mockTherapists);
+  const [therapists, setTherapists] = useState<Therapist[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [therapyType, setTherapyType] = useState<TherapyType>('All');
