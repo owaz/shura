@@ -139,6 +139,20 @@ The image builds the frontend and serves it from backend `public/`.
 - `PRODUCTION_CHECKLIST.md`
 - `PRODUCTION_READY.md`
 
+## Contributing
+
+Create a focused branch from `main`, keep commits limited to one logical change,
+and run the relevant checks before opening a pull request:
+
+```bash
+cd shura-frontend
+npm run typecheck
+npm run build
+```
+
+For backend changes, verify the affected routes locally and include any required
+database migration in the same pull request. Never commit `.env` files or secrets.
+
 ## Security Notes
 
 - Do not commit `.env` files or secrets.
