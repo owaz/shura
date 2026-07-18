@@ -20,6 +20,8 @@ type UpcomingAppointment = {
   client_email: string;
 };
 
+const formatDateOnly = (value: string) => String(value || '').slice(0, 10);
+
 const StatCard: React.FC<{ title: string; value: string; description: string }> = ({ title, value, description }) => (
   <div className="bg-ivory p-6 rounded-xl shadow-sm">
     <h3 className="text-sm font-semibold text-taupe">{title}</h3>
@@ -86,7 +88,7 @@ const TherapistDashboardPage: React.FC = () => {
               <div>
                 <p className="font-semibold text-brown-dark">{app.client_name}</p>
                 <p className="text-sm text-brown-soft">
-                  {app.date} @ {String(app.time).slice(0, 5)} ({app.session_type})
+                  {formatDateOnly(app.date)} @ {String(app.time).slice(0, 5)} ({app.session_type})
                 </p>
               </div>
               <span className="text-sm font-medium bg-sand text-brown-soft px-3 py-1 rounded-full">{app.status}</span>
