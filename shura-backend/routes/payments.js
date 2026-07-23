@@ -26,6 +26,32 @@ const toMinutes = (time) => {
   return hours * 60 + minutes;
 };
 
+const toIsoDateOnly = (value) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const asString = String(value || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(asString)) {
+    return asString;
+  }
+  const parsed = new Date(asString);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+  return '';
+};
+
+const toHHMM = (value) => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(11, 16);
+  }
+  const asString = String(value || '').trim();
+  if (/^\d{2}:\d{2}/.test(asString)) {
+    return asString.slice(0, 5);
+  }
+  return '';
+};
+
 const getDayOfWeek = (date) => {
   const parsed = new Date(`${date}T00:00:00+05:30`);
   return parsed.getDay();
@@ -71,14 +97,24 @@ const validatePaidIntentPayload = (payload) => {
 };
 
 const validateBookingSlotStillAvailable = async ({ therapistId, date, time }, queryClient = pool) => {
+  const normalizedDate = toIsoDateOnly(date);
+  const normalizedTime = toHHMM(time);
+  const dayOfWeek = getDayOfWeek(normalizedDate);
+  const requestedMinutes = toMinutes(normalizedTime);
+
+  if (!normalizedDate || !normalizedTime || Number.isNaN(dayOfWeek) || Number.isNaN(requestedMinutes)) {
+    const err = new Error('Invalid booking date or time');
+    err.statusCode = 400;
+    throw err;
+  }
+
   const rulesResult = await queryClient.query(
     `SELECT start_time, end_time, slot_minutes
      FROM therapist_availability_rules
      WHERE therapist_id = $1 AND day_of_week = $2 AND is_active = true`,
-    [therapistId, getDayOfWeek(date)]
+    [therapistId, dayOfWeek]
   );
 
-  const requestedMinutes = toMinutes(time);
   const matchingRule = rulesResult.rows.find((rule) => {
     const slotMinutes = Number(rule.slot_minutes || 30);
     return requestedMinutes >= toMinutes(rule.start_time) && requestedMinutes + slotMinutes <= toMinutes(rule.end_time);
@@ -97,9 +133,9 @@ const validateBookingSlotStillAvailable = async ({ therapistId, date, time }, qu
      WHERE therapist_id = $1
        AND starts_at < ($2::date + interval '1 day')
        AND ends_at > $2::date`,
-    [therapistId, date]
+    [therapistId, normalizedDate]
   );
-  if (blocked.rows.some((block) => slotOverlapsBlock(date, time, slotMinutes, block))) {
+  if (blocked.rows.some((block) => slotOverlapsBlock(normalizedDate, normalizedTime, slotMinutes, block))) {
     const err = new Error('Requested time is blocked by therapist');
     err.statusCode = 409;
     throw err;
@@ -216,8 +252,8 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
     await validateBookingSlotStillAvailable(
       {
         therapistId: intent.therapist_id,
-        date: String(intent.booking_date).slice(0, 10),
-        time: String(intent.booking_time).slice(0, 5),
+        date: toIsoDateOnly(intent.booking_date),
+        time: toHHMM(intent.booking_time),
       },
       dbClient
     );
