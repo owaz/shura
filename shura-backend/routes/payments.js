@@ -272,25 +272,54 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
       ]
     );
 
-    const paymentResult = await dbClient.query(
-      `INSERT INTO payments
-        (booking_id, client_id, therapist_id, amount_cents, status, razorpay_order_id, razorpay_payment_id, completed_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'completed', $5, $6, NOW(), NOW(), NOW())
-       ON CONFLICT (razorpay_payment_id)
-       DO UPDATE SET status = 'completed',
-                     razorpay_order_id = EXCLUDED.razorpay_order_id,
-                     completed_at = COALESCE(payments.completed_at, NOW()),
-                     updated_at = NOW()
-       RETURNING *`,
-      [
-        bookingResult.rows[0].id,
-        intent.client_id,
-        intent.therapist_id,
-        intent.amount_cents,
-        orderId,
-        paymentId,
-      ]
+    const existingPayment = await dbClient.query(
+      `SELECT id
+       FROM payments
+       WHERE razorpay_payment_id = $1
+       LIMIT 1
+       FOR UPDATE`,
+      [paymentId]
     );
+
+    let paymentResult;
+    if (existingPayment.rows.length) {
+      paymentResult = await dbClient.query(
+        `UPDATE payments
+         SET booking_id = COALESCE(booking_id, $1),
+             client_id = COALESCE(client_id, $2),
+             therapist_id = COALESCE(therapist_id, $3),
+             amount_cents = COALESCE(amount_cents, $4),
+             status = 'completed',
+             razorpay_order_id = COALESCE(razorpay_order_id, $5),
+             completed_at = COALESCE(completed_at, NOW()),
+             updated_at = NOW()
+         WHERE id = $6
+         RETURNING *`,
+        [
+          bookingResult.rows[0].id,
+          intent.client_id,
+          intent.therapist_id,
+          intent.amount_cents,
+          orderId,
+          existingPayment.rows[0].id,
+        ]
+      );
+    } else {
+      paymentResult = await dbClient.query(
+        `INSERT INTO payments
+          (booking_id, client_id, therapist_id, amount_cents, status, razorpay_order_id, razorpay_payment_id, completed_at, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'completed', $5, $6, NOW(), NOW(), NOW())
+         RETURNING *`,
+        [
+          bookingResult.rows[0].id,
+          intent.client_id,
+          intent.therapist_id,
+          intent.amount_cents,
+          orderId,
+          paymentId,
+        ]
+      );
+    }
 
     await dbClient.query(
       `UPDATE payment_booking_intents
