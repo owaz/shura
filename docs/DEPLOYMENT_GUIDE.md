@@ -315,6 +315,28 @@ az containerapp update \
     EMAIL_PASSWORD=secretref:email-password
 ```
 
+For completeness, include Razorpay secrets and env mappings as shown below:
+
+```bash
+az containerapp secret set \
+  --resource-group $RESOURCE_GROUP \
+  --name $ACA_APP \
+  --secrets \
+    razorpay-key-id="rzp_live_xxxxx" \
+    razorpay-key-secret="your-razorpay-key-secret" \
+    razorpay-webhook-secret="your-razorpay-webhook-secret"
+
+az containerapp update \
+  --resource-group $RESOURCE_GROUP \
+  --name $ACA_APP \
+  --set-env-vars \
+    RAZORPAY_KEY_ID=secretref:razorpay-key-id \
+    RAZORPAY_KEY_SECRET=secretref:razorpay-key-secret \
+    RAZORPAY_WEBHOOK_SECRET=secretref:razorpay-webhook-secret
+```
+
+`RAZORPAY_WEBHOOK_SECRET` must exactly match the secret configured in Razorpay Dashboard webhook settings.
+
 ### 5.4 Enable Azure Application Insights
 
 ```bash

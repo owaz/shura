@@ -124,6 +124,7 @@
 6. Update Railway environment variables:
    - `RAZORPAY_KEY_ID=rzp_live_xxxxx`
    - `RAZORPAY_KEY_SECRET=xxxxxxx`
+   - `RAZORPAY_WEBHOOK_SECRET=<same webhook secret configured in Razorpay Dashboard>`
 7. Test payment flow on production
 
 ---

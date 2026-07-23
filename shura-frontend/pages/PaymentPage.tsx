@@ -96,10 +96,13 @@ const PaymentPage: React.FC = () => {
             if (!createOrderResponse.ok) {
                 throw new Error(createOrderData.error || 'Unable to start payment');
             }
+            if (!createOrderData.key_id || !createOrderData.order_id || !Number.isInteger(Number(createOrderData.amount))) {
+                throw new Error('Payment configuration is unavailable right now. Please try again later.');
+            }
 
             const options = {
-                key: createOrderData.key_id || 'rzp_test_1DP5mmOlF5G5ag',
-                amount: createOrderData.amount || (price * 100),
+                key: createOrderData.key_id,
+                amount: Number(createOrderData.amount),
                 currency: createOrderData.currency || 'INR',
                 name: 'Shura',
                 description: `Payment for ${sessionType}`,

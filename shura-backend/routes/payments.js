@@ -42,7 +42,8 @@ const validatePaidIntentPayload = (payload) => {
   const date = String(payload.date || '');
   const time = String(payload.time || '').slice(0, 5);
   const sessionType = String(payload.session_type || 'video').toLowerCase();
-  const amountCents = Number(payload.amount_cents);
+  const amountProvided = payload.amount_cents !== undefined && payload.amount_cents !== null && payload.amount_cents !== '';
+  const amountCents = amountProvided ? Number(payload.amount_cents) : null;
 
   if (!Number.isInteger(therapistId) || therapistId <= 0) {
     return { error: 'Valid therapist_id is required' };
@@ -56,7 +57,7 @@ const validatePaidIntentPayload = (payload) => {
   if (!['video', 'audio', 'text', 'intro'].includes(sessionType)) {
     return { error: 'Invalid session_type' };
   }
-  if (!Number.isInteger(amountCents) || amountCents <= 0) {
+  if (amountProvided && (!Number.isInteger(amountCents) || amountCents <= 0)) {
     return { error: 'Valid amount_cents is required' };
   }
 
@@ -69,8 +70,8 @@ const validatePaidIntentPayload = (payload) => {
   };
 };
 
-const validateBookingSlotStillAvailable = async ({ therapistId, date, time }) => {
-  const rulesResult = await pool.query(
+const validateBookingSlotStillAvailable = async ({ therapistId, date, time }, queryClient = pool) => {
+  const rulesResult = await queryClient.query(
     `SELECT start_time, end_time, slot_minutes
      FROM therapist_availability_rules
      WHERE therapist_id = $1 AND day_of_week = $2 AND is_active = true`,
@@ -90,7 +91,7 @@ const validateBookingSlotStillAvailable = async ({ therapistId, date, time }) =>
   }
 
   const slotMinutes = Number(matchingRule.slot_minutes || 30);
-  const blocked = await pool.query(
+  const blocked = await queryClient.query(
     `SELECT starts_at, ends_at
      FROM therapist_blocked_times
      WHERE therapist_id = $1
@@ -129,6 +130,183 @@ const verifyRazorpaySignature = ({ orderId, paymentId, signature }) => {
     calculatedSignature.length === signature.length &&
     crypto.timingSafeEqual(Buffer.from(calculatedSignature), Buffer.from(signature))
   );
+};
+
+const resolveExpectedPaidAmountCents = async ({ therapistId, sessionType, clientAmountCents }) => {
+  if (sessionType === 'intro') {
+    const err = new Error('Intro sessions do not require payment');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const therapistRate = await pool.query(
+    `SELECT id, status, rate_60min
+     FROM therapists
+     WHERE id = $1`,
+    [therapistId]
+  );
+
+  if (!therapistRate.rows.length || therapistRate.rows[0].status !== 'approved') {
+    const err = new Error('Therapist not found');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const expectedAmountCents = Math.round(Number(therapistRate.rows[0].rate_60min || 0) * 100);
+  if (!Number.isInteger(expectedAmountCents) || expectedAmountCents <= 0) {
+    const err = new Error('Therapist rate is not configured for payment');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  if (clientAmountCents !== null && clientAmountCents !== expectedAmountCents) {
+    const err = new Error('Invalid payment amount');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  return expectedAmountCents;
+};
+
+const loadBookingEmailData = async ({ therapistId, userId }) => {
+  const details = await pool.query(
+    `SELECT u.full_name as client_name, u.email as client_email, t.full_name as therapist_name, t.email as therapist_email
+     FROM users u
+     JOIN therapists t ON t.id = $1
+     WHERE u.id = $2`,
+    [therapistId, userId]
+  );
+  return details.rows[0] || null;
+};
+
+const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedClientId = null }) => {
+  const dbClient = await pool.connect();
+  try {
+    await dbClient.query('BEGIN');
+
+    const params = expectedClientId === null ? [orderId] : [orderId, expectedClientId];
+    const intentResult = await dbClient.query(
+      `SELECT id, order_id, client_id, therapist_id, booking_date, booking_time, session_type, amount_cents, status, booking_id, payment_id
+       FROM payment_booking_intents
+       WHERE order_id = $1 ${expectedClientId === null ? '' : 'AND client_id = $2'}
+       FOR UPDATE`,
+      params
+    );
+
+    if (!intentResult.rows.length) {
+      await dbClient.query('ROLLBACK');
+      return { status: 'intent_not_found' };
+    }
+
+    const intent = intentResult.rows[0];
+    if (intent.status === 'completed' && intent.booking_id && intent.payment_id) {
+      const [bookingResult, paymentResult] = await Promise.all([
+        dbClient.query('SELECT * FROM bookings WHERE id = $1', [intent.booking_id]),
+        dbClient.query('SELECT * FROM payments WHERE id = $1', [intent.payment_id]),
+      ]);
+      await dbClient.query('COMMIT');
+      return {
+        status: 'already_finalized',
+        booking: bookingResult.rows[0] || null,
+        payment: paymentResult.rows[0] || null,
+        newlyFinalized: false,
+      };
+    }
+
+    await validateBookingSlotStillAvailable(
+      {
+        therapistId: intent.therapist_id,
+        date: String(intent.booking_date).slice(0, 10),
+        time: String(intent.booking_time).slice(0, 5),
+      },
+      dbClient
+    );
+
+    const bookingResult = await dbClient.query(
+      `INSERT INTO bookings (user_id, therapist_id, date, time, session_type, status, amount_cents)
+       VALUES ($1, $2, $3, $4, $5, 'confirmed', $6)
+       RETURNING *`,
+      [
+        intent.client_id,
+        intent.therapist_id,
+        intent.booking_date,
+        intent.booking_time,
+        intent.session_type || 'video',
+        intent.amount_cents,
+      ]
+    );
+
+    const paymentResult = await dbClient.query(
+      `INSERT INTO payments
+        (booking_id, client_id, therapist_id, amount_cents, status, razorpay_order_id, razorpay_payment_id, completed_at, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'completed', $5, $6, NOW(), NOW(), NOW())
+       ON CONFLICT (razorpay_payment_id)
+       DO UPDATE SET status = 'completed',
+                     razorpay_order_id = EXCLUDED.razorpay_order_id,
+                     completed_at = COALESCE(payments.completed_at, NOW()),
+                     updated_at = NOW()
+       RETURNING *`,
+      [
+        bookingResult.rows[0].id,
+        intent.client_id,
+        intent.therapist_id,
+        intent.amount_cents,
+        orderId,
+        paymentId,
+      ]
+    );
+
+    await dbClient.query(
+      `UPDATE payment_booking_intents
+       SET status = 'completed', booking_id = $1, payment_id = $2, updated_at = NOW()
+       WHERE id = $3`,
+      [bookingResult.rows[0].id, paymentResult.rows[0].id, intent.id]
+    );
+
+    await dbClient.query('COMMIT');
+
+    const emailDataDetails = await loadBookingEmailData({
+      therapistId: intent.therapist_id,
+      userId: intent.client_id,
+    });
+    if (emailDataDetails) {
+      dispatchBookingNotifications({
+        bookingId: bookingResult.rows[0].id,
+        clientName: emailDataDetails.client_name,
+        clientEmail: emailDataDetails.client_email,
+        therapistName: emailDataDetails.therapist_name,
+        therapistEmail: emailDataDetails.therapist_email,
+        date: bookingResult.rows[0].date,
+        time: bookingResult.rows[0].time,
+        sessionType: bookingResult.rows[0].session_type,
+      });
+    }
+
+    syncBookingToConnectedCalendars(bookingResult.rows[0].id).catch((err) => {
+      console.error('Calendar sync error:', err);
+    });
+
+    return {
+      status: 'finalized',
+      booking: bookingResult.rows[0],
+      payment: paymentResult.rows[0],
+      newlyFinalized: true,
+    };
+  } catch (err) {
+    await dbClient.query('ROLLBACK').catch(() => {});
+    if (err.code === '23505') {
+      await pool.query(
+        `UPDATE payment_booking_intents
+         SET status = 'conflict', updated_at = NOW()
+         WHERE order_id = $1`,
+        [orderId]
+      ).catch(() => {});
+      return { status: 'slot_conflict' };
+    }
+    throw err;
+  } finally {
+    dbClient.release();
+  }
 };
 
 /**
@@ -195,16 +373,14 @@ router.post('/create-order', auth, async (req, res) => {
       return res.status(400).json({ error: parsed.error });
     }
 
-    const therapistExists = await pool.query(
-      'SELECT id FROM therapists WHERE id = $1 AND status = $2',
-      [parsed.therapistId, 'approved']
-    );
-    if (!therapistExists.rows.length) {
-      return res.status(404).json({ error: 'Therapist not found' });
-    }
+    const expectedAmountCents = await resolveExpectedPaidAmountCents({
+      therapistId: parsed.therapistId,
+      sessionType: parsed.sessionType,
+      clientAmountCents: parsed.amountCents,
+    });
 
     const razorpayOrder = await createRazorpayClient().orders.create({
-      amount: parsed.amountCents,
+      amount: expectedAmountCents,
       currency: 'INR',
       receipt: `paid_slot_${parsed.therapistId}_${Date.now()}`,
       notes: {
@@ -230,7 +406,7 @@ router.post('/create-order', auth, async (req, res) => {
                      amount_cents = EXCLUDED.amount_cents,
                      status = 'initiated',
                      updated_at = NOW()`,
-      [razorpayOrder.id, user_id, parsed.therapistId, parsed.date, parsed.time, parsed.sessionType, parsed.amountCents]
+      [razorpayOrder.id, user_id, parsed.therapistId, parsed.date, parsed.time, parsed.sessionType, expectedAmountCents]
     );
     await client.query('COMMIT');
 
@@ -254,7 +430,6 @@ router.post('/create-order', auth, async (req, res) => {
  * Body: { razorpay_payment_id, razorpay_order_id, razorpay_signature }
  */
 router.post('/verify-and-finalize-booking', auth, async (req, res) => {
-  const dbClient = await pool.connect();
   try {
     if (req.user.role !== 'client') {
       return res.status(403).json({ error: 'Client access required' });
@@ -275,109 +450,26 @@ router.post('/verify-and-finalize-booking', auth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid payment signature' });
     }
 
-    const intentResult = await pool.query(
-      `SELECT id, order_id, client_id, therapist_id, booking_date, booking_time, session_type, amount_cents, status
-       FROM payment_booking_intents
-       WHERE order_id = $1 AND client_id = $2`,
-      [razorpay_order_id, user_id]
-    );
-
-    if (!intentResult.rows.length) {
+    const finalizeResult = await finalizeIntentBookingAndPayment({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      expectedClientId: user_id,
+    });
+    if (finalizeResult.status === 'intent_not_found') {
       return res.status(404).json({ error: 'Payment booking intent not found' });
     }
-
-    const intent = intentResult.rows[0];
-    if (intent.status === 'completed') {
-      return res.status(409).json({ error: 'Booking has already been finalized for this payment' });
+    if (finalizeResult.status === 'slot_conflict') {
+      return res.status(409).json({ error: 'This time slot was just booked. Please choose another time.' });
     }
-
-    await validateBookingSlotStillAvailable({
-      therapistId: intent.therapist_id,
-      date: String(intent.booking_date).slice(0, 10),
-      time: String(intent.booking_time).slice(0, 5),
-    });
-
-    await dbClient.query('BEGIN');
-    const bookingResult = await dbClient.query(
-      `INSERT INTO bookings (user_id, therapist_id, date, time, session_type, status, amount_cents)
-       VALUES ($1, $2, $3, $4, $5, 'confirmed', $6)
-       RETURNING *`,
-      [
-        user_id,
-        intent.therapist_id,
-        intent.booking_date,
-        intent.booking_time,
-        intent.session_type || 'video',
-        intent.amount_cents,
-      ]
-    );
-
-    const paymentResult = await dbClient.query(
-      `INSERT INTO payments
-        (booking_id, client_id, therapist_id, amount_cents, status, razorpay_order_id, razorpay_payment_id, completed_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'completed', $5, $6, NOW(), NOW(), NOW())
-       RETURNING *`,
-      [
-        bookingResult.rows[0].id,
-        user_id,
-        intent.therapist_id,
-        intent.amount_cents,
-        razorpay_order_id,
-        razorpay_payment_id,
-      ]
-    );
-
-    await dbClient.query(
-      `UPDATE payment_booking_intents
-       SET status = 'completed', booking_id = $1, payment_id = $2, updated_at = NOW()
-       WHERE id = $3`,
-      [bookingResult.rows[0].id, paymentResult.rows[0].id, intent.id]
-    );
-    await dbClient.query('COMMIT');
-
-    const details = await pool.query(
-      `SELECT u.full_name as client_name, u.email as client_email, t.full_name as therapist_name, t.email as therapist_email
-       FROM users u
-       JOIN therapists t ON t.id = $1
-       WHERE u.id = $2`,
-      [intent.therapist_id, user_id]
-    );
-    if (details.rows.length) {
-      const emailData = {
-        bookingId: bookingResult.rows[0].id,
-        clientName: details.rows[0].client_name,
-        clientEmail: details.rows[0].client_email,
-        therapistName: details.rows[0].therapist_name,
-        therapistEmail: details.rows[0].therapist_email,
-        date: bookingResult.rows[0].date,
-        time: bookingResult.rows[0].time,
-        sessionType: bookingResult.rows[0].session_type,
-      };
-      dispatchBookingNotifications(emailData);
-    }
-
-    syncBookingToConnectedCalendars(bookingResult.rows[0].id).catch((err) => {
-      console.error('Calendar sync error:', err);
-    });
 
     res.json({
       success: true,
-      booking: bookingResult.rows[0],
-      payment: paymentResult.rows[0],
+      booking: finalizeResult.booking,
+      payment: finalizeResult.payment,
     });
   } catch (err) {
-    await dbClient.query('ROLLBACK').catch(() => {});
-    if (err.code === '23505') {
-      await pool.query(
-        `UPDATE payment_booking_intents SET status = 'conflict', updated_at = NOW() WHERE order_id = $1 AND client_id = $2`,
-        [req.body?.razorpay_order_id || '', req.user.id]
-      ).catch(() => {});
-      return res.status(409).json({ error: 'This time slot was just booked. Please choose another time.' });
-    }
     const statusCode = err.statusCode || 500;
     res.status(statusCode).json({ error: err.message || 'Failed to finalize paid booking' });
-  } finally {
-    dbClient.release();
   }
 });
 
@@ -463,9 +555,10 @@ router.get('/status/:payment_id', auth, async (req, res) => {
  */
 router.post('/webhook', async (req, res) => {
   try {
+    const eventIdHeader = String(req.headers['x-razorpay-event-id'] || '').trim();
     const signature = req.headers['x-razorpay-signature'];
     const body = req.rawBody;
-    if (!process.env.RAZORPAY_WEBHOOK_SECRET || !body || !signature) {
+    if (!process.env.RAZORPAY_WEBHOOK_SECRET || !body || !signature || !eventIdHeader) {
       return res.status(400).json({ error: 'Webhook verification is not configured' });
     }
 
@@ -482,22 +575,53 @@ router.post('/webhook', async (req, res) => {
     }
 
     const event = req.body;
+    const eventInsert = await pool.query(
+      `INSERT INTO razorpay_webhook_events (event_id, event_type, payload, received_at)
+       VALUES ($1, $2, $3::jsonb, NOW())
+       ON CONFLICT (event_id) DO NOTHING
+       RETURNING event_id`,
+      [eventIdHeader, event.event || 'unknown', JSON.stringify(event || {})]
+    );
+    if (!eventInsert.rows.length) {
+      return res.json({ received: true, duplicate: true });
+    }
+
     if (event.event === 'payment.captured') {
-      const orderId = event.payload.payment.entity.order_id;
-      await pool.query(
-        `UPDATE payments SET status = 'completed', completed_at = NOW(), updated_at = NOW()
-         WHERE razorpay_order_id = $1`,
-        [orderId]
-      );
+      const paymentEntity = event.payload?.payment?.entity;
+      const orderId = paymentEntity?.order_id;
+      const paymentId = paymentEntity?.id;
+      if (!orderId || !paymentId) {
+        return res.status(400).json({ error: 'Invalid payment.captured payload' });
+      }
+
+      const finalizeResult = await finalizeIntentBookingAndPayment({
+        orderId,
+        paymentId,
+      });
+      if (finalizeResult.status === 'intent_not_found') {
+        await pool.query(
+          `UPDATE payments
+           SET status = 'completed', completed_at = NOW(), updated_at = NOW(), razorpay_payment_id = COALESCE(razorpay_payment_id, $2)
+           WHERE razorpay_order_id = $1`,
+          [orderId, paymentId]
+        );
+      }
     }
     if (event.event === 'payment.failed') {
-      const orderId = event.payload.payment.entity.order_id;
+      const orderId = event.payload?.payment?.entity?.order_id;
+      if (!orderId) {
+        return res.status(400).json({ error: 'Invalid payment.failed payload' });
+      }
       await pool.query(
-        `UPDATE payments SET status = 'failed', updated_at = NOW() WHERE razorpay_order_id = $1`,
+        `UPDATE payments
+         SET status = 'failed', updated_at = NOW()
+         WHERE razorpay_order_id = $1 AND status != 'completed'`,
         [orderId]
       );
       await pool.query(
-        `UPDATE payment_booking_intents SET status = 'failed', updated_at = NOW() WHERE order_id = $1`,
+        `UPDATE payment_booking_intents
+         SET status = 'failed', updated_at = NOW()
+         WHERE order_id = $1 AND status NOT IN ('completed', 'conflict')`,
         [orderId]
       );
     }

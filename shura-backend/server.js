@@ -134,6 +134,12 @@ console.log('✅ CORS enabled for localhost, configured env origins, and Azure C
 // Rate limiting
 const limiterDefaults = { standardHeaders: true, legacyHeaders: false };
 const generalLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, max: 200 });
+const paymentLimiter = rateLimit({
+  ...limiterDefaults,
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  skip: (req) => req.originalUrl === '/api/payments/webhook',
+});
 const authLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, max: 60 });
 const uploadLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 60 * 1000, max: 30 });
 const newsletterLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 60 * 1000, max: 20 });
@@ -182,7 +188,7 @@ const bookingRoutes = require('./routes/bookings');
 if (bookingRoutes) app.use('/api/bookings', generalLimiter, bookingRoutes);
 
 const paymentRoutes = require('./routes/payments');
-if (paymentRoutes) app.use('/api/payments', generalLimiter, paymentRoutes);
+if (paymentRoutes) app.use('/api/payments', paymentLimiter, paymentRoutes);
 
 const calendarRoutes = require('./routes/calendar');
 if (calendarRoutes) app.use('/api/calendar', generalLimiter, calendarRoutes);
@@ -410,6 +416,13 @@ async function runStartupMigrations() {
     )`);
     await pool.query('CREATE INDEX IF NOT EXISTS idx_payment_booking_intents_client ON payment_booking_intents(client_id, created_at DESC)');
     await pool.query('CREATE INDEX IF NOT EXISTS idx_payment_booking_intents_status ON payment_booking_intents(status)');
+    await pool.query(`CREATE TABLE IF NOT EXISTS razorpay_webhook_events (
+      event_id VARCHAR(255) PRIMARY KEY,
+      event_type VARCHAR(120) NOT NULL,
+      payload JSONB NOT NULL,
+      received_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_razorpay_webhook_events_received_at ON razorpay_webhook_events(received_at DESC)');
     // Add other lightweight migration steps here if needed in future
     console.log('✅ Startup migrations applied');
   } catch (err) {

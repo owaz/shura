@@ -41,6 +41,7 @@ In Railway dashboard, add these variables:
 **Razorpay (Payment - Add AFTER getting production keys):**
 - `RAZORPAY_KEY_ID=rzp_live_xxxxx`
 - `RAZORPAY_KEY_SECRET=xxxxxxx`
+- `RAZORPAY_WEBHOOK_SECRET=<same webhook secret set in Razorpay Dashboard>`
 
 ### Step 4: Deploy
 ```bash
