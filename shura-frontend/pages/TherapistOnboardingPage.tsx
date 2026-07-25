@@ -5,7 +5,7 @@ import { ChevronLeftIcon, ChevronRightIcon, CheckIcon } from '../components/Icon
 import { Logo } from '../components/Logo';
 import { apiFetch } from '../config/api';
 
-const totalSteps = 4;
+const totalSteps = 3;
 const sessionTypesOptions = ['Video', 'Audio', 'Text'];
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 
@@ -23,8 +23,7 @@ const TherapistOnboardingPage: React.FC = () => {
     sessionTypes: [] as string[],
     rate60min: '',
     availability: '',
-    password: '',
-    confirmPassword: '',
+    bio: '',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -55,17 +54,12 @@ const TherapistOnboardingPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      alert("Passwords do not match.");
-      return;
-    }
     try {
-      const response = await apiFetch('/auth/therapist/apply', {
+      const response = await apiFetch('/auth/therapist/application', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fullName: formData.fullName,
-          email: formData.email,
           phone: formData.phone,
           licenseNumber: formData.licenseNumber,
           experience: formData.experience,
@@ -73,15 +67,15 @@ const TherapistOnboardingPage: React.FC = () => {
           sessionTypes: formData.sessionTypes,
           rate60min: formData.rate60min,
           availability: formData.availability,
-          password: formData.password,
+          bio: formData.bio,
         }),
       });
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || 'Application submission failed');
       }
-      alert("Application submitted successfully! You will be notified via email once your application is reviewed.");
-      navigate('/therapist-login');
+      alert("Application submitted successfully! You will be notified once your application is reviewed.");
+      navigate('/therapist-apply/pending');
     } catch (error) {
       console.error('Application submission error:', error);
       alert('Failed to submit application. Please try again.');
@@ -101,9 +95,7 @@ const TherapistOnboardingPage: React.FC = () => {
     return false;
   };
 
-  const isSubmitDisabled = () => {
-    return !formData.password || !formData.confirmPassword || formData.password !== formData.confirmPassword;
-  };
+  const isSubmitDisabled = () => false;
 
   const renderStep = () => {
     switch (currentStep) {
@@ -188,23 +180,6 @@ const TherapistOnboardingPage: React.FC = () => {
                     </div>
                 </div>
             </div>
-        );
-      case 4:
-        return (
-          <div key={4} className="animate-fade-in w-full">
-            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-brown-dark mb-2">Create Your Account</h2>
-            <p className="text-brown-soft mb-6">Set a secure password for your therapist portal.</p>
-             <div className="space-y-4">
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-brown-soft">Password</label>
-                <input type="password" name="password" value={formData.password} onChange={handleChange} className="mt-1 block w-full bg-white border-sand rounded-md shadow-sm py-3 px-4 focus:ring-brown-soft focus:border-brown-soft" required />
-              </div>
-              <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-brown-soft">Confirm Password</label>
-                <input type="password" name="confirmPassword" value={formData.confirmPassword} onChange={handleChange} className="mt-1 block w-full bg-white border-sand rounded-md shadow-sm py-3 px-4 focus:ring-brown-soft focus:border-brown-soft" required />
-              </div>
-            </div>
-          </div>
         );
       default:
         return null;

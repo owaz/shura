@@ -1,34 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-
-const getJwtSecret = () => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET must be configured in production');
-  }
-  return secret || 'shura_dev_jwt_secret_change_me';
-};
 const { requireAdmin } = require('../middleware/auth');
 
 router.post('/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
-    }
-    const { rows } = await pool.query('SELECT * FROM admins WHERE email = $1', [email]);
-    if (rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
-    const admin = rows[0];
-    const isValid = await bcrypt.compare(password, admin.password_hash);
-    if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ id: admin.id, email: admin.email, role: admin.role, type: 'admin' }, getJwtSecret(), { expiresIn: '7d' });
-    return res.json({ admin: { id: admin.id, email: admin.email, full_name: admin.full_name, role: admin.role }, token });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
+  return res.status(410).json({
+    error: 'Admin password login has been removed. Use Auth0 Universal Login with admin role and MFA.',
+  });
 });
 
 router.get('/profile', requireAdmin, async (req, res) => {

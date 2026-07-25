@@ -137,19 +137,21 @@ const withDevToken = (payload, responseBody) => {
 // --- Session routes ---
 router.get('/session', authenticateToken, async (req, res) => {
   try {
-    const csrfToken = req.user.sid
-      ? (await pool.query('SELECT csrf_token FROM auth_sessions WHERE id = $1', [req.user.sid])).rows[0]?.csrf_token
-      : null;
-
     if (req.user.role === 'therapist') {
       const { rows } = await pool.query('SELECT id, email, full_name FROM therapists WHERE id = $1', [req.user.id]);
       if (!rows.length) return res.status(404).json({ error: 'Therapist not found' });
-      return res.json({ user: { ...rows[0], role: 'therapist' }, csrfToken });
+      return res.json({ user: { ...rows[0], role: 'therapist', status: req.user.status } });
+    }
+
+    if (req.user.role === 'admin') {
+      const { rows } = await pool.query('SELECT id, email, full_name, role FROM admins WHERE id = $1', [req.user.id]);
+      if (!rows.length) return res.status(404).json({ error: 'Admin not found' });
+      return res.json({ user: { ...rows[0], role: 'admin', status: 'active' } });
     }
 
     const { rows } = await pool.query('SELECT id, email, full_name FROM users WHERE id = $1', [req.user.id]);
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    return res.json({ user: { ...rows[0], role: 'client' }, csrfToken });
+    return res.json({ user: { ...rows[0], role: 'client', status: req.user.status } });
   } catch (err) {
     console.error('GET /session error', err);
     return res.status(500).json({ error: err.message });
@@ -157,35 +159,13 @@ router.get('/session', authenticateToken, async (req, res) => {
 });
 
 router.post('/refresh', async (req, res) => {
-  try {
-    const session = await rotateSession(req, res);
-    if (!session) return res.status(401).json({ error: 'Refresh session invalid or expired' });
-    return res.json({ user: session.user, csrfToken: session.csrfToken });
-  } catch (err) {
-    console.error('POST /refresh error', err);
-    return res.status(500).json({ error: err.message });
-  }
+  return res.status(410).json({
+    error: 'Refresh tokens are managed by Auth0. Re-authenticate through Universal Login.',
+  });
 });
 
 router.post('/logout', async (req, res) => {
-  try {
-    const cookies = parseCookies(req.headers.cookie || '');
-    const csrfHeader = req.headers['x-csrf-token'];
-    if (cookies[CSRF_COOKIE] && csrfHeader !== cookies[CSRF_COOKIE]) {
-      return res.status(403).json({ error: 'Invalid CSRF token' });
-    }
-
-    const refreshCookie = cookies[REFRESH_COOKIE];
-    const refreshSessionId = refreshCookie?.includes('.') ? refreshCookie.split('.', 1)[0] : null;
-
-    await revokeSession(refreshSessionId);
-    clearAuthCookies(res);
-    return res.json({ success: true });
-  } catch (err) {
-    console.error('POST /logout error', err);
-    clearAuthCookies(res);
-    return res.status(500).json({ error: err.message });
-  }
+  return res.json({ success: true, message: 'Client should clear local app state and perform Auth0 logout redirect.' });
 });
 
 // --- Profile routes for clients ---
@@ -369,6 +349,10 @@ router.put('/profile', authenticateToken, async (req, res) => {
 // Signup route
 router.post('/signup', async (req, res) => {
   try {
+    return res.status(410).json({
+      error: 'Direct signup has been removed. Use Auth0 Universal Login signup.',
+    });
+
     const { email, password, full_name } = req.body;
 
     // Validation
@@ -441,13 +425,13 @@ router.post('/dev/create-test-user', async (req, res) => {
 });
 
 // Save questionnaire responses
-router.post('/questionnaire', async (req, res) => {
+router.post('/questionnaire', authenticateToken, async (req, res) => {
   try {
-    const { userId, concerns, gender, notes } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID required' });
+    if (req.user.role !== 'client') {
+      return res.status(403).json({ error: 'Client access required' });
     }
+    const { concerns, gender, notes } = req.body;
+    const userId = req.user.id;
 
     // Get user info
     const userResult = await pool.query(
@@ -510,6 +494,10 @@ router.post('/questionnaire', async (req, res) => {
 // Login route
 router.post('/login', async (req, res) => {
   try {
+    return res.status(410).json({
+      error: 'Direct login has been removed. Use Auth0 Universal Login.',
+    });
+
     const { email, password } = req.body;
 
     // Validation
@@ -721,9 +709,110 @@ router.post('/therapist/apply', async (req, res) => {
   }
 });
 
+// Auth0 flow: therapist identity is created in Auth0 first, then professional profile is completed here.
+router.post('/therapist/application', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'therapist') {
+      return res.status(403).json({ error: 'Therapist access required' });
+    }
+
+    const {
+      fullName,
+      phone,
+      licenseNumber,
+      experience,
+      specialties,
+      sessionTypes,
+      rate60min,
+      availability,
+      languages,
+      gender,
+      location,
+      bio,
+    } = req.body || {};
+
+    const normalizedSpecialties = normalizeTextList(specialties);
+    const normalizedSessionTypes = normalizeSessionTypes(sessionTypes);
+    const normalizedAvailability = normalizeTextList(availability);
+    const normalizedLanguages = normalizeTextList(languages);
+
+    if (!String(fullName || '').trim()) {
+      return res.status(400).json({ error: 'fullName is required' });
+    }
+    if (!normalizedSpecialties.length) {
+      return res.status(400).json({ error: 'specialties are required' });
+    }
+    if (!normalizedSessionTypes.length) {
+      return res.status(400).json({ error: 'At least one session type is required' });
+    }
+    if (!normalizedAvailability.length) {
+      return res.status(400).json({ error: 'availability is required' });
+    }
+
+    const columnTypeMap = await getTherapistsColumnTypeMap(['specialties', 'session_types', 'availability', 'languages']);
+    const dbSpecialties = toDbTextList(normalizedSpecialties, columnTypeMap, 'specialties');
+    const dbSessionTypes = isArrayColumn(columnTypeMap, 'session_types')
+      ? normalizedSessionTypes
+      : normalizedSessionTypes.join(', ');
+    const dbAvailability = toDbTextList(normalizedAvailability, columnTypeMap, 'availability');
+    const dbLanguages = toDbTextList(normalizedLanguages, columnTypeMap, 'languages');
+
+    const { rows } = await pool.query(
+      `UPDATE therapists
+       SET full_name = $1,
+           phone = $2,
+           license_number = $3,
+           experience_years = $4,
+           specialties = $5,
+           session_types = $6,
+           rate_60min = $7,
+           availability = $8,
+           languages = $9,
+           gender = $10,
+           location = $11,
+           bio = $12,
+           status = COALESCE(NULLIF(status, ''), 'pending'),
+           updated_at = NOW()
+       WHERE id = $13
+       RETURNING id, auth0_sub, email, full_name, status, specialties, session_types, availability, rate_60min`,
+      [
+        String(fullName).trim(),
+        typeof phone === 'string' ? phone.trim() || null : null,
+        typeof licenseNumber === 'string' ? licenseNumber.trim() || null : null,
+        toNullableInt(experience),
+        dbSpecialties,
+        dbSessionTypes,
+        toNullableInt(rate60min),
+        dbAvailability,
+        dbLanguages,
+        typeof gender === 'string' ? gender.trim() || null : null,
+        typeof location === 'string' ? location.trim() || null : null,
+        typeof bio === 'string' ? bio.trim() || null : null,
+        req.user.id,
+      ]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Therapist profile not found' });
+    }
+
+    return res.json({
+      message: 'Therapist application submitted successfully. Your profile is now under review.',
+      therapist: rows[0],
+    });
+  } catch (err) {
+    console.error('POST /therapist/application error', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Therapist login route
 router.post('/therapist/login', async (req, res) => {
   try {
+    return res.status(410).json({
+      error: 'Therapist password login has been removed. Use Auth0 Universal Login.',
+    });
+
     const { email, password } = req.body;
 
     // Validation
