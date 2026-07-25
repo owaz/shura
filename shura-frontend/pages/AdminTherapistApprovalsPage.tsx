@@ -2,8 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../config/api';
 import { Logo } from '../components/Logo';
-
-const ADMIN_TOKEN_KEY = 'shura-admin-token';
+import { useAuth } from '../contexts/AuthContext';
 
 type PendingTherapist = {
   id: number;
@@ -21,25 +20,18 @@ type PendingTherapist = {
 
 const AdminTherapistApprovalsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { currentUser, logout } = useAuth();
   const [therapists, setTherapists] = useState<PendingTherapist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  const authHeaders = () => {
-    const token = localStorage.getItem(ADMIN_TOKEN_KEY);
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
 
   const loadPending = useCallback(async () => {
     setError('');
     setLoading(true);
     try {
-      const response = await apiFetch('/admin/therapists/pending', {
-        headers: authHeaders(),
-      });
+      const response = await apiFetch('/admin/therapists/pending');
       const data = await response.json();
       if (response.status === 401 || response.status === 403) {
-        localStorage.removeItem(ADMIN_TOKEN_KEY);
         navigate('/admin/login');
         return;
       }
@@ -53,21 +45,20 @@ const AdminTherapistApprovalsPage: React.FC = () => {
   }, [navigate]);
 
   useEffect(() => {
-    if (!localStorage.getItem(ADMIN_TOKEN_KEY)) {
+    if (!currentUser || currentUser.role !== 'admin') {
       navigate('/admin/login');
       return;
     }
     loadPending();
-  }, [loadPending, navigate]);
+  }, [currentUser, loadPending, navigate]);
 
   const updateStatus = async (id: number, action: 'approve' | 'reject') => {
     try {
+      const body = action === 'reject' ? JSON.stringify({ reason: 'Application did not meet current criteria.' }) : undefined;
       const response = await apiFetch(`/admin/therapists/${id}/${action}`, {
         method: 'POST',
-        headers: {
-          ...authHeaders(),
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
+        body,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `Failed to ${action} therapist`);
@@ -77,8 +68,8 @@ const AdminTherapistApprovalsPage: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem(ADMIN_TOKEN_KEY);
+  const handleLogout = async () => {
+    await logout();
     navigate('/admin/login');
   };
 
@@ -90,10 +81,7 @@ const AdminTherapistApprovalsPage: React.FC = () => {
             <Logo className="h-8 w-8" />
             <span className="font-serif text-3xl font-bold text-brown-dark">Shura Admin</span>
           </Link>
-          <button
-            onClick={handleLogout}
-            className="text-brown-soft hover:text-brown-dark font-semibold"
-          >
+          <button onClick={handleLogout} className="text-brown-soft hover:text-brown-dark font-semibold">
             Logout
           </button>
         </div>
@@ -104,9 +92,7 @@ const AdminTherapistApprovalsPage: React.FC = () => {
 
           {loading && <p className="text-brown-soft">Loading...</p>}
           {error && <p className="text-red-600 mb-4">{error}</p>}
-          {!loading && !error && therapists.length === 0 && (
-            <p className="text-brown-soft">No pending applications.</p>
-          )}
+          {!loading && !error && therapists.length === 0 && <p className="text-brown-soft">No pending applications.</p>}
 
           <div className="space-y-4">
             {therapists.map((therapist) => (

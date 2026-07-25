@@ -1,0 +1,46 @@
+/**
+ * Trigger: post-login
+ * Execution order: 1 of 2
+ * Required secrets: none
+ * Custom claim namespace: https://shura.com
+ */
+exports.onExecutePostLogin = async (event, api) => {
+  const namespace = 'https://shura.com';
+  const role = String(event?.user?.app_metadata?.role || '').toLowerCase();
+  const status = String(event?.user?.app_metadata?.status || 'active').toLowerCase();
+  const connectionStrategy = String(event?.connection?.strategy || '').toLowerCase();
+  const isSocial = !['auth0', 'waad', 'ad', 'email', 'sms'].includes(connectionStrategy);
+
+  if (role === 'admin' && isSocial) {
+    api.access.deny('unauthorized', 'Admin accounts must use email and password login.');
+    return;
+  }
+
+  if (role === 'therapist') {
+    if (isSocial) {
+      api.access.deny('unauthorized', 'Therapist accounts must use email and password login.');
+      return;
+    }
+    if (!event?.user?.email_verified) {
+      api.access.deny('unauthorized', 'Please verify your email address before logging in.');
+      return;
+    }
+    if (status === 'pending') {
+      api.access.deny('unauthorized', "Your application is under review. You'll receive an email once approved.");
+      return;
+    }
+    if (status === 'rejected') {
+      api.access.deny('unauthorized', 'Your application was unsuccessful. Please contact support for more information.');
+      return;
+    }
+    if (status === 'suspended') {
+      api.access.deny('unauthorized', 'Your account is currently suspended. Please contact support.');
+      return;
+    }
+  }
+
+  api.idToken.setCustomClaim(`${namespace}/role`, role || 'client');
+  api.idToken.setCustomClaim(`${namespace}/status`, status || 'active');
+  api.accessToken.setCustomClaim(`${namespace}/role`, role || 'client');
+  api.accessToken.setCustomClaim(`${namespace}/status`, status || 'active');
+};

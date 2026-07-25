@@ -19,6 +19,9 @@ import LoginHubPage from './pages/LoginHubPage';
 import TherapistLoginPage from './pages/TherapistLoginPage';
 import TherapistOnboardingPage from './pages/TherapistOnboardingPage';
 import JoinNetworkPage from './pages/JoinNetworkPage';
+import TherapistApplyPage from './pages/TherapistApplyPage';
+import TherapistApplyPendingPage from './pages/TherapistApplyPendingPage';
+import TherapistApplyStatusPage from './pages/TherapistApplyStatusPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import TherapistPortalLayout from './pages/therapist-portal/TherapistPortalLayout';
 import TherapistDashboardPage from './pages/therapist-portal/TherapistDashboardPage';
@@ -179,8 +182,8 @@ const MainLayout: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
         <ScrollToTop />
         <Routes>
           <Route element={<MainLayout />}>
@@ -199,14 +202,22 @@ const App: React.FC = () => {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/therapist-login" element={<TherapistLoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/therapist-apply" element={<TherapistApplyPage />} />
+          <Route path="/therapist-apply/pending" element={<TherapistApplyPendingPage />} />
+          <Route path="/therapist-apply/status" element={<TherapistApplyStatusPage />} />
+          <Route element={<ProtectedRoute allowedRoles={['therapist']} redirectTo="/therapist-apply" />}>
+            <Route path="/therapist-apply/complete" element={<TherapistOnboardingPage />} />
+          </Route>
           <Route path="/questionnaire" element={<QuestionnairePage />} />
-          <Route path="/join-as-therapist" element={<TherapistOnboardingPage />} />
+          <Route path="/join-as-therapist" element={<TherapistApplyPage />} />
           <Route path="/chat/:therapistId" element={<ClientChatPage />} />
           <Route path="/call" element={<CallPage />} />
           <Route path="/intake/:token" element={<IntakeFormPage />} />
           <Route path="/intake-success" element={<IntakeSuccessPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin/therapists/pending" element={<AdminTherapistApprovalsPage />} />
+          <Route element={<ProtectedRoute allowedRoles={['admin']} redirectTo="/admin/login" />}>
+            <Route path="/admin/therapists/pending" element={<AdminTherapistApprovalsPage />} />
+          </Route>
 
           <Route element={<ProtectedRoute allowedRoles={['client']} redirectTo="/login" />}>
             <Route path="/payment" element={<PaymentPage />} />
@@ -225,8 +236,8 @@ const App: React.FC = () => {
             </Route>
           </Route>
         </Routes>
-      </BrowserRouter>
-    </AuthProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 };
 

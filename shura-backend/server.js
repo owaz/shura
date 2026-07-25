@@ -6,10 +6,9 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 const rateLimit = require('express-rate-limit');
-const jwt = require('jsonwebtoken');
 const pool = require('./db'); // Import pool from db/index.js
 const { authenticateToken } = require('./middleware/auth');
-const { ACCESS_COOKIE, getJwtSecret, parseCookies } = require('./utils/sessionAuth');
+const { verifyAccessToken } = require('./middleware/auth');
 
 if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
   useAzureMonitor();
@@ -80,20 +79,12 @@ app.set('io', io);
 // Socket.io authentication middleware
 io.use(async (socket, next) => {
   try {
-    const cookies = parseCookies(socket.handshake.headers?.cookie || '');
-    const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split?.(' ')[1] || cookies[ACCESS_COOKIE];
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.split?.(' ')?.[1];
     if (!token) return next(new Error('Authentication required'));
 
-    const user = jwt.verify(token, getJwtSecret());
-    if (user.sid) {
-      const { rows } = await pool.query(
-        'SELECT id FROM auth_sessions WHERE id = $1 AND revoked_at IS NULL AND expires_at > NOW()',
-        [user.sid]
-      );
-      if (!rows.length) return next(new Error('Session expired or revoked'));
-    }
-
-    socket.user = user;
+    socket.user = await verifyAccessToken(token);
     next();
   } catch (err) {
     next(new Error('Invalid token'));

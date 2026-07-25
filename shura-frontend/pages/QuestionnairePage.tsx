@@ -42,50 +42,18 @@ const QuestionnairePage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Get user from localStorage - use correct key 'shura-current-user'
-    const userStr = localStorage.getItem('shura-current-user');
-    let userId = null;
-    
-    if (userStr) {
-      try {
-        const userData = JSON.parse(userStr);
-        userId = userData.id;
-        console.log('📋 Found user ID:', userId);
-      } catch (err) {
-        console.error('Failed to parse user data:', err);
-      }
-    }
-
-    // Send questionnaire data to backend
-    if (userId) {
-      try {
-        console.log('📤 Sending questionnaire data to backend...');
-        const response = await apiFetch('/auth/questionnaire', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId,
-            concerns: selectedConcerns,
-            gender: selectedGender,
-            notes: notes
-          }),
-        });
-
-        const result = await response.json();
-        
-        if (response.ok) {
-          console.log('✅ Questionnaire submitted successfully:', result);
-        } else {
-          console.error('❌ Failed to submit questionnaire:', result);
-        }
-      } catch (err) {
-        console.error('❌ Error submitting questionnaire:', err);
-      }
-    } else {
-      console.warn('⚠️ No user ID found - questionnaire not sent to backend');
+    try {
+      await apiFetch('/auth/questionnaire', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          concerns: selectedConcerns,
+          gender: selectedGender,
+          notes,
+        }),
+      });
+    } catch (err) {
+      console.error('Questionnaire submission error:', err);
     }
 
     completeQuestionnaire(); // Mark questionnaire as completed for this user
