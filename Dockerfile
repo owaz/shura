@@ -1,5 +1,19 @@
 # ============ Stage 1: Build Frontend ============
 FROM node:20-alpine AS frontend-build
+
+# Declare build-time vars so Vite can bake them in at build time
+ARG VITE_AUTH0_DOMAIN
+ARG VITE_AUTH0_CLIENT_ID
+ARG VITE_AUTH0_AUDIENCE
+ARG VITE_API_URL
+ARG VITE_WS_URL
+
+ENV VITE_AUTH0_DOMAIN=$VITE_AUTH0_DOMAIN
+ENV VITE_AUTH0_CLIENT_ID=$VITE_AUTH0_CLIENT_ID
+ENV VITE_AUTH0_AUDIENCE=$VITE_AUTH0_AUDIENCE
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_WS_URL=$VITE_WS_URL
+
 WORKDIR /app/frontend
 COPY shura-frontend/package*.json ./
 RUN npm ci
