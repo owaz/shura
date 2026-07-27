@@ -2,8 +2,11 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { IndividualIcon, CouplesIcon } from '../components/Icons'; // Using these for visual distinction
+import { useAuth } from '../contexts/AuthContext';
 
 const LoginHubPage: React.FC = () => {
+  const { login, therapistLogin } = useAuth();
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-sand p-6">
       <div className="w-full max-w-4xl mx-auto">
@@ -17,9 +20,10 @@ const LoginHubPage: React.FC = () => {
         
         <div className="grid md:grid-cols-2 gap-8">
           {/* Client Portal Card */}
-          <Link 
-            to="/login"
-            className="block bg-ivory p-8 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-center group"
+          <button
+            type="button"
+            onClick={() => void login('', '')}
+            className="block w-full bg-ivory p-8 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-center group"
           >
             <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-sand mb-5">
               <IndividualIcon className="h-8 w-8 text-brown-soft" />
@@ -29,12 +33,13 @@ const LoginHubPage: React.FC = () => {
             <span className="font-semibold text-brown-soft group-hover:underline">
               Client Login &rarr;
             </span>
-          </Link>
+          </button>
           
           {/* Therapist Portal Card */}
-          <Link 
-            to="/therapist-login"
-            className="block bg-ivory p-8 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-center group"
+          <button
+            type="button"
+            onClick={() => void therapistLogin('', '')}
+            className="block w-full bg-ivory p-8 rounded-2xl shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300 text-center group"
           >
             <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-sand mb-5">
               <CouplesIcon className="h-8 w-8 text-brown-soft" />
@@ -44,12 +49,15 @@ const LoginHubPage: React.FC = () => {
             <span className="font-semibold text-brown-soft group-hover:underline">
               Therapist Login &rarr;
             </span>
-          </Link>
+          </button>
         </div>
-        <div className="text-center mt-8">
-          <Link to="/admin/login" className="text-brown-soft font-semibold hover:text-brown-dark hover:underline">
-            Admin Login &rarr;
-          </Link>
+        <div className="mt-6 text-center">
+          <p className="text-sm text-brown-soft">
+            New to our network?{' '}
+            <Link to="/therapist-apply" className="font-semibold text-brown-soft hover:underline">
+              Apply Here
+            </Link>
+          </p>
         </div>
       </div>
     </div>
