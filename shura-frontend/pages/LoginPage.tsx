@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Logo } from '../components/Logo';
@@ -7,6 +7,7 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const hasRedirectedRef = useRef(false);
 
   const handleLogin = async () => {
     setError('');
@@ -19,6 +20,12 @@ const LoginPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (hasRedirectedRef.current) return;
+    hasRedirectedRef.current = true;
+    void handleLogin();
+  }, []);
+
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-cream">
       <div className="container mx-auto">
@@ -30,8 +37,8 @@ const LoginPage: React.FC = () => {
                 Shura
               </h3>
             </Link>
-            <h1 className="text-3xl font-serif font-bold text-brown-dark mt-2">Welcome Back</h1>
-            <p className="text-brown-soft mt-1">Continue securely with Auth0 Universal Login.</p>
+            <h1 className="text-3xl font-serif font-bold text-brown-dark mt-2">Redirecting...</h1>
+            <p className="text-brown-soft mt-1">Taking you to secure Auth0 login.</p>
           </div>
 
           {error && (

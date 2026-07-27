@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,6 +7,7 @@ const TherapistLoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { therapistLogin } = useAuth();
+  const hasRedirectedRef = useRef(false);
 
   const handleLogin = async () => {
     setLoading(true);
@@ -19,6 +20,12 @@ const TherapistLoginPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (hasRedirectedRef.current) return;
+    hasRedirectedRef.current = true;
+    void handleLogin();
+  }, []);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-sand p-6">
       <div className="max-w-md w-full bg-ivory p-8 rounded-xl shadow-lg">
@@ -27,8 +34,8 @@ const TherapistLoginPage: React.FC = () => {
             <Logo className="h-8 w-8 text-brown-dark" />
             <h3 className="font-serif text-3xl font-bold text-brown-dark group-hover:text-brown-soft transition-colors">Shura</h3>
           </Link>
-          <h1 className="text-2xl font-serif font-bold text-brown-dark">Therapist Portal</h1>
-          <p className="text-brown-soft">Sign in securely with Auth0 Universal Login.</p>
+          <h1 className="text-2xl font-serif font-bold text-brown-dark">Redirecting...</h1>
+          <p className="text-brown-soft">Taking you to secure therapist login.</p>
         </div>
 
         {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
