@@ -16,6 +16,13 @@ exports.onExecutePostLogin = async (event, api) => {
     return;
   }
 
+  // Block all email/password users (clients, therapists, admins) from logging in
+  // until they verify their email. Social logins (Google/Apple) are pre-verified.
+  if (!isSocial && !event?.user?.email_verified) {
+    api.access.deny('email_not_verified', 'Please verify your email address. Check your inbox (and junk folder) for the verification email from Shura.');
+    return;
+  }
+
   if (role === 'therapist') {
     if (isSocial) {
       api.access.deny('unauthorized', 'Therapist accounts must use email and password login.');
