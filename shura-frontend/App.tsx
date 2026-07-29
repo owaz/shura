@@ -38,6 +38,7 @@ import IntakeFormPage from './pages/IntakeFormPage';
 import IntakeSuccessPage from './pages/IntakeSuccessPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminTherapistApprovalsPage from './pages/AdminTherapistApprovalsPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 import { apiFetch } from './config/api';
 
 const NewsletterSignup: React.FC = () => {
@@ -202,6 +203,7 @@ const App: React.FC = () => {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/therapist-login" element={<TherapistLoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="/therapist-apply" element={<TherapistApplyPage />} />
           <Route path="/therapist-apply/pending" element={<TherapistApplyPendingPage />} />
           <Route path="/therapist-apply/status" element={<TherapistApplyStatusPage />} />

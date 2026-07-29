@@ -158,7 +158,7 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
 
   const signup = useCallback(async (email: string, _password: string, fullName: string) => {
     await loginWithRedirect({
-      appState: { returnTo: '/questionnaire' },
+      appState: { returnTo: '/verify-email', email },
       authorizationParams: {
         screen_hint: 'signup',
         login_hint: email,
@@ -238,8 +238,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       cacheLocation="localstorage"
       useRefreshTokens
       onRedirectCallback={(appState) => {
-        const returnTo = (appState as { returnTo?: string } | undefined)?.returnTo || window.location.pathname;
-        window.history.replaceState({}, document.title, returnTo);
+        const state = appState as { returnTo?: string; email?: string } | undefined;
+        const returnTo = state?.returnTo || window.location.pathname;
+        // Pass email as router location state so VerifyEmailPage can display it
+        if (state?.email) {
+          window.history.replaceState({ email: state.email }, document.title, returnTo);
+        } else {
+          window.history.replaceState({}, document.title, returnTo);
+        }
       }}
     >
       <AuthContextInner>{children}</AuthContextInner>
