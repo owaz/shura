@@ -23,7 +23,8 @@ const getJwks = () => {
 
 const resolveRoleAndStatus = (payload) => {
   const config = auth0Config || getAuth0Config();
-  const role = String(getClaim(payload, config, 'role') || '').toLowerCase();
+  // Default to 'client' when no role claim is present (e.g. Post-Login Action not yet deployed)
+  const role = String(getClaim(payload, config, 'role') || 'client').toLowerCase();
   const status = String(getClaim(payload, config, 'status') || 'active').toLowerCase();
   return { role, status };
 };
@@ -146,15 +147,13 @@ const verifyAccessToken = async (token) => {
     audience: config.audience,
   });
   const { role, status } = resolveRoleAndStatus(payload);
-  if (!roleValues.has(role)) {
-    throw new Error('Token missing valid role claim');
-  }
+  const validRole = roleValues.has(role) ? role : 'client';
   const sub = String(payload.sub || '').trim();
   if (!sub) {
     throw new Error('Token missing subject claim');
   }
   const email = String(payload.email || '').trim();
-  const localIdentity = await ensureLocalIdentity({ sub, email, role, status, payload });
+  const localIdentity = await ensureLocalIdentity({ sub, email, role: validRole, status, payload });
   return {
     ...payload,
     ...localIdentity,
@@ -171,6 +170,7 @@ const authenticateToken = async (req, res, next) => {
     req.authSource = 'bearer';
     return next();
   } catch (err) {
+    console.error('[auth] token verification failed:', err?.message || err);
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
 };
