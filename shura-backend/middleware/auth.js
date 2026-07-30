@@ -1,6 +1,7 @@
 const { createRemoteJWKSet, jwtVerify } = require('jose');
 const pool = require('../db');
 const { getAuth0Config, getClaim } = require('../config/auth0');
+const { errorResponse } = require('../utils/apiResponse');
 
 const roleValues = new Set(['client', 'therapist', 'admin']);
 let jwks;
@@ -167,30 +168,30 @@ const authenticateToken = async (req, res, next) => {
   try {
     const token = getBearerToken(req);
     if (!token) {
-      return res.status(401).json({ error: 'Bearer access token required' });
+      return errorResponse(res, 401, 'AUTHENTICATION_REQUIRED', 'Bearer access token required.');
     }
     req.user = await verifyAccessToken(token);
     req.authSource = 'bearer';
     return next();
   } catch (err) {
     console.error('[auth] token verification failed:', err?.message || err);
-    return res.status(403).json({ error: 'Invalid or expired token' });
+    return errorResponse(res, 401, 'INVALID_ACCESS_TOKEN', 'Your access token is invalid or has expired.');
   }
 };
 
 const requireAdmin = async (req, res, next) => {
   try {
     const token = getBearerToken(req);
-    if (!token) return res.status(401).json({ error: 'Admin access token required' });
+    if (!token) return errorResponse(res, 401, 'AUTHENTICATION_REQUIRED', 'Admin access token required.');
     const user = await verifyAccessToken(token);
     if (user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin privileges required' });
+      return errorResponse(res, 403, 'ADMIN_ROLE_REQUIRED', 'Admin privileges are required.');
     }
     req.user = user;
     req.admin = user;
     return next();
   } catch (err) {
-    return res.status(403).json({ error: 'Invalid or expired admin token' });
+    return errorResponse(res, 401, 'INVALID_ACCESS_TOKEN', 'Your access token is invalid or has expired.');
   }
 };
 

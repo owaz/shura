@@ -184,6 +184,9 @@ if (paymentRoutes) app.use('/api/payments', paymentLimiter, paymentRoutes);
 const calendarRoutes = require('./routes/calendar');
 if (calendarRoutes) app.use('/api/calendar', generalLimiter, calendarRoutes);
 
+const clientPortalRoutes = require('./routes/client');
+app.use('/api/client', generalLimiter, clientPortalRoutes);
+
 // Health check endpoints
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Shura API is running' });
@@ -219,9 +222,15 @@ if (process.env.NODE_ENV === 'production') {
 app.use((err, req, res, next) => {
   console.error('Error:', err.message);
   if (err.message === 'CORS not allowed by server') {
-    return res.status(403).json({ error: 'CORS policy violation' });
+    return res.status(403).json({ error: { code: 'CORS_DENIED', message: 'CORS policy violation', details: null } });
   }
-  res.status(err.status || 500).json({ error: err.message || 'Internal Server Error' });
+  res.status(err.status || 500).json({
+    error: {
+      code: err.code || 'INTERNAL_SERVER_ERROR',
+      message: err.expose ? err.message : 'Internal Server Error',
+      details: err.details || null,
+    },
+  });
 });
 
 // Socket.io signaling handlers for WebRTC
