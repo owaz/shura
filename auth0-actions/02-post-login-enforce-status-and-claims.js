@@ -50,4 +50,8 @@ exports.onExecutePostLogin = async (event, api) => {
   api.idToken.setCustomClaim(`${namespace}/status`, status || 'active');
   api.accessToken.setCustomClaim(`${namespace}/role`, role || 'client');
   api.accessToken.setCustomClaim(`${namespace}/status`, status || 'active');
+  // Include email in access token so the backend can look up / provision the user
+  if (event.user.email) {
+    api.accessToken.setCustomClaim(`${namespace}/email`, event.user.email);
+  }
 };
