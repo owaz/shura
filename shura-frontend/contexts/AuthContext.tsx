@@ -156,14 +156,12 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     });
   }, [loginWithRedirect]);
 
-  const signup = useCallback(async (email: string, _password: string, fullName: string) => {
+  const signup = useCallback(async (email: string, _password: string, _fullName: string) => {
     await loginWithRedirect({
       appState: { returnTo: '/verify-email', email },
       authorizationParams: {
         screen_hint: 'signup',
         login_hint: email,
-        role: 'client',
-        full_name: fullName,
       },
     });
   }, [loginWithRedirect]);
