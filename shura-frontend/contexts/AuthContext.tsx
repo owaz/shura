@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
+import { useNavigate } from 'react-router-dom';
 import { apiFetch, getStoredAccessToken, setStoredAccessToken } from '../config/api';
 
 export type UserRole = 'client' | 'therapist' | 'admin';
@@ -55,6 +56,7 @@ const readStoredUser = (): User | null => {
 };
 
 const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const navigate = useNavigate();
   const {
     isAuthenticated: isAuth0Authenticated,
     isLoading: isAuth0Loading,
@@ -70,6 +72,16 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     const user = readStoredUser();
     return user ? localStorage.getItem(`${QUESTIONNAIRE_KEY_PREFIX}${user.email}`) === 'true' : false;
   });
+
+  // Intercept Auth0 error redirects (e.g. email_not_verified) and handle them gracefully
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get('error');
+    const desc = params.get('error_description');
+    if (error === 'access_denied' && desc === 'email_not_verified') {
+      navigate('/verify-email', { replace: true });
+    }
+  }, [navigate]);
 
   const persistUser = useCallback((nextUser: User | null) => {
     if (!nextUser) {
