@@ -40,15 +40,12 @@ const defaultDisplayName = (payload) => {
 
 const ensureLocalIdentity = async ({ sub, email, role, status, payload }) => {
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  if (!normalizedEmail) {
-    throw new Error('Authenticated token is missing email');
-  }
-
+  // email is required to create a new user record; existing users can be found by sub alone
   if (role === 'client') {
     const { rows } = await pool.query(
       `SELECT id, email, full_name, status, auth0_sub
        FROM users
-       WHERE auth0_sub = $1 OR LOWER(email) = $2
+       WHERE auth0_sub = $1 OR (LOWER(email) = $2 AND $2 <> '')
        ORDER BY id ASC
        LIMIT 1`,
       [sub, normalizedEmail]
@@ -67,6 +64,7 @@ const ensureLocalIdentity = async ({ sub, email, role, status, payload }) => {
       return { id: existing.id, email: existing.email, role: 'client', status: status || existing.status || 'active', sub };
     }
 
+    if (!normalizedEmail) throw new Error('Cannot create user: email missing from token');
     const inserted = await pool.query(
       `INSERT INTO users (email, password_hash, full_name, auth0_sub, status)
        VALUES ($1, $2, $3, $4, $5)
@@ -80,7 +78,7 @@ const ensureLocalIdentity = async ({ sub, email, role, status, payload }) => {
     const { rows } = await pool.query(
       `SELECT id, email, full_name, status, auth0_sub
        FROM therapists
-       WHERE auth0_sub = $1 OR LOWER(email) = $2
+       WHERE auth0_sub = $1 OR (LOWER(email) = $2 AND $2 <> '')
        ORDER BY id ASC
        LIMIT 1`,
       [sub, normalizedEmail]
@@ -99,6 +97,7 @@ const ensureLocalIdentity = async ({ sub, email, role, status, payload }) => {
       return { id: existing.id, email: existing.email, role: 'therapist', status: status || existing.status || 'pending', sub };
     }
 
+    if (!normalizedEmail) throw new Error('Cannot create therapist: email missing from token');
     const inserted = await pool.query(
       `INSERT INTO therapists (email, password_hash, full_name, status, auth0_sub)
        VALUES ($1, $2, $3, $4, $5)
@@ -111,7 +110,7 @@ const ensureLocalIdentity = async ({ sub, email, role, status, payload }) => {
   const { rows } = await pool.query(
     `SELECT id, email, full_name, role, auth0_sub
      FROM admins
-     WHERE auth0_sub = $1 OR LOWER(email) = $2
+     WHERE auth0_sub = $1 OR (LOWER(email) = $2 AND $2 <> '')
      ORDER BY id ASC
      LIMIT 1`,
     [sub, normalizedEmail]
@@ -152,7 +151,11 @@ const verifyAccessToken = async (token) => {
   if (!sub) {
     throw new Error('Token missing subject claim');
   }
-  const email = String(payload.email || '').trim();
+  // email may be in a namespaced claim (set by Post-Login Action) or standard claim
+  const config2 = auth0Config || getAuth0Config();
+  const email = String(
+    getClaim(payload, config2, 'email') || payload.email || ''
+  ).trim();
   const localIdentity = await ensureLocalIdentity({ sub, email, role: validRole, status, payload });
   return {
     ...payload,
