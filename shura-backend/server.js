@@ -187,6 +187,9 @@ if (calendarRoutes) app.use('/api/calendar', generalLimiter, calendarRoutes);
 const clientPortalRoutes = require('./routes/client');
 app.use('/api/client', generalLimiter, clientPortalRoutes);
 
+const platformRoutes = require('./routes/platform');
+app.use('/api/platform', generalLimiter, platformRoutes);
+
 // Health check endpoints
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Shura API is running' });

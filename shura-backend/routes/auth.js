@@ -6,6 +6,7 @@ const pool = require('../db'); // Properly import the pool
 const { sendTherapistApplicationNotification, sendClientSignupNotification } = require('../utils/emailService');
 const { autoAssignTherapist } = require('../utils/matchingService');
 const { authenticateToken } = require('../middleware/auth');
+const { deleteImage, getCanonicalImageUrl, getImageReadUrl } = require('../services/azureBlobStorage');
 const { CSRF_COOKIE, REFRESH_COOKIE, clearAuthCookies, createSession, parseCookies, revokeSession, rotateSession } = require('../utils/sessionAuth');
 const router = express.Router();
 
@@ -77,7 +78,14 @@ const toDbTextList = (value, columnTypeMap, columnName) => {
   return isArrayColumn(columnTypeMap, columnName) ? normalized : normalized.join(', ');
 };
 
-const therapistToPublic = (therapist) => {
+const resolveTherapistImage = async (therapist) => {
+  if (therapist.profile_image_storage_provider === 'azure_blob' && therapist.profile_image_blob_name) {
+    return getImageReadUrl(therapist.profile_image_blob_name);
+  }
+  return therapist.profile_image_url || 'https://picsum.photos/id/1005/400/400';
+};
+
+const therapistToPublic = async (therapist) => {
   const specialties = toArray(therapist.specialties);
   const sessionTypes = toArray(therapist.session_types).map((type) => {
     const normalized = String(type).toLowerCase();
@@ -95,7 +103,7 @@ const therapistToPublic = (therapist) => {
     name: therapist.full_name,
     title: therapist.specialization || 'Licensed Therapist',
     experience: therapist.experience_years || therapist.years_experience || 0,
-    imageUrl: therapist.profile_image_url || 'https://picsum.photos/id/1005/400/400',
+    imageUrl: await resolveTherapistImage(therapist),
     bioSnippet: therapist.bio || `Supports clients with ${concerns.slice(0, 3).join(', ')} through faith-centered care.`,
     fullBio: therapist.bio || `Dr. ${therapist.full_name} provides compassionate, faith-centered support for clients seeking therapy.`,
     specialties,
@@ -110,7 +118,7 @@ const therapistToPublic = (therapist) => {
   };
 };
 
-const therapistToEditableProfile = (therapist) => ({
+const therapistToEditableProfile = async (therapist) => ({
   id: therapist.id,
   email: therapist.email,
   full_name: therapist.full_name || '',
@@ -120,7 +128,9 @@ const therapistToEditableProfile = (therapist) => ({
   session_types: normalizeSessionTypes(therapist.session_types),
   rate_60min: Number(therapist.rate_60min || 0),
   bio: therapist.bio || '',
-  profile_image_url: therapist.profile_image_url || '',
+  profile_image_url: await resolveTherapistImage(therapist),
+  profile_image_blob_name: therapist.profile_image_blob_name || '',
+  profile_image_storage_provider: therapist.profile_image_storage_provider || '',
   languages: normalizeTextList(therapist.languages),
   gender: therapist.gender || '',
   location: therapist.location || '',
@@ -190,9 +200,13 @@ router.post('/logout', async (req, res) => {
 router.get('/profile', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { rows } = await pool.query('SELECT id, email, full_name, phone, dob, profile_picture, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications, created_at FROM users WHERE id = $1', [userId]);
+    const { rows } = await pool.query('SELECT id, email, full_name, phone, dob, profile_picture, profile_picture_blob_name, profile_picture_storage_provider, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications, created_at FROM users WHERE id = $1', [userId]);
     if (!rows.length) return res.status(404).json({ error: 'Profile not found' });
-    return res.json({ user: rows[0] });
+    const user = rows[0];
+    if (user.profile_picture_storage_provider === 'azure_blob' && user.profile_picture_blob_name) {
+      user.profile_picture = await getImageReadUrl(user.profile_picture_blob_name);
+    }
+    return res.json({ user });
   } catch (err) {
     console.error('GET /profile error', err);
     return res.status(500).json({ error: err.message });
@@ -203,14 +217,15 @@ router.get('/therapists', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, full_name, specialization, experience_years, years_experience, specialties,
-              session_types, rate_60min, profile_image_url, bio,
+              session_types, rate_60min, profile_image_url, profile_image_blob_name,
+              profile_image_storage_provider, bio,
               languages, gender, location, status
        FROM therapists
        WHERE LOWER(COALESCE(status, '')) = 'approved'
        ORDER BY full_name ASC`
     );
 
-    return res.json({ therapists: rows.map(therapistToPublic) });
+    return res.json({ therapists: await Promise.all(rows.map(therapistToPublic)) });
   } catch (err) {
     console.error('GET /therapists error', err);
     return res.status(500).json({ error: err.message });
@@ -221,7 +236,8 @@ router.get('/therapists/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, full_name, specialization, experience_years, years_experience, specialties,
-              session_types, rate_60min, profile_image_url, bio,
+              session_types, rate_60min, profile_image_url, profile_image_blob_name,
+              profile_image_storage_provider, bio,
               languages, gender, location, status
        FROM therapists
        WHERE id = $1 AND LOWER(COALESCE(status, '')) = 'approved'`,
@@ -232,7 +248,7 @@ router.get('/therapists/:id', async (req, res) => {
       return res.status(404).json({ error: 'Therapist not found' });
     }
 
-    return res.json({ therapist: therapistToPublic(rows[0]) });
+    return res.json({ therapist: await therapistToPublic(rows[0]) });
   } catch (err) {
     console.error('GET /therapists/:id error', err);
     return res.status(500).json({ error: err.message });
@@ -248,6 +264,7 @@ router.get('/therapist/profile', authenticateToken, async (req, res) => {
     const { rows } = await pool.query(
       `SELECT id, email, full_name, specialization, experience_years, years_experience,
               specialties, session_types, rate_60min, bio, profile_image_url,
+              profile_image_blob_name, profile_image_storage_provider,
               languages, gender, location, status
        FROM therapists
        WHERE id = $1`,
@@ -259,8 +276,8 @@ router.get('/therapist/profile', authenticateToken, async (req, res) => {
     }
 
     return res.json({
-      profile: therapistToEditableProfile(rows[0]),
-      therapist: therapistToPublic(rows[0]),
+      profile: await therapistToEditableProfile(rows[0]),
+      therapist: await therapistToPublic(rows[0]),
     });
   } catch (err) {
     console.error('GET /therapist/profile error', err);
@@ -278,7 +295,7 @@ router.put('/therapist/profile', authenticateToken, async (req, res) => {
     const fullName = typeof payload.full_name === 'string' ? payload.full_name.trim() : '';
     const specialization = typeof payload.specialization === 'string' ? payload.specialization.trim() : '';
     const bio = typeof payload.bio === 'string' ? payload.bio.trim() : '';
-    const profileImageUrl = typeof payload.profile_image_url === 'string' ? payload.profile_image_url.trim() : '';
+    const profileImageBlobName = typeof payload.profile_image_blob_name === 'string' ? payload.profile_image_blob_name.trim() : '';
     const gender = typeof payload.gender === 'string' ? payload.gender.trim() : '';
     const location = typeof payload.location === 'string' ? payload.location.trim() : '';
     const experienceYears = toNullableInt(payload.experience_years);
@@ -296,6 +313,21 @@ router.put('/therapist/profile', authenticateToken, async (req, res) => {
       : null;
     const dbLanguages = toDbTextList(payload.languages, columnTypeMap, 'languages');
 
+    const expectedBlobPrefix = `uploads/therapist/${req.user.id}/`;
+    if (profileImageBlobName && !profileImageBlobName.startsWith(expectedBlobPrefix)) {
+      return res.status(400).json({ error: 'Invalid therapist profile image.' });
+    }
+    const existingImage = await pool.query(
+      `SELECT profile_image_url, profile_image_blob_name, profile_image_storage_provider
+       FROM therapists WHERE id = $1`,
+      [req.user.id]
+    );
+    const nextBlobName = profileImageBlobName || existingImage.rows[0]?.profile_image_blob_name || null;
+    const nextImageProvider = nextBlobName ? 'azure_blob' : existingImage.rows[0]?.profile_image_storage_provider || null;
+    const nextImageUrl = nextImageProvider === 'azure_blob'
+      ? getCanonicalImageUrl(nextBlobName)
+      : existingImage.rows[0]?.profile_image_url || null;
+
     const { rows } = await pool.query(
       `UPDATE therapists
        SET full_name = $1,
@@ -306,13 +338,16 @@ router.put('/therapist/profile', authenticateToken, async (req, res) => {
            rate_60min = $6,
            bio = $7,
            profile_image_url = $8,
-           languages = $9,
-           gender = $10,
-           location = $11,
+           profile_image_blob_name = $9,
+           profile_image_storage_provider = $10,
+           languages = $11,
+           gender = $12,
+           location = $13,
            updated_at = NOW()
-       WHERE id = $12
+       WHERE id = $14
        RETURNING id, email, full_name, specialization, experience_years, years_experience,
                  specialties, session_types, rate_60min, bio, profile_image_url,
+                 profile_image_blob_name, profile_image_storage_provider,
                  languages, gender, location, status`,
       [
         fullName,
@@ -322,7 +357,9 @@ router.put('/therapist/profile', authenticateToken, async (req, res) => {
         dbSessionTypes,
         rate60min,
         bio || null,
-        profileImageUrl || null,
+        nextImageUrl,
+        nextBlobName,
+        nextImageProvider,
         dbLanguages,
         gender || null,
         location || null,
@@ -330,14 +367,19 @@ router.put('/therapist/profile', authenticateToken, async (req, res) => {
       ]
     );
 
+    const previousBlobName = existingImage.rows[0]?.profile_image_blob_name;
+    if (existingImage.rows[0]?.profile_image_storage_provider === 'azure_blob' && previousBlobName && previousBlobName !== nextBlobName) {
+      deleteImage(previousBlobName).catch((err) => console.error('Could not remove replaced therapist image', err?.message || err));
+    }
+
     if (!rows.length) {
       return res.status(404).json({ error: 'Therapist profile not found' });
     }
 
     return res.json({
       message: 'Therapist profile updated successfully',
-      profile: therapistToEditableProfile(rows[0]),
-      therapist: therapistToPublic(rows[0]),
+      profile: await therapistToEditableProfile(rows[0]),
+      therapist: await therapistToPublic(rows[0]),
     });
   } catch (err) {
     console.error('PUT /therapist/profile error', err);
@@ -349,13 +391,17 @@ router.put('/therapist/profile', authenticateToken, async (req, res) => {
 router.put('/profile', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { full_name, phone, dob, profile_picture, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications } = req.body;
+    const { full_name, phone, dob, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications } = req.body;
     const { rows } = await pool.query(
-      'UPDATE users SET full_name = $1, phone = $2, dob = $3, profile_picture = $4, display_name = $5, bio = $6, spiritual_integration = $7, preferred_language = $8, timezone = $9, focus_areas = $10, email_notifications = $11, sms_notifications = $12, updated_at = NOW() WHERE id = $13 RETURNING id, email, full_name, phone, dob, profile_picture, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications, created_at',
-      [full_name, phone, dob, profile_picture, display_name, bio, spiritual_integration, preferred_language, timezone, JSON.stringify(focus_areas), email_notifications, sms_notifications, userId]
+      'UPDATE users SET full_name = $1, phone = $2, dob = $3, display_name = $4, bio = $5, spiritual_integration = $6, preferred_language = $7, timezone = $8, focus_areas = $9, email_notifications = $10, sms_notifications = $11, updated_at = NOW() WHERE id = $12 RETURNING id, email, full_name, phone, dob, profile_picture, profile_picture_blob_name, profile_picture_storage_provider, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications, created_at',
+      [full_name, phone, dob, display_name, bio, spiritual_integration, preferred_language, timezone, JSON.stringify(focus_areas), email_notifications, sms_notifications, userId]
     );
     if (!rows.length) return res.status(404).json({ error: 'Profile not found' });
-    return res.json({ user: rows[0] });
+    const user = rows[0];
+    if (user.profile_picture_storage_provider === 'azure_blob' && user.profile_picture_blob_name) {
+      user.profile_picture = await getImageReadUrl(user.profile_picture_blob_name);
+    }
+    return res.json({ user });
   } catch (err) {
     console.error('PUT /profile error', err);
     return res.status(500).json({ error: err.message });
