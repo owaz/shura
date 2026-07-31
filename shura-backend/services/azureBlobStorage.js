@@ -109,10 +109,13 @@ const uploadImage = async ({ buffer, mimeType, namespace, metadata = {} }) => {
 
 const getDelegationKey = async (startsOn, expiresOn) => {
   const { serviceClient: client } = getClients();
-  if (cachedDelegationKey && cachedDelegationKeyExpiresAt > expiresOn.getTime() + 60_000) {
+  const requiredExpiryMs = expiresOn.getTime() + 60_000; // keep a small safety buffer
+
+  if (cachedDelegationKey && cachedDelegationKeyExpiresAt > requiredExpiryMs) {
     return cachedDelegationKey;
   }
-  const keyExpiresOn = new Date(Date.now() + 60 * 60 * 1000);
+
+  const keyExpiresOn = new Date(requiredExpiryMs + 60_000);
   cachedDelegationKey = await client.getUserDelegationKey(startsOn, keyExpiresOn);
   cachedDelegationKeyExpiresAt = keyExpiresOn.getTime();
   return cachedDelegationKey;
