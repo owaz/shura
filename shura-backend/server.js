@@ -224,7 +224,8 @@ app.use((err, req, res, next) => {
   if (err.message === 'CORS not allowed by server') {
     return res.status(403).json({ error: { code: 'CORS_DENIED', message: 'CORS policy violation', details: null } });
   }
-  res.status(err.status || 500).json({
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
     error: {
       code: err.code || 'INTERNAL_SERVER_ERROR',
       message: err.expose ? err.message : 'Internal Server Error',
