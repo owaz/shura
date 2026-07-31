@@ -28,10 +28,14 @@ In Railway dashboard, add these variables:
 - `JWT_SECRET=<generate-strong-random-string>`
 - `FRONTEND_URL=https://your-vercel-app.vercel.app`
 
-**Cloudinary (Image uploads):**
-- `CLOUD_NAME=your_cloudinary_name`
-- `CLOUD_API_KEY=your_cloudinary_key`
-- `CLOUD_API_SECRET=your_cloudinary_secret`
+**Azure Blob Storage (Image uploads):**
+- `AZURE_STORAGE_ACCOUNT_NAME=yourstorageaccount`
+- `AZURE_STORAGE_IMAGE_CONTAINER=shura-images`
+- `AZURE_STORAGE_CONNECTION_STRING=<storage-connection-string>`
+
+Azure-hosted production deployments should use Managed Identity instead of a
+connection string. The connection string is retained here only for non-Azure
+legacy deployments.
 
 **Email (Gmail):**
 - `EMAIL_USER=shuraa.life@gmail.com`

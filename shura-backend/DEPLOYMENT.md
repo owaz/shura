@@ -21,10 +21,10 @@ DB_PORT=5432
 # JWT - Generate a strong secret
 JWT_SECRET=your_very_long_random_secret_key_here_at_least_64_characters
 
-# Cloudinary
-CLOUD_NAME=your_cloudinary_name
-CLOUD_API_KEY=your_api_key
-CLOUD_API_SECRET=your_api_secret
+# Azure Blob Storage (production uses Managed Identity)
+AZURE_STORAGE_ACCOUNT_NAME=yourstorageaccount
+AZURE_STORAGE_IMAGE_CONTAINER=shura-images
+AZURE_STORAGE_SAS_TTL_MINUTES=15
 
 # Email
 EMAIL_USER=your-email@gmail.com
@@ -34,6 +34,10 @@ ADMIN_EMAIL=admin@shuraa.life
 # Frontend URL
 FRONTEND_URL=https://your-frontend-domain.com
 ```
+
+Grant the backend's Managed Identity `Storage Blob Data Contributor` and
+`Storage Blob Delegator` on the storage account. Keep the image container
+private. See `AZURE_BLOB_STORAGE.md` for the full setup.
 
 ### 2. Database Setup
 

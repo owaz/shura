@@ -87,8 +87,24 @@ const searchUsers = async (query = '', page = 0, perPage = 50) => {
   return managementRequest(`/users?search_engine=v3${q}&page=${page}&per_page=${perPage}`);
 };
 
+const createPasswordChangeTicket = async (auth0UserId, resultUrl) =>
+  managementRequest('/tickets/password-change', {
+    method: 'POST',
+    body: JSON.stringify({
+      user_id: auth0UserId,
+      result_url: resultUrl,
+      ttl_sec: 900,
+      includeEmailInRedirect: false,
+    }),
+  });
+
+const deleteUser = async (auth0UserId) =>
+  managementRequest(`/users/${encodeURIComponent(auth0UserId)}`, { method: 'DELETE' });
+
 module.exports = {
   assignRoles,
+  createPasswordChangeTicket,
+  deleteUser,
   searchUsers,
   setBlocked,
   updateAppMetadata,

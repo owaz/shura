@@ -13,6 +13,8 @@ type TherapistProfile = {
   rate_60min: number;
   bio: string;
   profile_image_url: string;
+  profile_image_blob_name: string;
+  profile_image_storage_provider: string;
   languages: string[];
   gender: string;
   location: string;
@@ -27,6 +29,8 @@ const EMPTY_PROFILE: TherapistProfile = {
   rate_60min: 0,
   bio: '',
   profile_image_url: '',
+  profile_image_blob_name: '',
+  profile_image_storage_provider: '',
   languages: [],
   gender: '',
   location: '',
@@ -46,6 +50,7 @@ const TherapistProfileEditorPage: React.FC = () => {
   const [languagesInput, setLanguagesInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -108,6 +113,40 @@ const TherapistProfileEditorPage: React.FC = () => {
     }));
   };
 
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      setError('Choose a JPG, PNG, or WebP image up to 5 MB.');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setError('');
+    setMessage('');
+    try {
+      const body = new FormData();
+      body.append('image', file);
+      const response = await apiFetch('/upload/photo', { method: 'POST', body });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error?.message || data.error || 'Failed to upload profile image');
+      }
+      setFormData((current) => ({
+        ...current,
+        profile_image_url: data.imageUrl,
+        profile_image_blob_name: data.blobName,
+        profile_image_storage_provider: data.storageProvider,
+      }));
+      setMessage('Image uploaded. Save your profile to publish it.');
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : 'Failed to upload profile image');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
@@ -165,9 +204,17 @@ const TherapistProfileEditorPage: React.FC = () => {
       <div className="bg-ivory p-6 rounded-xl shadow-sm">
         <h2 className="text-xl font-serif font-semibold text-brown-dark border-b border-sand pb-3 mb-4">Personal Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="md:col-span-2">
-            <label htmlFor="profile_image_url" className="block text-sm font-medium text-brown-soft">Profile Image URL</label>
-            <input id="profile_image_url" name="profile_image_url" type="url" value={formData.profile_image_url} onChange={handleChange} className="mt-1 block w-full bg-white border-sand rounded-md shadow-sm py-2 px-3 focus:ring-brown-soft focus:border-brown-soft" placeholder="https://..." />
+          <div className="md:col-span-2 flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="h-24 w-24 overflow-hidden rounded-full border-4 border-sand bg-white">
+              {formData.profile_image_url ? <img src={formData.profile_image_url} alt="Your therapist profile" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-2xl text-brown-soft">?</div>}
+            </div>
+            <div>
+              <label className="inline-flex cursor-pointer rounded-lg border border-sand bg-white px-4 py-2.5 text-sm font-semibold text-brown-dark hover:bg-sand focus-within:ring-2 focus-within:ring-brown-soft">
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} className="sr-only" disabled={isUploadingImage} />
+                {isUploadingImage ? 'Uploading to Azure…' : 'Upload profile image'}
+              </label>
+              <p className="mt-2 text-xs text-brown-soft">Stored privately in Azure Blob Storage. JPG, PNG, or WebP up to 5 MB.</p>
+            </div>
           </div>
           <div className="md:col-span-2">
             <label htmlFor="full_name" className="block text-sm font-medium text-brown-soft">Full Name</label>

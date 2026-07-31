@@ -43,6 +43,9 @@ import { apiFetch } from './config/api';
 import ClientPortalGuard from './pages/client-portal/ClientPortalGuard';
 import ClientPortalLayout from './pages/client-portal/ClientPortalLayout';
 import PortalPlaceholderPage from './pages/client-portal/PortalPlaceholderPage';
+import ClientOnboardingPage from './pages/client-portal/ClientOnboardingPage';
+import ClientProfilePage from './pages/client-portal/ClientProfilePage';
+import ClientPreferencesPage from './pages/client-portal/ClientPreferencesPage';
 
 const NewsletterSignup: React.FC = () => {
   const [name, setName] = useState('');
@@ -230,13 +233,13 @@ const App: React.FC = () => {
 
           {/* Client portal routes. Page-specific functionality is delivered in subsequent milestones. */}
           <Route element={<ClientPortalGuard />}>
-            <Route path="/portal/onboarding" element={<PortalPlaceholderPage eyebrow="Step 1 of 5" title="Welcome to Shura" description="Your private client portal is being prepared. Your onboarding experience will be available in the next milestone." />} />
+            <Route path="/portal/onboarding" element={<ClientOnboardingPage />} />
             <Route element={<ClientPortalLayout />}>
               <Route path="/portal/home" element={<PortalPlaceholderPage eyebrow="Where Faith Meets Healing" title="Welcome home" description="Your sessions, therapist details, and gentle wellbeing guidance will appear here." />} />
               <Route path="/portal/sessions" element={<PortalPlaceholderPage eyebrow="Your care" title="My Sessions" description="Your upcoming, past, and cancelled sessions will appear here." />} />
               <Route path="/portal/therapist" element={<PortalPlaceholderPage eyebrow="Your support" title="My Therapist" description="Your therapist profile and booking options will appear here." />} />
-              <Route path="/portal/profile" element={<PortalPlaceholderPage eyebrow="Your account" title="My Profile" description="Your personal details and account controls will appear here." />} />
-              <Route path="/portal/preferences" element={<PortalPlaceholderPage eyebrow="Your comfort" title="Preferences" description="Your matching, session, and notification preferences will appear here." />} />
+              <Route path="/portal/profile" element={<ClientProfilePage />} />
+              <Route path="/portal/preferences" element={<ClientPreferencesPage />} />
               <Route path="/portal/billing" element={<PortalPlaceholderPage eyebrow="Your payments" title="Billing" description="Your payment methods, receipts, and transaction history will appear here." />} />
             </Route>
           </Route>

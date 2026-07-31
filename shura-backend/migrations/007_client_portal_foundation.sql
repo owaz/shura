@@ -59,10 +59,11 @@ ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_duration_minutes_check;
 ALTER TABLE bookings ADD CONSTRAINT bookings_duration_minutes_check
   CHECK (duration_minutes IN (30, 50, 80));
 
--- Existing installations store date and time separately. The original timezone
--- was not retained, so legacy values are conservatively treated as UTC.
+-- Existing installations store date and time separately. The legacy booking
+-- flow interprets those values in Asia/Kolkata, so preserve that interpretation
+-- when deriving the new UTC timestamp.
 UPDATE bookings
-SET scheduled_at = (date::timestamp + time::time) AT TIME ZONE 'UTC'
+SET scheduled_at = (date::timestamp + time::time) AT TIME ZONE 'Asia/Kolkata'
 WHERE scheduled_at IS NULL AND date IS NOT NULL AND time IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_bookings_client_scheduled_at ON bookings(user_id, scheduled_at DESC);
