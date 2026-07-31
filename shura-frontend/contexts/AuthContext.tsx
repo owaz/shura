@@ -13,6 +13,7 @@ interface User {
   full_name?: string;
   role: UserRole;
   status?: string;
+  onboardingCompleted?: boolean;
 }
 
 interface AuthContextType {
@@ -49,6 +50,7 @@ const readStoredUser = (): User | null => {
       full_name: parsed.full_name,
       role,
       status: parsed.status,
+      onboardingCompleted: Boolean(parsed.onboardingCompleted),
     };
   } catch {
     return null;
@@ -110,6 +112,7 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
       full_name: data.user.full_name,
       role,
       status: data.user.status,
+      onboardingCompleted: Boolean(data.user.onboardingCompleted),
     };
   }, []);
 
@@ -149,7 +152,7 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
 
   const login = useCallback(async () => {
     await loginWithRedirect({
-      appState: { returnTo: '/therapists' },
+      appState: { returnTo: '/portal/home' },
       authorizationParams: { prompt: 'login' },
     });
   }, [loginWithRedirect]);

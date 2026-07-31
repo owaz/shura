@@ -34,7 +34,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles, redirectT
   }
 
   if (allowedRoles?.length && !allowedRoles.includes(currentUser.role)) {
-    return <Navigate to="/login-hub" replace />;
+    const roleDestination: Record<UserRole, string> = {
+      client: '/portal/home',
+      therapist: '/therapist-portal/dashboard',
+      admin: '/admin/therapists/pending',
+    };
+    return <Navigate to={roleDestination[currentUser.role]} replace />;
   }
 
   return <Outlet />;

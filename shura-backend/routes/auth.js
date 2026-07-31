@@ -149,12 +149,29 @@ router.get('/session', authenticateToken, async (req, res) => {
       return res.json({ user: { ...rows[0], role: 'admin', status: 'active' } });
     }
 
-    const { rows } = await pool.query('SELECT id, email, full_name FROM users WHERE id = $1', [req.user.id]);
+    const { rows } = await pool.query(
+      `SELECT id, email, full_name, onboarding_completed_at
+       FROM users WHERE id = $1`,
+      [req.user.id]
+    );
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
-    return res.json({ user: { ...rows[0], role: 'client', status: req.user.status } });
+    return res.json({
+      user: {
+        ...rows[0],
+        onboardingCompleted: Boolean(rows[0].onboarding_completed_at),
+        role: 'client',
+        status: req.user.status,
+      },
+    });
   } catch (err) {
     console.error('GET /session error', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({
+      error: {
+        code: 'SESSION_LOOKUP_FAILED',
+        message: 'We could not load your session right now.',
+        details: null,
+      },
+    });
   }
 });
 
