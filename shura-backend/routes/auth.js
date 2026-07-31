@@ -165,7 +165,13 @@ router.get('/session', authenticateToken, async (req, res) => {
     });
   } catch (err) {
     console.error('GET /session error', err);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({
+      error: {
+        code: 'SESSION_LOOKUP_FAILED',
+        message: 'We could not load your session right now.',
+        details: null,
+      },
+    });
   }
 });
 
