@@ -1,5 +1,5 @@
 import { apiFetch } from '../../config/api';
-import type { ClientOptions, ClientPreferences, ClientProfile, OnboardingData } from './clientPortalTypes';
+import type { AssignedTherapist, ClientOptions, ClientPreferences, ClientProfile, OnboardingData } from './clientPortalTypes';
 
 export class PortalApiError extends Error {
   code: string;
@@ -60,5 +60,9 @@ export const clientPortalApi = {
   deleteAccount: () => request<void>('/client/account', {
     method: 'DELETE',
     body: JSON.stringify({ confirmation: 'DELETE' }),
+  }),
+  getAssignedTherapist: () => request<{ therapist: AssignedTherapist | null }>('/client/therapist'),
+  releaseTherapist: () => request<{ released: boolean; therapistId: number | null; notificationSent?: boolean }>('/client/therapist/release', {
+    method: 'POST',
   }),
 };

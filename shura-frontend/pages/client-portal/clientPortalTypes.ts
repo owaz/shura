@@ -53,3 +53,30 @@ export interface OnboardingData {
   notes: string;
   assignedTherapist: { id: number; name: string } | null;
 }
+
+export interface TherapistAvailabilityBand {
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+}
+
+export interface AssignedTherapist {
+  id: number;
+  name: string;
+  professionalTitle: string;
+  credentials: string[];
+  verified: boolean;
+  imageUrl: string;
+  rating: number;
+  reviewCount: number;
+  bio: string;
+  specialisations: string[];
+  approach: string;
+  faithIntegration: string;
+  languages: string[];
+  sessionTypes: Array<'video' | 'audio' | 'text'>;
+  durationOptions: number[];
+  availability: TherapistAvailabilityBand[];
+  assignedAt: string | null;
+}

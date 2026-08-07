@@ -56,6 +56,7 @@ const TherapistsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isMatching = Boolean(location.state?.concerns);
+  const portalMessage = typeof location.state?.message === 'string' ? location.state.message : '';
 
   const [therapists, setTherapists] = useState<Therapist[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -196,6 +197,12 @@ const TherapistsPage: React.FC = () => {
           )}
         </div>
       </section>
+
+      {portalMessage && (
+        <div className="container mx-auto max-w-5xl px-6 pt-6" role="status">
+          <div className="rounded-xl border border-[#A5B99A] bg-[#EEF4EA] px-4 py-3 text-sm font-medium text-[#3F5D3A]">{portalMessage}</div>
+        </div>
+      )}
 
       {!isMatching && (
         <section className="py-8 border-b border-sand/70 bg-ivory/40">

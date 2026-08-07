@@ -18,6 +18,8 @@ const {
 } = require('../services/auth0Management');
 const { deleteImage, getImageReadUrl, uploadImage } = require('../services/azureBlobStorage');
 const { sanitizeImageMetadata } = require('../utils/imageSanitization');
+const { toAssignedTherapist } = require('../utils/clientTherapist');
+const { sendTherapistReleaseNotification } = require('../utils/emailService');
 
 const router = express.Router();
 router.use(requireClient);
@@ -186,6 +188,117 @@ const updatePreferences = async (queryable, clientId, values) => {
 
 const validationError = (res, errors) =>
   errorResponse(res, 400, 'VALIDATION_FAILED', 'Please review the highlighted fields.', errors);
+
+const assignedTherapistQuery = `
+  SELECT t.id, t.full_name, t.email, t.specialization, t.credentials,
+         t.is_verified, t.profile_image_url, t.profile_image_blob_name,
+         t.profile_image_storage_provider, t.bio, t.specialties, t.approach,
+         t.faith_integration, t.languages, t.session_types,
+         t.session_duration_options, tc.assigned_at,
+         COALESCE((
+           SELECT AVG(review.rating)::numeric(3,2)
+           FROM client_session_reviews review
+           WHERE review.therapist_id = t.id
+         ), 0) AS average_rating,
+         (
+           SELECT COUNT(*)::integer
+           FROM client_session_reviews review
+           WHERE review.therapist_id = t.id
+         ) AS review_count
+  FROM therapist_clients tc
+  JOIN therapists t ON t.id = tc.therapist_id
+  WHERE tc.client_id = $1
+    AND tc.status = 'active'
+    AND LOWER(COALESCE(t.status, '')) = 'approved'
+  ORDER BY tc.assigned_at DESC NULLS LAST, tc.id DESC
+  LIMIT 1`;
+
+router.get('/therapist', async (req, res) => {
+  try {
+    const assignment = await pool.query(assignedTherapistQuery, [req.clientId]);
+    const therapist = assignment.rows[0];
+    if (!therapist) return res.json({ data: { therapist: null } });
+
+    const availability = await pool.query(
+      `SELECT day_of_week, start_time, end_time, timezone
+       FROM therapist_availability_rules
+       WHERE therapist_id = $1 AND is_active = TRUE
+       ORDER BY day_of_week ASC, start_time ASC`,
+      [therapist.id]
+    );
+    const imageUrl = therapist.profile_image_storage_provider === 'azure_blob' && therapist.profile_image_blob_name
+      ? await getImageReadUrl(therapist.profile_image_blob_name)
+      : therapist.profile_image_url || '';
+
+    return res.json({
+      data: {
+        therapist: toAssignedTherapist({ therapist, availability: availability.rows, imageUrl }),
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/client/therapist error', err);
+    return errorResponse(res, 500, 'THERAPIST_LOAD_FAILED', 'We could not load your therapist right now.');
+  }
+});
+
+router.post('/therapist/release', sensitiveLimiter, async (req, res) => {
+  const client = await pool.connect();
+  let releasedAssignment = null;
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT tc.id AS assignment_id, t.id AS therapist_id, t.email AS therapist_email,
+              t.full_name AS therapist_name, u.full_name AS client_name
+       FROM therapist_clients tc
+       JOIN therapists t ON t.id = tc.therapist_id
+       JOIN users u ON u.id = tc.client_id
+       WHERE tc.client_id = $1 AND tc.status = 'active'
+       ORDER BY tc.assigned_at DESC NULLS LAST, tc.id DESC
+       LIMIT 1
+       FOR UPDATE OF tc`,
+      [req.clientId]
+    );
+    releasedAssignment = rows[0] || null;
+    if (!releasedAssignment) {
+      await client.query('COMMIT');
+      return res.json({ data: { released: false, therapistId: null } });
+    }
+
+    await client.query(
+      `UPDATE therapist_clients
+       SET status = 'released', updated_at = NOW()
+       WHERE id = $1`,
+      [releasedAssignment.assignment_id]
+    );
+    await client.query(
+      `INSERT INTO notifications (client_id, type, title, body, metadata)
+       VALUES ($1, 'therapist_assignment_released', 'Therapist preference updated',
+               'Your current therapist assignment has been released. You can now choose a different therapist.',
+               $2::jsonb)`,
+      [req.clientId, JSON.stringify({ therapistId: releasedAssignment.therapist_id })]
+    );
+    await client.query('COMMIT');
+
+    const notification = await sendTherapistReleaseNotification({
+      therapistEmail: releasedAssignment.therapist_email,
+      therapistName: releasedAssignment.therapist_name,
+      clientName: releasedAssignment.client_name,
+    });
+    return res.json({
+      data: {
+        released: true,
+        therapistId: releasedAssignment.therapist_id,
+        notificationSent: notification.success,
+      },
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('POST /api/client/therapist/release error', err);
+    return errorResponse(res, 500, 'THERAPIST_RELEASE_FAILED', 'We could not update your therapist assignment.');
+  } finally {
+    client.release();
+  }
+});
 
 router.get('/bootstrap', async (req, res) => {
   try {
