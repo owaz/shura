@@ -46,6 +46,7 @@ import PortalPlaceholderPage from './pages/client-portal/PortalPlaceholderPage';
 import ClientOnboardingPage from './pages/client-portal/ClientOnboardingPage';
 import ClientProfilePage from './pages/client-portal/ClientProfilePage';
 import ClientPreferencesPage from './pages/client-portal/ClientPreferencesPage';
+import ClientTherapistPage from './pages/client-portal/ClientTherapistPage';
 
 const NewsletterSignup: React.FC = () => {
   const [name, setName] = useState('');
@@ -237,7 +238,7 @@ const App: React.FC = () => {
             <Route element={<ClientPortalLayout />}>
               <Route path="/portal/home" element={<PortalPlaceholderPage eyebrow="Where Faith Meets Healing" title="Welcome home" description="Your sessions, therapist details, and gentle wellbeing guidance will appear here." />} />
               <Route path="/portal/sessions" element={<PortalPlaceholderPage eyebrow="Your care" title="My Sessions" description="Your upcoming, past, and cancelled sessions will appear here." />} />
-              <Route path="/portal/therapist" element={<PortalPlaceholderPage eyebrow="Your support" title="My Therapist" description="Your therapist profile and booking options will appear here." />} />
+              <Route path="/portal/therapist" element={<ClientTherapistPage />} />
               <Route path="/portal/profile" element={<ClientProfilePage />} />
               <Route path="/portal/preferences" element={<ClientPreferencesPage />} />
               <Route path="/portal/billing" element={<PortalPlaceholderPage eyebrow="Your payments" title="Billing" description="Your payment methods, receipts, and transaction history will appear here." />} />

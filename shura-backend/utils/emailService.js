@@ -528,6 +528,33 @@ const sendBookingNotificationToTherapist = async (bookingData) => {
   }
 };
 
+const sendTherapistReleaseNotification = async ({ therapistEmail, therapistName, clientName }) => {
+  try {
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: therapistEmail,
+      subject: 'Shura client assignment update',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #f8f5f0;">
+          <div style="background-color: #ffffff; padding: 28px; border-radius: 12px; border-top: 4px solid #8B7355;">
+            <h1 style="font-size: 22px; color: #5C5043; margin-top: 0;">Client assignment update</h1>
+            <p style="color: #555; line-height: 1.6;">Assalamu Alaikum ${textOrFallback(therapistName)},</p>
+            <p style="color: #555; line-height: 1.6;">
+              ${textOrFallback(clientName, 'A client')} has requested a different therapist. Their active assignment with you has been released in Shura.
+            </p>
+            <p style="color: #555; line-height: 1.6;">No action is required. Existing session records remain available according to Shura policy.</p>
+          </div>
+        </div>
+      `,
+    });
+    return { success: true };
+  } catch (error) {
+    console.error('Error sending therapist release notification:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendTherapistApplicationNotification,
   sendTherapistApprovalEmail,
@@ -536,4 +563,5 @@ module.exports = {
   sendIntakeFormSubmission,
   sendBookingConfirmation,
   sendBookingNotificationToTherapist,
+  sendTherapistReleaseNotification,
 };
