@@ -269,7 +269,9 @@ router.post('/', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Requested time is outside therapist availability' });
     }
 
-    const blocked = await pool.query(
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [therapist_id, date]);
+    const blocked = await client.query(
       `SELECT id
        FROM therapist_blocked_times
        WHERE therapist_id = $1
@@ -279,13 +281,12 @@ router.post('/', authenticateToken, async (req, res) => {
       [therapist_id, date, requestedTime, requestedSlotMinutes]
     );
     if (blocked.rows.length) {
+      await client.query('ROLLBACK');
       return res.status(409).json({ error: 'Requested time is blocked by therapist' });
     }
-
-    await client.query('BEGIN');
     const result = await client.query(
-      `INSERT INTO bookings (user_id, therapist_id, date, time, session_type, status) 
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      `INSERT INTO bookings (user_id, therapist_id, date, time, scheduled_at, session_type, status) 
+       VALUES ($1, $2, $3, $4, (($3::date + $4::time) AT TIME ZONE 'Asia/Kolkata'), $5, $6) RETURNING *`,
       [user_id, therapist_id, date, requestedTime, session_type || 'video', 'pending']
     );
     await client.query('COMMIT');

@@ -392,6 +392,7 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
   let booking;
   let payment;
   let refundEligible = false;
+  let alreadyCancelled = false;
   try {
     await client.query('BEGIN');
     const policies = await loadPolicies(client);
@@ -410,49 +411,51 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
       await client.query('ROLLBACK');
       return errorResponse(res, 404, 'SESSION_NOT_FOUND', 'This session could not be found.');
     }
-    if (normalizeSessionStatus(booking.status) === 'cancelled') {
-      await client.query('COMMIT');
-      const existing = await fetchSession(req.clientId, booking.id);
-      return res.json({ data: { session: await sessionDto(existing, policies), refundStatus: existing.refund_status || null } });
-    }
+    alreadyCancelled = normalizeSessionStatus(booking.status) === 'cancelled';
     const paymentResult = await client.query(
       `SELECT * FROM payments WHERE booking_id = $1 AND client_id = $2
        ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE`,
       [booking.id, req.clientId]
     );
     payment = paymentResult.rows[0] || null;
-    const actions = sessionActions({
-      scheduledAt: booking.scheduled_at,
-      durationMinutes: booking.duration_minutes,
-      status: booking.status,
-      paid: payment && paidStatuses.has(String(payment.status || '').toLowerCase()),
-    }, policies);
-    if (!actions.canCancel) {
-      await client.query('ROLLBACK');
-      return errorResponse(res, 409, 'SESSION_NOT_CANCELLABLE', 'This session can no longer be cancelled.');
+    if (!alreadyCancelled) {
+      const actions = sessionActions({
+        scheduledAt: booking.scheduled_at,
+        durationMinutes: booking.duration_minutes,
+        status: booking.status,
+        paid: payment && paidStatuses.has(String(payment.status || '').toLowerCase()),
+      }, policies);
+      if (!actions.canCancel) {
+        await client.query('ROLLBACK');
+        return errorResponse(res, 409, 'SESSION_NOT_CANCELLABLE', 'This session can no longer be cancelled.');
+      }
+      refundEligible = actions.refundEligible && Boolean(payment?.razorpay_payment_id);
+      await client.query(
+        `UPDATE bookings SET status = 'cancelled', cancelled_at = NOW(),
+           cancellation_reason = $1, cancelled_by = 'client', updated_at = NOW()
+         WHERE id = $2`,
+        [reasonResult.value, booking.id]
+      );
+      await client.query(
+        `INSERT INTO client_session_events (booking_id, client_id, event_type, metadata)
+         VALUES ($1, $2, 'cancelled', $3::jsonb)`,
+        [booking.id, req.clientId, JSON.stringify({ reasonProvided: Boolean(reasonResult.value), refundEligible })]
+      );
+      await client.query(
+        `INSERT INTO notifications (client_id, type, title, body, metadata)
+         VALUES ($1, 'session_cancelled', 'Session cancelled',
+                 $2, $3::jsonb)`,
+        [
+          req.clientId,
+          refundEligible ? 'Your session was cancelled and your refund is being processed.' : 'Your session was cancelled.',
+          JSON.stringify({ bookingId: booking.id, refundEligible }),
+        ]
+      );
+    } else {
+      const retryableRefundStatus = new Set(['pending', 'failed']);
+      refundEligible = Boolean(payment?.razorpay_payment_id)
+        && retryableRefundStatus.has(String(payment?.refund_status || '').toLowerCase());
     }
-    refundEligible = actions.refundEligible && Boolean(payment?.razorpay_payment_id);
-    await client.query(
-      `UPDATE bookings SET status = 'cancelled', cancelled_at = NOW(),
-         cancellation_reason = $1, cancelled_by = 'client', updated_at = NOW()
-       WHERE id = $2`,
-      [reasonResult.value, booking.id]
-    );
-    await client.query(
-      `INSERT INTO client_session_events (booking_id, client_id, event_type, metadata)
-       VALUES ($1, $2, 'cancelled', $3::jsonb)`,
-      [booking.id, req.clientId, JSON.stringify({ reasonProvided: Boolean(reasonResult.value), refundEligible })]
-    );
-    await client.query(
-      `INSERT INTO notifications (client_id, type, title, body, metadata)
-       VALUES ($1, 'session_cancelled', 'Session cancelled',
-               $2, $3::jsonb)`,
-      [
-        req.clientId,
-        refundEligible ? 'Your session was cancelled and your refund is being processed.' : 'Your session was cancelled.',
-        JSON.stringify({ bookingId: booking.id, refundEligible }),
-      ]
-    );
     if (refundEligible && payment.refund_status !== 'completed') {
       await client.query(
         `UPDATE payments SET refund_status = 'pending', refund_amount_cents = amount_cents,
@@ -496,11 +499,13 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
       );
     }
   }
-  void Promise.allSettled([
-    cancelBookingOnConnectedCalendars(booking.id),
-    sendSessionCancellationNotifications({ ...booking, refundEligible, refundStatus }),
-  ]).then((results) => results.filter((result) => result.status === 'rejected')
-    .forEach((result) => console.error('Post-cancellation notification error', result.reason)));
+  if (!alreadyCancelled) {
+    void Promise.allSettled([
+      cancelBookingOnConnectedCalendars(booking.id),
+      sendSessionCancellationNotifications({ ...booking, refundEligible, refundStatus }),
+    ]).then((results) => results.filter((result) => result.status === 'rejected')
+      .forEach((result) => console.error('Post-cancellation notification error', result.reason)));
+  }
   const [row, policies] = await Promise.all([fetchSession(req.clientId, booking.id), loadPolicies()]);
   return res.json({ data: { session: await sessionDto(row, policies), refundStatus } });
 });

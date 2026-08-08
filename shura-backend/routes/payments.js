@@ -140,6 +140,25 @@ const validateBookingSlotStillAvailable = async ({ therapistId, date, time }, qu
     err.statusCode = 409;
     throw err;
   }
+  const conflict = await queryClient.query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM bookings existing
+       WHERE existing.therapist_id = $1
+         AND LOWER(COALESCE(existing.status, '')) <> 'cancelled'
+         AND COALESCE(existing.scheduled_at, ((existing.date::timestamp + existing.time::time) AT TIME ZONE 'Asia/Kolkata'))
+               < (($2::date + $3::time) AT TIME ZONE 'Asia/Kolkata') + make_interval(mins => $4)
+         AND COALESCE(existing.scheduled_at, ((existing.date::timestamp + existing.time::time) AT TIME ZONE 'Asia/Kolkata'))
+               + make_interval(mins => COALESCE(existing.duration_minutes, 50))
+               > (($2::date + $3::time) AT TIME ZONE 'Asia/Kolkata')
+     ) AS unavailable`,
+    [therapistId, normalizedDate, normalizedTime, slotMinutes]
+  );
+  if (conflict.rows[0]?.unavailable) {
+    const err = new Error('That time was just taken. Please choose another available time.');
+    err.statusCode = 409;
+    throw err;
+  }
 };
 
 // Initialize Razorpay
@@ -249,6 +268,7 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
       };
     }
 
+    await dbClient.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [intent.therapist_id, toIsoDateOnly(intent.booking_date)]);
     await validateBookingSlotStillAvailable(
       {
         therapistId: intent.therapist_id,
@@ -259,8 +279,8 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
     );
 
     const bookingResult = await dbClient.query(
-      `INSERT INTO bookings (user_id, therapist_id, date, time, session_type, status, amount_cents)
-       VALUES ($1, $2, $3, $4, $5, 'confirmed', $6)
+      `INSERT INTO bookings (user_id, therapist_id, date, time, scheduled_at, session_type, status, amount_cents)
+       VALUES ($1, $2, $3, $4, (($3::date + $4::time) AT TIME ZONE 'Asia/Kolkata'), $5, 'confirmed', $6)
        RETURNING *`,
       [
         intent.client_id,
