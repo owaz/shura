@@ -7,6 +7,9 @@ import { AuthProvider } from './contexts/AuthContext';
 import ScrollAnimationWrapper from './components/ScrollAnimationWrapper';
 import ProtectedRoute from './components/ProtectedRoute';
 import { apiFetch } from './config/api';
+import TherapistPortalLayout from './pages/therapist-portal/TherapistPortalLayout';
+import ClientPortalGuard from './pages/client-portal/ClientPortalGuard';
+import ClientPortalLayout from './pages/client-portal/ClientPortalLayout';
 
 const HomePage = lazy(() => import('./pages/HomePage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
@@ -25,7 +28,6 @@ const JoinNetworkPage = lazy(() => import('./pages/JoinNetworkPage'));
 const TherapistApplyPage = lazy(() => import('./pages/TherapistApplyPage'));
 const TherapistApplyPendingPage = lazy(() => import('./pages/TherapistApplyPendingPage'));
 const TherapistApplyStatusPage = lazy(() => import('./pages/TherapistApplyStatusPage'));
-const TherapistPortalLayout = lazy(() => import('./pages/therapist-portal/TherapistPortalLayout'));
 const TherapistDashboardPage = lazy(() => import('./pages/therapist-portal/TherapistDashboardPage'));
 const TherapistProfileEditorPage = lazy(() => import('./pages/therapist-portal/TherapistProfileEditorPage'));
 const TherapistCalendarPage = lazy(() => import('./pages/therapist-portal/TherapistCalendarPage'));
@@ -41,8 +43,6 @@ const IntakeSuccessPage = lazy(() => import('./pages/IntakeSuccessPage'));
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
 const AdminTherapistApprovalsPage = lazy(() => import('./pages/AdminTherapistApprovalsPage'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
-const ClientPortalGuard = lazy(() => import('./pages/client-portal/ClientPortalGuard'));
-const ClientPortalLayout = lazy(() => import('./pages/client-portal/ClientPortalLayout'));
 const PortalPlaceholderPage = lazy(() => import('./pages/client-portal/PortalPlaceholderPage'));
 const ClientOnboardingPage = lazy(() => import('./pages/client-portal/ClientOnboardingPage'));
 const ClientProfilePage = lazy(() => import('./pages/client-portal/ClientProfilePage'));
@@ -60,6 +60,32 @@ const RouteLoadingFallback: React.FC<{ contained?: boolean }> = ({ contained = f
     </div>
   </div>
 );
+
+class RouteErrorBoundary extends React.Component<React.PropsWithChildren, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-[#FAF7F2] px-6" role="alert">
+          <div className="w-full max-w-md rounded-2xl border border-sand bg-white p-7 text-center shadow-[0_8px_30px_rgba(92,80,67,0.06)]">
+            <h1 className="text-2xl font-serif font-bold text-brown-dark">This page could not be loaded</h1>
+            <p className="mt-3 text-brown-soft">Reload the page to try again.</p>
+            <button type="button" onClick={() => window.location.reload()} className="mt-6 rounded-full bg-brown-soft px-6 py-3 font-semibold text-white transition-colors hover:bg-brown-dark">
+              Reload page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 const NewsletterSignup: React.FC = () => {
   const [name, setName] = useState('');
@@ -206,8 +232,9 @@ const App: React.FC = () => {
     <BrowserRouter>
       <AuthProvider>
         <ScrollToTop />
-        <Suspense fallback={<RouteLoadingFallback />}>
-          <Routes>
+        <RouteErrorBoundary>
+          <Suspense fallback={<RouteLoadingFallback />}>
+            <Routes>
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/about" element={<AboutPage />} />
@@ -271,8 +298,9 @@ const App: React.FC = () => {
               <Route path="/therapist-portal/intake-forms" element={<TherapistIntakeFormsPage />} />
             </Route>
           </Route>
-          </Routes>
-        </Suspense>
+            </Routes>
+          </Suspense>
+        </RouteErrorBoundary>
       </AuthProvider>
     </BrowserRouter>
   );
