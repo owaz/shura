@@ -113,7 +113,7 @@ const TherapistPortalLayout: React.FC = () => {
             <div className="flex-1 flex flex-col overflow-hidden">
                 <main className="flex-1 overflow-x-hidden overflow-y-auto bg-sand">
                     <div className="container mx-auto px-6 py-8">
-                        <Outlet />
+                        <React.Suspense fallback={<div className="h-64 animate-pulse rounded-2xl bg-white/70" role="status" aria-label="Loading this portal page" />}><Outlet /></React.Suspense>
                     </div>
                 </main>
             </div>

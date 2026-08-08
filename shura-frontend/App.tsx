@@ -1,53 +1,65 @@
 
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Routes, Route, useLocation, Outlet } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
-import HomePage from './pages/HomePage';
-import AboutPage from './pages/AboutPage';
-import TherapistsPage from './pages/TherapistsPage';
-import TherapistProfilePage from './pages/TherapistProfilePage';
-import ShuraHubPage from './pages/HealingHubPage';
-import ContactPage from './pages/ContactPage';
-import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
-import QuestionnairePage from './pages/QuestionnairePage';
-import ServicesPage from './pages/ServicesPage';
 import { AuthProvider } from './contexts/AuthContext';
 import ScrollAnimationWrapper from './components/ScrollAnimationWrapper';
-import LoginHubPage from './pages/LoginHubPage';
-import TherapistLoginPage from './pages/TherapistLoginPage';
-import TherapistOnboardingPage from './pages/TherapistOnboardingPage';
-import JoinNetworkPage from './pages/JoinNetworkPage';
-import TherapistApplyPage from './pages/TherapistApplyPage';
-import TherapistApplyPendingPage from './pages/TherapistApplyPendingPage';
-import TherapistApplyStatusPage from './pages/TherapistApplyStatusPage';
 import ProtectedRoute from './components/ProtectedRoute';
-import TherapistPortalLayout from './pages/therapist-portal/TherapistPortalLayout';
-import TherapistDashboardPage from './pages/therapist-portal/TherapistDashboardPage';
-import TherapistProfileEditorPage from './pages/therapist-portal/TherapistProfileEditorPage';
-import TherapistCalendarPage from './pages/therapist-portal/TherapistCalendarPage';
-import TherapistPaymentsPage from './pages/therapist-portal/TherapistPaymentsPage';
-import TherapistCallPage from './pages/therapist-portal/TherapistCallPage';
-import ClientChatPage from './pages/ClientChatPage';
-import PaymentPage from './pages/PaymentPage';
-import CallPage from './pages/CallPage';
-import TherapistChatPage from './pages/therapist-portal/TherapistChatPage';
-import TherapistIntakeFormsPage from './pages/therapist-portal/TherapistIntakeFormsPage';
-import IntakeFormPage from './pages/IntakeFormPage';
-import IntakeSuccessPage from './pages/IntakeSuccessPage';
-import AdminLoginPage from './pages/AdminLoginPage';
-import AdminTherapistApprovalsPage from './pages/AdminTherapistApprovalsPage';
-import VerifyEmailPage from './pages/VerifyEmailPage';
 import { apiFetch } from './config/api';
-import ClientPortalGuard from './pages/client-portal/ClientPortalGuard';
-import ClientPortalLayout from './pages/client-portal/ClientPortalLayout';
-import PortalPlaceholderPage from './pages/client-portal/PortalPlaceholderPage';
-import ClientOnboardingPage from './pages/client-portal/ClientOnboardingPage';
-import ClientProfilePage from './pages/client-portal/ClientProfilePage';
-import ClientPreferencesPage from './pages/client-portal/ClientPreferencesPage';
-import ClientSessionsPage from './pages/client-portal/ClientSessionsPage';
-import ClientTherapistPage from './pages/client-portal/ClientTherapistPage';
+
+const HomePage = lazy(() => import('./pages/HomePage'));
+const AboutPage = lazy(() => import('./pages/AboutPage'));
+const TherapistsPage = lazy(() => import('./pages/TherapistsPage'));
+const TherapistProfilePage = lazy(() => import('./pages/TherapistProfilePage'));
+const ShuraHubPage = lazy(() => import('./pages/HealingHubPage'));
+const ContactPage = lazy(() => import('./pages/ContactPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const SignupPage = lazy(() => import('./pages/SignupPage'));
+const QuestionnairePage = lazy(() => import('./pages/QuestionnairePage'));
+const ServicesPage = lazy(() => import('./pages/ServicesPage'));
+const LoginHubPage = lazy(() => import('./pages/LoginHubPage'));
+const TherapistLoginPage = lazy(() => import('./pages/TherapistLoginPage'));
+const TherapistOnboardingPage = lazy(() => import('./pages/TherapistOnboardingPage'));
+const JoinNetworkPage = lazy(() => import('./pages/JoinNetworkPage'));
+const TherapistApplyPage = lazy(() => import('./pages/TherapistApplyPage'));
+const TherapistApplyPendingPage = lazy(() => import('./pages/TherapistApplyPendingPage'));
+const TherapistApplyStatusPage = lazy(() => import('./pages/TherapistApplyStatusPage'));
+const TherapistPortalLayout = lazy(() => import('./pages/therapist-portal/TherapistPortalLayout'));
+const TherapistDashboardPage = lazy(() => import('./pages/therapist-portal/TherapistDashboardPage'));
+const TherapistProfileEditorPage = lazy(() => import('./pages/therapist-portal/TherapistProfileEditorPage'));
+const TherapistCalendarPage = lazy(() => import('./pages/therapist-portal/TherapistCalendarPage'));
+const TherapistPaymentsPage = lazy(() => import('./pages/therapist-portal/TherapistPaymentsPage'));
+const TherapistCallPage = lazy(() => import('./pages/therapist-portal/TherapistCallPage'));
+const ClientChatPage = lazy(() => import('./pages/ClientChatPage'));
+const PaymentPage = lazy(() => import('./pages/PaymentPage'));
+const CallPage = lazy(() => import('./pages/CallPage'));
+const TherapistChatPage = lazy(() => import('./pages/therapist-portal/TherapistChatPage'));
+const TherapistIntakeFormsPage = lazy(() => import('./pages/therapist-portal/TherapistIntakeFormsPage'));
+const IntakeFormPage = lazy(() => import('./pages/IntakeFormPage'));
+const IntakeSuccessPage = lazy(() => import('./pages/IntakeSuccessPage'));
+const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
+const AdminTherapistApprovalsPage = lazy(() => import('./pages/AdminTherapistApprovalsPage'));
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+const ClientPortalGuard = lazy(() => import('./pages/client-portal/ClientPortalGuard'));
+const ClientPortalLayout = lazy(() => import('./pages/client-portal/ClientPortalLayout'));
+const PortalPlaceholderPage = lazy(() => import('./pages/client-portal/PortalPlaceholderPage'));
+const ClientOnboardingPage = lazy(() => import('./pages/client-portal/ClientOnboardingPage'));
+const ClientProfilePage = lazy(() => import('./pages/client-portal/ClientProfilePage'));
+const ClientPreferencesPage = lazy(() => import('./pages/client-portal/ClientPreferencesPage'));
+const ClientSessionsPage = lazy(() => import('./pages/client-portal/ClientSessionsPage'));
+const ClientTherapistPage = lazy(() => import('./pages/client-portal/ClientTherapistPage'));
+
+const RouteLoadingFallback: React.FC<{ contained?: boolean }> = ({ contained = false }) => (
+  <div className={`flex items-center justify-center bg-[#FAF7F2] px-6 ${contained ? 'min-h-[50vh]' : 'min-h-screen'}`} role="status" aria-live="polite">
+    <div className="w-full max-w-md rounded-2xl border border-sand bg-white p-7 shadow-[0_8px_30px_rgba(92,80,67,0.06)]">
+      <span className="sr-only">Loading this page</span>
+      <div className="h-5 w-32 animate-pulse rounded-full bg-sand" aria-hidden="true" />
+      <div className="mt-5 h-3 w-full animate-pulse rounded-full bg-[#F3E9DC]" aria-hidden="true" />
+      <div className="mt-3 h-3 w-3/4 animate-pulse rounded-full bg-[#F3E9DC]" aria-hidden="true" />
+    </div>
+  </div>
+);
 
 const NewsletterSignup: React.FC = () => {
   const [name, setName] = useState('');
@@ -181,7 +193,7 @@ const MainLayout: React.FC = () => {
     <div className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-grow">
-        <Outlet />
+        <Suspense fallback={<RouteLoadingFallback contained />}><Outlet /></Suspense>
       </main>
       {showNewsletter && <NewsletterSignup />}
       <Footer />
@@ -194,7 +206,8 @@ const App: React.FC = () => {
     <BrowserRouter>
       <AuthProvider>
         <ScrollToTop />
-        <Routes>
+        <Suspense fallback={<RouteLoadingFallback />}>
+          <Routes>
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/about" element={<AboutPage />} />
@@ -258,7 +271,8 @@ const App: React.FC = () => {
               <Route path="/therapist-portal/intake-forms" element={<TherapistIntakeFormsPage />} />
             </Route>
           </Route>
-        </Routes>
+          </Routes>
+        </Suspense>
       </AuthProvider>
     </BrowserRouter>
   );

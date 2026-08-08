@@ -40,6 +40,14 @@ const initials = (name?: string, email?: string) => {
   return values.slice(0, 2).map((value) => value[0]).join('').toUpperCase();
 };
 
+const PortalContentFallback: React.FC = () => (
+  <div className="space-y-5" role="status" aria-live="polite">
+    <span className="sr-only">Loading this portal page</span>
+    <div className="h-32 animate-pulse rounded-2xl border border-sand bg-white/80" aria-hidden="true" />
+    <div className="h-52 animate-pulse rounded-2xl border border-sand bg-white/80" aria-hidden="true" />
+  </div>
+);
+
 const ClientPortalLayout: React.FC = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
@@ -125,7 +133,7 @@ const ClientPortalLayout: React.FC = () => {
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-7xl px-4 pb-24 pt-6 md:px-7 md:pt-8 lg:pb-8"><Outlet /></main>
+        <main className="mx-auto max-w-7xl px-4 pb-24 pt-6 md:px-7 md:pt-8 lg:pb-8"><React.Suspense fallback={<PortalContentFallback />}><Outlet /></React.Suspense></main>
       </div>
 
       <nav aria-label="Mobile client portal navigation" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-sand bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-1 shadow-[0_-4px_18px_rgba(92,80,67,0.08)] md:hidden">
