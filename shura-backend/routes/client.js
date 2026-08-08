@@ -20,10 +20,12 @@ const { deleteImage, getImageReadUrl, uploadImage } = require('../services/azure
 const { sanitizeImageMetadata } = require('../utils/imageSanitization');
 const { toAssignedTherapist } = require('../utils/clientTherapist');
 const { sendTherapistReleaseNotification } = require('../utils/emailService');
+const clientSessionsRouter = require('./clientSessions');
 
 const router = express.Router();
 router.use(requireClient);
 router.use(csrfProtection);
+router.use('/sessions', clientSessionsRouter);
 
 const mutationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

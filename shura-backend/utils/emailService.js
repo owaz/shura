@@ -555,6 +555,76 @@ const sendTherapistReleaseNotification = async ({ therapistEmail, therapistName,
   }
 };
 
+const formatSessionDateTime = (value, timezone = 'UTC') => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return textOrFallback(value, 'the scheduled time');
+  try {
+    return date.toLocaleString('en-GB', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZone: timezone, timeZoneName: 'short',
+    });
+  } catch {
+    return date.toISOString();
+  }
+};
+
+const sendSessionRescheduledNotifications = async (session) => {
+  try {
+    const transporter = createTransporter();
+    const oldTime = formatSessionDateTime(session.previousScheduledAt, session.client_timezone || session.clientTimezone);
+    const newTime = formatSessionDateTime(session.nextScheduledAt, session.client_timezone || session.clientTimezone);
+    const panel = `<div style="margin:20px 0;padding:16px;background:#f8f5f0;border-radius:8px;color:#555;line-height:1.6"><div><strong>Previous time:</strong> ${oldTime}</div><div><strong>New time:</strong> ${newTime}</div></div>`;
+    const shell = (greeting, message) => `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f8f5f0"><div style="background:#fff;padding:28px;border-radius:12px;border-top:4px solid #8B7355"><h1 style="font-size:22px;color:#5C5043;margin-top:0">Session rescheduled</h1><p style="color:#555">Assalamu Alaikum ${textOrFallback(greeting)},</p><p style="color:#555;line-height:1.6">${message}</p>${panel}</div></div>`;
+    const results = await Promise.allSettled([
+      transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: session.client_email || session.clientEmail,
+        subject: 'Your Shura session has been rescheduled',
+        html: shell(session.client_name || session.clientName, `Your session with ${textOrFallback(session.therapist_name || session.therapistName)} has been moved.`),
+      }),
+      transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: session.therapist_email || session.therapistEmail,
+        subject: 'A Shura session has been rescheduled',
+        html: shell(session.therapist_name || session.therapistName, `${textOrFallback(session.client_name || session.clientName)} has moved their session.`),
+      }),
+    ]);
+    return { success: results.every((result) => result.status === 'fulfilled') };
+  } catch (error) {
+    console.error('Error sending reschedule notifications:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+const sendSessionCancellationNotifications = async (session) => {
+  try {
+    const transporter = createTransporter();
+    const sessionTime = formatSessionDateTime(session.scheduled_at || session.scheduledAt, session.client_timezone || session.clientTimezone);
+    const refundNote = session.refundEligible
+      ? (session.refundStatus === 'failed' ? 'The refund requires follow-up from the Shura team.' : 'A full refund has been initiated and will be returned through the original payment method.')
+      : 'This cancellation is outside the refundable window.';
+    const shell = (greeting, message, includeRefund) => `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f8f5f0"><div style="background:#fff;padding:28px;border-radius:12px;border-top:4px solid #8B7355"><h1 style="font-size:22px;color:#5C5043;margin-top:0">Session cancelled</h1><p style="color:#555">Assalamu Alaikum ${textOrFallback(greeting)},</p><p style="color:#555;line-height:1.6">${message}</p><p style="padding:14px;background:#f8f5f0;border-radius:8px;color:#555"><strong>Original time:</strong> ${sessionTime}</p>${includeRefund ? `<p style="color:#555;line-height:1.6">${refundNote}</p>` : ''}</div></div>`;
+    const results = await Promise.allSettled([
+      transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: session.client_email || session.clientEmail,
+        subject: 'Your Shura session has been cancelled',
+        html: shell(session.client_name || session.clientName, `Your session with ${textOrFallback(session.therapist_name || session.therapistName)} has been cancelled.`, true),
+      }),
+      transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: session.therapist_email || session.therapistEmail,
+        subject: 'A Shura session has been cancelled',
+        html: shell(session.therapist_name || session.therapistName, `${textOrFallback(session.client_name || session.clientName)} has cancelled their session.`, false),
+      }),
+    ]);
+    return { success: results.every((result) => result.status === 'fulfilled') };
+  } catch (error) {
+    console.error('Error sending cancellation notifications:', error);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendTherapistApplicationNotification,
   sendTherapistApprovalEmail,
@@ -564,4 +634,6 @@ module.exports = {
   sendBookingConfirmation,
   sendBookingNotificationToTherapist,
   sendTherapistReleaseNotification,
+  sendSessionRescheduledNotifications,
+  sendSessionCancellationNotifications,
 };

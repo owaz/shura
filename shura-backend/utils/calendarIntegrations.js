@@ -244,12 +244,17 @@ const saveIntegration = async ({ therapistId, provider, tokenData }) => {
 };
 
 const parseBookingDate = (booking) => {
+  if (booking.scheduled_at) {
+    const start = new Date(booking.scheduled_at);
+    const end = new Date(start.getTime() + Number(booking.duration_minutes || 50) * 60 * 1000);
+    return { start, end };
+  }
   const dateOnly = booking.date instanceof Date
     ? booking.date.toISOString().slice(0, 10)
     : String(booking.date).slice(0, 10);
   const time = String(booking.time || '09:00').padStart(5, '0');
   const start = new Date(`${dateOnly}T${time}:00+05:30`);
-  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  const end = new Date(start.getTime() + Number(booking.duration_minutes || 60) * 60 * 1000);
   return { start, end };
 };
 
@@ -258,8 +263,8 @@ const googleEventPayload = ({ booking, client, therapist }) => {
   return {
     summary: `Shura session with ${client.full_name || client.email}`,
     description: `Faith-centered therapy session booked through Shura.\nSession type: ${booking.session_type || 'video'}`,
-    start: { dateTime: start.toISOString(), timeZone: 'Asia/Kolkata' },
-    end: { dateTime: end.toISOString(), timeZone: 'Asia/Kolkata' },
+    start: { dateTime: start.toISOString(), timeZone: 'UTC' },
+    end: { dateTime: end.toISOString(), timeZone: 'UTC' },
     attendees: [
       { email: therapist.email },
       { email: client.email },
@@ -275,8 +280,8 @@ const outlookEventPayload = ({ booking, client, therapist }) => {
       contentType: 'Text',
       content: `Faith-centered therapy session booked through Shura.\nSession type: ${booking.session_type || 'video'}`,
     },
-    start: { dateTime: start.toISOString(), timeZone: 'Asia/Kolkata' },
-    end: { dateTime: end.toISOString(), timeZone: 'Asia/Kolkata' },
+    start: { dateTime: start.toISOString(), timeZone: 'UTC' },
+    end: { dateTime: end.toISOString(), timeZone: 'UTC' },
     attendees: [
       { emailAddress: { address: therapist.email }, type: 'required' },
       { emailAddress: { address: client.email }, type: 'required' },
@@ -365,6 +370,104 @@ const syncBookingToConnectedCalendars = async (bookingId) => {
   }
 };
 
+const bookingCalendarContext = async (bookingId) => {
+  const { rows } = await pool.query(
+    `SELECT b.*, u.full_name, u.email AS client_email,
+            t.email AS therapist_email, t.full_name AS therapist_name
+     FROM bookings b
+     JOIN users u ON u.id = b.user_id
+     JOIN therapists t ON t.id = b.therapist_id
+     WHERE b.id = $1`,
+    [bookingId]
+  );
+  if (!rows.length) return null;
+  const booking = rows[0];
+  return {
+    booking,
+    client: { full_name: booking.full_name, email: booking.client_email },
+    therapist: { full_name: booking.therapist_name, email: booking.therapist_email },
+  };
+};
+
+const syncBookingUpdateToConnectedCalendars = async (bookingId) => {
+  const context = await bookingCalendarContext(bookingId);
+  if (!context) return;
+  const events = await pool.query(
+    `SELECT event.id AS calendar_event_row_id, event.provider_event_id,
+            integration.*
+     FROM booking_calendar_events event
+     JOIN therapist_calendar_integrations integration ON integration.id = event.integration_id
+     WHERE event.booking_id = $1 AND integration.status = 'connected'`,
+    [bookingId]
+  );
+  if (!events.rows.length) return syncBookingToConnectedCalendars(bookingId);
+
+  for (const event of events.rows) {
+    try {
+      if (!event.provider_event_id) throw new Error('Calendar event identifier is missing');
+      const accessToken = await getAccessToken(event);
+      const payload = event.provider === 'google'
+        ? googleEventPayload(context)
+        : outlookEventPayload(context);
+      const endpoint = event.provider === 'google'
+        ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(event.provider_event_id)}?sendUpdates=all`
+        : `https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(event.provider_event_id)}`;
+      const response = await fetch(endpoint, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error?.message || 'Calendar event update failed');
+      await pool.query(
+        `UPDATE booking_calendar_events
+         SET sync_status = 'synced', last_error = NULL, synced_at = NOW()
+         WHERE id = $1`,
+        [event.calendar_event_row_id]
+      );
+    } catch (err) {
+      await pool.query(
+        `UPDATE booking_calendar_events SET sync_status = 'failed', last_error = $1 WHERE id = $2`,
+        [err.message, event.calendar_event_row_id]
+      );
+    }
+  }
+};
+
+const cancelBookingOnConnectedCalendars = async (bookingId) => {
+  const events = await pool.query(
+    `SELECT event.id AS calendar_event_row_id, event.provider_event_id,
+            integration.*
+     FROM booking_calendar_events event
+     JOIN therapist_calendar_integrations integration ON integration.id = event.integration_id
+     WHERE event.booking_id = $1 AND integration.status = 'connected'`,
+    [bookingId]
+  );
+  for (const event of events.rows) {
+    try {
+      if (!event.provider_event_id) throw new Error('Calendar event identifier is missing');
+      const accessToken = await getAccessToken(event);
+      const endpoint = event.provider === 'google'
+        ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(event.provider_event_id)}?sendUpdates=all`
+        : `https://graph.microsoft.com/v1.0/me/events/${encodeURIComponent(event.provider_event_id)}`;
+      const response = await fetch(endpoint, { method: 'DELETE', headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!response.ok && response.status !== 404) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error?.message || 'Calendar event cancellation failed');
+      }
+      await pool.query(
+        `UPDATE booking_calendar_events SET sync_status = 'cancelled', last_error = NULL, synced_at = NOW() WHERE id = $1`,
+        [event.calendar_event_row_id]
+      );
+    } catch (err) {
+      await pool.query(
+        `UPDATE booking_calendar_events SET sync_status = 'failed', last_error = $1 WHERE id = $2`,
+        [err.message, event.calendar_event_row_id]
+      );
+    }
+  }
+};
+
 module.exports = {
   PROVIDERS,
   buildAuthorizationUrl,
@@ -375,5 +478,7 @@ module.exports = {
   providerConfigured,
   saveIntegration,
   syncBookingToConnectedCalendars,
+  syncBookingUpdateToConnectedCalendars,
+  cancelBookingOnConnectedCalendars,
   verifyOAuthState,
 };

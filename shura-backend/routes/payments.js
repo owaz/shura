@@ -690,6 +690,25 @@ router.post('/webhook', async (req, res) => {
         [orderId]
       );
     }
+    if (event.event === 'refund.processed' || event.event === 'refund.failed') {
+      const refundEntity = event.payload?.refund?.entity;
+      if (!refundEntity?.id || !refundEntity?.payment_id) {
+        return res.status(400).json({ error: `Invalid ${event.event} payload` });
+      }
+      const processed = event.event === 'refund.processed';
+      await pool.query(
+        `UPDATE payments
+         SET status = CASE WHEN $1 THEN 'refunded' ELSE status END,
+             refund_status = CASE WHEN $1 THEN 'completed' ELSE 'failed' END,
+             razorpay_refund_id = $2,
+             refund_amount_cents = COALESCE($3, refund_amount_cents),
+             refund_failure_reason = CASE WHEN $1 THEN NULL ELSE 'Razorpay reported that the refund failed.' END,
+             refunded_at = CASE WHEN $1 THEN NOW() ELSE refunded_at END,
+             updated_at = NOW()
+         WHERE razorpay_payment_id = $4`,
+        [processed, refundEntity.id, refundEntity.amount || null, refundEntity.payment_id]
+      );
+    }
 
     res.json({ received: true });
   } catch (err) {

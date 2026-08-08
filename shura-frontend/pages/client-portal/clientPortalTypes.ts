@@ -80,3 +80,71 @@ export interface AssignedTherapist {
   availability: TherapistAvailabilityBand[];
   assignedAt: string | null;
 }
+
+export type ClientSessionStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'upcoming'
+  | 'live'
+  | 'completed'
+  | 'cancelled'
+  | 'no_show_client'
+  | 'no_show_therapist';
+
+export interface ClientSessionActions {
+  canJoin: boolean;
+  joinAvailableAt: string;
+  canReschedule: boolean;
+  canCancel: boolean;
+  refundEligible: boolean;
+  rescheduleCutoffHours: number;
+  cancellationCutoffHours: number;
+  cancellationPolicyText: string;
+}
+
+export interface ClientSessionReceipt {
+  id: number;
+  amountCents: number;
+  currency: string;
+  status: string;
+  paymentReference: string | null;
+  refundAmountCents: number;
+  refundReference: string | null;
+}
+
+export interface ClientSession {
+  id: number;
+  therapist: {
+    id: number;
+    name: string;
+    credentials: string[];
+    imageUrl: string;
+  };
+  scheduledAt: string;
+  clientTimezone: string;
+  durationMinutes: number;
+  sessionType: 'video' | 'audio' | 'text';
+  status: ClientSessionStatus;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  cancelledBy: 'client' | 'therapist' | 'admin' | null;
+  rescheduledAt: string | null;
+  rescheduledFrom: string | null;
+  reviewed: boolean;
+  reviewRating: number | null;
+  reviewEligible: boolean;
+  receipt: ClientSessionReceipt | null;
+  actions: ClientSessionActions;
+}
+
+export interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface SessionAvailability {
+  timezone: string;
+  slots: Array<{ scheduledAt: string }>;
+}
