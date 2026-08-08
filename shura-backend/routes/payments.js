@@ -140,6 +140,25 @@ const validateBookingSlotStillAvailable = async ({ therapistId, date, time }, qu
     err.statusCode = 409;
     throw err;
   }
+  const conflict = await queryClient.query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM bookings existing
+       WHERE existing.therapist_id = $1
+         AND LOWER(COALESCE(existing.status, '')) <> 'cancelled'
+         AND COALESCE(existing.scheduled_at, ((existing.date::timestamp + existing.time::time) AT TIME ZONE 'Asia/Kolkata'))
+               < (($2::date + $3::time) AT TIME ZONE 'Asia/Kolkata') + make_interval(mins => $4)
+         AND COALESCE(existing.scheduled_at, ((existing.date::timestamp + existing.time::time) AT TIME ZONE 'Asia/Kolkata'))
+               + make_interval(mins => COALESCE(existing.duration_minutes, 50))
+               > (($2::date + $3::time) AT TIME ZONE 'Asia/Kolkata')
+     ) AS unavailable`,
+    [therapistId, normalizedDate, normalizedTime, slotMinutes]
+  );
+  if (conflict.rows[0]?.unavailable) {
+    const err = new Error('That time was just taken. Please choose another available time.');
+    err.statusCode = 409;
+    throw err;
+  }
 };
 
 // Initialize Razorpay
@@ -249,6 +268,7 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
       };
     }
 
+    await dbClient.query('SELECT pg_advisory_xact_lock($1, hashtext($2))', [intent.therapist_id, toIsoDateOnly(intent.booking_date)]);
     await validateBookingSlotStillAvailable(
       {
         therapistId: intent.therapist_id,
@@ -259,8 +279,8 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
     );
 
     const bookingResult = await dbClient.query(
-      `INSERT INTO bookings (user_id, therapist_id, date, time, session_type, status, amount_cents)
-       VALUES ($1, $2, $3, $4, $5, 'confirmed', $6)
+      `INSERT INTO bookings (user_id, therapist_id, date, time, scheduled_at, session_type, status, amount_cents)
+       VALUES ($1, $2, $3, $4, (($3::date + $4::time) AT TIME ZONE 'Asia/Kolkata'), $5, 'confirmed', $6)
        RETURNING *`,
       [
         intent.client_id,
@@ -688,6 +708,25 @@ router.post('/webhook', async (req, res) => {
          SET status = 'failed', updated_at = NOW()
          WHERE order_id = $1 AND status NOT IN ('completed', 'conflict')`,
         [orderId]
+      );
+    }
+    if (event.event === 'refund.processed' || event.event === 'refund.failed') {
+      const refundEntity = event.payload?.refund?.entity;
+      if (!refundEntity?.id || !refundEntity?.payment_id) {
+        return res.status(400).json({ error: `Invalid ${event.event} payload` });
+      }
+      const processed = event.event === 'refund.processed';
+      await pool.query(
+        `UPDATE payments
+         SET status = CASE WHEN $1 THEN 'refunded' ELSE status END,
+             refund_status = CASE WHEN $1 THEN 'completed' ELSE 'failed' END,
+             razorpay_refund_id = $2,
+             refund_amount_cents = COALESCE($3, refund_amount_cents),
+             refund_failure_reason = CASE WHEN $1 THEN NULL ELSE 'Razorpay reported that the refund failed.' END,
+             refunded_at = CASE WHEN $1 THEN NOW() ELSE refunded_at END,
+             updated_at = NOW()
+         WHERE razorpay_payment_id = $4`,
+        [processed, refundEntity.id, refundEntity.amount || null, refundEntity.payment_id]
       );
     }
 

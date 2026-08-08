@@ -1,5 +1,5 @@
 import { apiFetch } from '../../config/api';
-import type { AssignedTherapist, ClientOptions, ClientPreferences, ClientProfile, OnboardingData } from './clientPortalTypes';
+import type { AssignedTherapist, ClientOptions, ClientPreferences, ClientProfile, ClientSession, OnboardingData, Pagination, SessionAvailability } from './clientPortalTypes';
 
 export class PortalApiError extends Error {
   code: string;
@@ -30,6 +30,20 @@ const request = async <T>(path: string, init: RequestInit = {}): Promise<T> => {
     );
   }
   return payload.data as T;
+};
+
+const requestPaginated = async <T>(path: string): Promise<{ data: T[]; pagination: Pagination }> => {
+  const response = await apiFetch(path);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const apiError = payload?.error;
+    throw new PortalApiError(
+      typeof apiError === 'string' ? apiError : apiError?.message || 'Something went wrong. Please try again.',
+      apiError?.code,
+      apiError?.details
+    );
+  }
+  return { data: payload.data || [], pagination: payload.pagination };
 };
 
 export const clientPortalApi = {
@@ -63,6 +77,26 @@ export const clientPortalApi = {
   }),
   getAssignedTherapist: () => request<{ therapist: AssignedTherapist | null }>('/client/therapist'),
   releaseTherapist: () => request<{ released: boolean; therapistId: number | null; notificationSent?: boolean }>('/client/therapist/release', {
+    method: 'POST',
+  }),
+  getSessions: (status: 'upcoming' | 'past' | 'cancelled', page = 1, limit = 20) =>
+    requestPaginated<ClientSession>(`/client/sessions?status=${status}&page=${page}&limit=${limit}`),
+  getSession: (id: number) => request<{ session: ClientSession }>(`/client/sessions/${id}`),
+  getSessionAvailability: (id: number, from: string, to: string) =>
+    request<SessionAvailability>(`/client/sessions/${id}/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  rescheduleSession: (id: number, scheduledAt: string) => request<{ session: ClientSession }>(`/client/sessions/${id}/reschedule`, {
+    method: 'PATCH',
+    body: JSON.stringify({ scheduledAt }),
+  }),
+  cancelSession: (id: number, reason: string) => request<{ session: ClientSession; refundStatus: string | null }>(`/client/sessions/${id}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  }),
+  reviewSession: (id: number, rating: number, comment: string) => request<{ review: { id: number; rating: number; comment: string | null } }>(`/client/sessions/${id}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ rating, comment }),
+  }),
+  joinSession: (id: number) => request<{ mode: string; url?: string; joinUrl?: string }>(`/client/sessions/${id}/join`, {
     method: 'POST',
   }),
 };
