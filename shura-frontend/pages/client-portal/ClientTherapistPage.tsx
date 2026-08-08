@@ -115,7 +115,7 @@ const ClientTherapistPage: React.FC = () => {
 
   const availabilityByDay = useMemo(() => {
     const result = new Map<number, AssignedTherapist['availability']>();
-    therapist?.availability.forEach((band) => result.set(band.dayOfWeek, [...(result.get(band.dayOfWeek) || []), band]));
+    therapist?.availability?.forEach((band) => result.set(band.dayOfWeek, [...(result.get(band.dayOfWeek) || []), band]));
     return result;
   }, [therapist]);
 
