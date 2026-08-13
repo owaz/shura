@@ -1,0 +1,3 @@
+# Historical Razorpay test Key ID used by browser checkout. Razorpay Key IDs
+# are public identifiers; the corresponding Key Secret remains server-side.
+8b41f9d1104638731a9d5f56ab40a106af6d4812:shura-frontend/pages/PaymentPage.tsx:generic-api-key:28
