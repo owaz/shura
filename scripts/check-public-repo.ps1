@@ -36,6 +36,11 @@ try {
         exit 1
     }
 
+    & $gitleaks.Source protect --staged --redact
+    if ($LASTEXITCODE -ne 0) {
+        exit $LASTEXITCODE
+    }
+
     & $gitleaks.Source git --redact
     if ($LASTEXITCODE -ne 0) {
         exit $LASTEXITCODE
