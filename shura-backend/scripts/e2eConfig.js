@@ -36,6 +36,8 @@ const requiredBackendKeys = [
 
 const requiredFrontendKeys = [...frontendAllowedKeys];
 
+const PLACEHOLDER_JWT_SECRET = 'generate-a-unique-random-secret-at-least-32-characters';
+
 const isConfigured = (value) => typeof value === 'string' && value.trim().length > 0;
 const normalizeDomain = (value = '') => value.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '').toLowerCase();
 
@@ -134,8 +136,13 @@ function validateConfiguration(backend, frontend) {
     errors.push('FRONTEND_URLS must include http://localhost:3006.');
   }
 
-  if (isConfigured(backend.JWT_SECRET) && backend.JWT_SECRET.length < 32) {
-    errors.push('JWT_SECRET must contain at least 32 characters.');
+  if (isConfigured(backend.JWT_SECRET)) {
+    const jwtSecret = backend.JWT_SECRET.trim();
+    if (jwtSecret === PLACEHOLDER_JWT_SECRET) {
+      errors.push('JWT_SECRET must not remain the .env.example placeholder value.');
+    } else if (jwtSecret.length < 32) {
+      errors.push('JWT_SECRET must contain at least 32 characters.');
+    }
   }
 
   const phaseTwoGroups = [

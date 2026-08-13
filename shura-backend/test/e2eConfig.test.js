@@ -64,6 +64,19 @@ test('requires explicit mutation safety and refuses production', () => {
   assert.ok(errors.some((error) => error.includes('explicitly set to true')));
 });
 
+test('rejects the .env.example JWT_SECRET placeholder and short secrets', () => {
+  const config = validConfiguration();
+  config.backend.JWT_SECRET = 'generate-a-unique-random-secret-at-least-32-characters';
+  assert.ok(validateConfiguration(config.backend, config.frontend).errors.some((error) =>
+    error.includes('placeholder')
+  ));
+
+  config.backend.JWT_SECRET = 'too-short';
+  assert.ok(validateConfiguration(config.backend, config.frontend).errors.some((error) =>
+    error.includes('at least 32 characters')
+  ));
+});
+
 test('uses SSL when DB_SSL is enabled for Azure PostgreSQL', () => {
   const config = databaseConfig({
     DB_USER: 'shuraadmin',

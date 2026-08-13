@@ -18,7 +18,7 @@ Copy-Item shura-backend\.env.example shura-backend\.env
 Copy-Item shura-frontend\.env.example shura-frontend\.env.local
 ```
 
-The current workspace already contains empty ignored copies ready to populate.
+Run the copy step whenever either file is missing; both are ignored by Git and never arrive with a checkout.
 
 ## 1. Configure the existing Auth0 tenant
 
@@ -132,12 +132,13 @@ Seed the synthetic identities and stable portal fixtures:
 npm run e2e:seed
 ```
 
-Re-running the seed updates the same synthetic identities and session fixtures instead of creating duplicates. It resets the fixture timestamps relative to the current day and may release another active therapist assignment belonging to the configured synthetic client. It never creates Auth0 passwords or calls Razorpay.
+Re-running the seed updates the same synthetic identities and session fixtures instead of creating duplicates. It resets the fixture timestamps relative to the current day, removes reviews left on fixture bookings other than the reviewed fixture, and may release another active therapist assignment belonging to the configured synthetic client. It never creates Auth0 passwords or calls Razorpay.
 
 The seed creates:
 
 - One client, therapist, and administrator linked to the configured Auth0 subjects.
 - One active therapist assignment and client preferences.
+- Daily 08:00–20:00 UTC availability rules for the synthetic therapist so rescheduling offers slots.
 - Upcoming, rescheduled, reviewable, reviewed, and cancelled sessions.
 - Synthetic successful payment rows without provider payment IDs.
 - Session audit events and client notifications.

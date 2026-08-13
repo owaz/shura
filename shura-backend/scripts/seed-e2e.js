@@ -98,7 +98,7 @@ async function upsertBooking(client, columns, clientId, therapistId, fixture) {
     session_type: 'video',
     status: fixture.status,
     payment_status: 'paid',
-    amount_cents: 7500,
+    amount_cents: 750000,
     amount_paise: 750000,
     amount_inr: 7500,
     is_free_session: false,
@@ -143,7 +143,7 @@ async function upsertPayment(client, columns, clientId, therapistId, bookingId, 
     client_id: clientId,
     therapist_id: therapistId,
     booking_id: bookingId,
-    amount_cents: 7500,
+    amount_cents: 750000,
     amount_inr: 7500,
     currency: 'INR',
     description: 'Synthetic E2E session payment',
@@ -299,6 +299,21 @@ async function run() {
       [therapistId, clientId]
     );
 
+    await client.query(
+      `INSERT INTO therapist_availability_rules
+        (therapist_id, day_of_week, start_time, end_time, slot_minutes, timezone, is_active)
+       SELECT $1, day, '08:00'::time, '20:00'::time, 30, 'UTC', TRUE
+       FROM generate_series(0, 6) AS day
+       ON CONFLICT (therapist_id, day_of_week) DO UPDATE SET
+         start_time = EXCLUDED.start_time,
+         end_time = EXCLUDED.end_time,
+         slot_minutes = EXCLUDED.slot_minutes,
+         timezone = EXCLUDED.timezone,
+         is_active = TRUE,
+         updated_at = NOW()`,
+      [therapistId]
+    );
+
     const bookingColumns = await tableColumns(client, 'bookings');
     const paymentColumns = await tableColumns(client, 'payments');
     const fixtures = [
@@ -327,6 +342,10 @@ async function run() {
       await upsertPayment(client, paymentColumns, clientId, therapistId, bookingId, fixture.key);
     }
 
+    await client.query(
+      'DELETE FROM client_session_reviews WHERE booking_id = ANY($1::integer[])',
+      [[...bookingIds.values()].filter((id) => id !== bookingIds.get('past-reviewed'))]
+    );
     await client.query(
       `INSERT INTO client_session_reviews (booking_id, client_id, therapist_id, rating, comment)
        VALUES ($1, $2, $3, 5, 'Synthetic E2E review fixture')
