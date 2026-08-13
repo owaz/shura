@@ -10,6 +10,16 @@
 !.env.example
 !.env.production.example
 
+# Local browser sessions, database exports, and private key material
+playwright/.auth/
+.auth/
+*.dump
+*.backup
+*.pem
+*.p12
+*.pfx
+*.key
+
 # Logs
 *.log
 npm-debug.log*

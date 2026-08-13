@@ -2,11 +2,15 @@
 require('dotenv').config();
 const { Pool } = require('pg');
 
+const sslEnabled = (process.env.DB_SSL || '').trim().toLowerCase() === 'true';
+
 // Support both DATABASE_URL (Railway/Render) and individual parameters (local)
 const connectionConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      ssl: sslEnabled || process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false }
+        : false,
     }
   : {
       user: process.env.DB_USER || 'postgres',
@@ -14,7 +18,9 @@ const connectionConfig = process.env.DATABASE_URL
       database: process.env.DB_NAME || 'shura',
       password: process.env.DB_PASSWORD || '',
       port: parseInt(process.env.DB_PORT || '5432', 10),
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      ssl: sslEnabled || process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false }
+        : false,
     };
 
 const pool = new Pool(connectionConfig);
