@@ -228,6 +228,7 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
 };
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const navigate = useNavigate();
   const domain = import.meta.env.VITE_AUTH0_DOMAIN as string | undefined;
   const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID as string | undefined;
   const audience = import.meta.env.VITE_AUTH0_AUDIENCE as string | undefined;
@@ -253,12 +254,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       onRedirectCallback={(appState) => {
         const state = appState as { returnTo?: string; email?: string } | undefined;
         const returnTo = state?.returnTo || window.location.pathname;
-        // Pass email as router location state so VerifyEmailPage can display it
-        if (state?.email) {
-          window.history.replaceState({ email: state.email }, document.title, returnTo);
-        } else {
-          window.history.replaceState({}, document.title, returnTo);
-        }
+        navigate(returnTo, {
+          replace: true,
+          // Pass email as router location state so VerifyEmailPage can display it.
+          state: state?.email ? { email: state.email } : undefined,
+        });
       }}
     >
       <AuthContextInner>{children}</AuthContextInner>
