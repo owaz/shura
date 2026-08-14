@@ -82,6 +82,8 @@ This system handles mental-health intake, messages, identity, scheduling, and pa
 
 ## Documentation maintenance
 
+At the completion of every task, determine whether the change introduced or discovered durable project knowledge. If so, update the appropriate documentation or ADR. Do not update documentation merely to record that the task occurred.
+
 Update permanent documentation when a change materially affects architecture, business rules, public APIs, database schemas, authentication/authorization, security assumptions, infrastructure, external integrations, or a significant architectural decision.
 
 **Document durable knowledge, not task history.** Information belongs here when a future developer or agent needs it to understand or safely modify the system. Routine implementation history belongs in commits, pull requests, and issues.
