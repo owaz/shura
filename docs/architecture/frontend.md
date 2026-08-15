@@ -23,6 +23,8 @@ The project has no separate application-state library, form framework, frontend 
 
 Shura also stores a small current-user projection and questionnaire-completion flag in local storage. These values are UI state only and must never be trusted by the API.
 
+Client signup temporarily keeps the submitted email and full name in local storage for up to seven days so the name survives Auth0's email-verification redirect. After the same verified email authenticates, the frontend sends the pending name to an authenticated backend endpoint. The backend applies it only when the local identity still has an Auth0 fallback name, then the frontend removes the pending signup record. The name is not added to Auth0 authorization URLs and an unverified signup does not create a local user row.
+
 Only browser-safe values belong in frontend environment files. `VITE_*` values are embedded into the bundle at build time; no client secret, database credential, provider secret, storage key, or webhook secret may be placed there.
 
 ## API and realtime access

@@ -34,6 +34,46 @@ interface AuthContextType {
 
 const CURRENT_USER_STORAGE_KEY = 'shura-current-user';
 const QUESTIONNAIRE_KEY_PREFIX = 'shura-q-completed-';
+const PENDING_CLIENT_SIGNUP_KEY = 'shura-pending-client-signup';
+const PENDING_CLIENT_SIGNUP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+interface PendingClientSignup {
+  email: string;
+  fullName: string;
+  createdAt: number;
+}
+
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+const storePendingClientSignup = (email: string, fullName: string) => {
+  const pending: PendingClientSignup = {
+    email: normalizeEmail(email),
+    fullName: fullName.trim().replace(/\s+/g, ' '),
+    createdAt: Date.now(),
+  };
+  localStorage.setItem(PENDING_CLIENT_SIGNUP_KEY, JSON.stringify(pending));
+};
+
+const readPendingClientSignup = (): PendingClientSignup | null => {
+  try {
+    const stored = localStorage.getItem(PENDING_CLIENT_SIGNUP_KEY);
+    if (!stored) return null;
+    const pending = JSON.parse(stored) as PendingClientSignup;
+    const isValid = typeof pending?.email === 'string'
+      && typeof pending?.fullName === 'string'
+      && pending.fullName.length >= 2
+      && pending.fullName.length <= 200
+      && Number.isFinite(pending.createdAt)
+      && pending.createdAt > 0
+      && pending.createdAt <= Date.now()
+      && Date.now() - pending.createdAt <= PENDING_CLIENT_SIGNUP_TTL_MS;
+    if (isValid) return pending;
+  } catch {
+    // Invalid or stale signup state is discarded below.
+  }
+  localStorage.removeItem(PENDING_CLIENT_SIGNUP_KEY);
+  return null;
+};
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
@@ -106,7 +146,7 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     if (!response.ok) return null;
     const data = await response.json();
     const role: UserRole = data.user?.role === 'therapist' || data.user?.role === 'admin' ? data.user.role : 'client';
-    return {
+    const user: User = {
       id: String(data.user.id),
       email: data.user.email,
       full_name: data.user.full_name,
@@ -114,6 +154,25 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
       status: data.user.status,
       onboardingCompleted: Boolean(data.user.onboardingCompleted),
     };
+
+    const pendingSignup = readPendingClientSignup();
+    if (user.role === 'client' && pendingSignup && normalizeEmail(user.email) === pendingSignup.email) {
+      const profileResponse = await apiFetch('/auth/signup-profile', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ fullName: pendingSignup.fullName }),
+      });
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json();
+        user.full_name = profileData.data?.fullName || user.full_name;
+        localStorage.removeItem(PENDING_CLIENT_SIGNUP_KEY);
+      }
+    }
+
+    return user;
   }, []);
 
   const refreshSession = useCallback(async (): Promise<User | null> => {
@@ -171,7 +230,8 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     });
   }, [loginWithRedirect]);
 
-  const signup = useCallback(async (email: string, _password: string, _fullName: string) => {
+  const signup = useCallback(async (email: string, _password: string, fullName: string) => {
+    storePendingClientSignup(email, fullName);
     await loginWithRedirect({
       appState: { returnTo: '/verify-email', email },
       authorizationParams: {

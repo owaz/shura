@@ -19,13 +19,18 @@ const SignupPage: React.FC = () => {
       setError('Please enter your full name and email.');
       return;
     }
+    const normalizedName = name.trim().replace(/\s+/g, ' ');
+    if (normalizedName.length < 2 || normalizedName.length > 200) {
+      setError('Please enter a full name between 2 and 200 characters.');
+      return;
+    }
     if (!isValidEmail(email)) {
       setError('Please enter a valid email address.');
       return;
     }
     setLoading(true);
     try {
-      await signup(email, '', name.trim());
+      await signup(email, '', normalizedName);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Signup failed. Please try again.');
       setLoading(false);
@@ -65,6 +70,7 @@ const SignupPage: React.FC = () => {
                 onChange={(e) => setName(e.target.value)}
                 className="mt-1 block w-full bg-ivory border-sand rounded-md shadow-sm py-3 px-4 focus:ring-brown-soft focus:border-brown-soft"
                 required
+                maxLength={200}
                 disabled={loading}
               />
             </div>
