@@ -115,6 +115,14 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
     return user ? localStorage.getItem(`${QUESTIONNAIRE_KEY_PREFIX}${user.email}`) === 'true' : false;
   });
 
+  useEffect(() => {
+    readPendingClientSignup();
+    const intervalId = window.setInterval(readPendingClientSignup, 60 * 1000);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   // Intercept Auth0 error redirects (e.g. email_not_verified) and handle them gracefully
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -141,7 +149,7 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
 
   const fetchSessionUser = useCallback(async (token: string): Promise<User | null> => {
     const response = await apiFetch('/auth/session', {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: 'Bearer ' + token },
     });
     if (!response.ok) return null;
     const data = await response.json();
@@ -157,18 +165,31 @@ const AuthContextInner: React.FC<{ children: ReactNode }> = ({ children }) => {
 
     const pendingSignup = readPendingClientSignup();
     if (user.role === 'client' && pendingSignup && normalizeEmail(user.email) === pendingSignup.email) {
-      const profileResponse = await apiFetch('/auth/signup-profile', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fullName: pendingSignup.fullName }),
-      });
-      if (profileResponse.ok) {
-        const profileData = await profileResponse.json();
-        user.full_name = profileData.data?.fullName || user.full_name;
-        localStorage.removeItem(PENDING_CLIENT_SIGNUP_KEY);
+      try {
+        const profileResponse = await apiFetch('/auth/signup-profile', {
+          method: 'POST',
+          headers: {
+            Authorization: 'Bearer ' + token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ fullName: pendingSignup.fullName }),
+        });
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          const hasStableResponse = typeof profileData?.data?.applied === 'boolean'
+            && typeof profileData?.data?.fullName === 'string';
+          if (hasStableResponse) {
+            const resolvedFullName = profileData.data.fullName.trim();
+            if (resolvedFullName) {
+              user.full_name = resolvedFullName;
+            }
+            if (profileData.data.applied || resolvedFullName) {
+              localStorage.removeItem(PENDING_CLIENT_SIGNUP_KEY);
+            }
+          }
+        }
+      } catch {
+        // Keep the authenticated session; this best-effort reconciliation can retry later.
       }
     }
 
