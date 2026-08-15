@@ -8,6 +8,7 @@ const { autoAssignTherapist } = require('../utils/matchingService');
 const { authenticateToken } = require('../middleware/auth');
 const { deleteImage, getCanonicalImageUrl, getImageReadUrl } = require('../services/azureBlobStorage');
 const { CSRF_COOKIE, REFRESH_COOKIE, clearAuthCookies, createSession, parseCookies, revokeSession, rotateSession } = require('../utils/sessionAuth');
+const { isPlaceholderFullName, normalizeSignupFullName } = require('../utils/signupProfile');
 const router = express.Router();
 
 const getJwtSecret = () => {
@@ -179,6 +180,73 @@ router.get('/session', authenticateToken, async (req, res) => {
       error: {
         code: 'SESSION_LOOKUP_FAILED',
         message: 'We could not load your session right now.',
+        details: null,
+      },
+    });
+  }
+});
+
+router.post('/signup-profile', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'client') {
+    return res.status(403).json({
+      error: {
+        code: 'CLIENT_ROLE_REQUIRED',
+        message: 'Client access is required.',
+        details: null,
+      },
+    });
+  }
+
+  const fullName = normalizeSignupFullName(req.body?.fullName);
+  if (!fullName) {
+    return res.status(400).json({
+      error: {
+        code: 'INVALID_SIGNUP_NAME',
+        message: 'Enter a full name between 2 and 200 characters.',
+        details: null,
+      },
+    });
+  }
+
+  try {
+    const currentResult = await pool.query(
+      'SELECT id, email, full_name FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    if (!currentResult.rows.length) {
+      return res.status(404).json({
+        error: {
+          code: 'CLIENT_NOT_FOUND',
+          message: 'Your client profile could not be found.',
+          details: null,
+        },
+      });
+    }
+
+    const current = currentResult.rows[0];
+    if (!isPlaceholderFullName(current.full_name, current.email)) {
+      return res.json({ data: { applied: false, fullName: current.full_name } });
+    }
+
+    const updated = await pool.query(
+      `UPDATE users
+       SET full_name = $1, updated_at = NOW()
+       WHERE id = $2 AND full_name IS NOT DISTINCT FROM $3
+       RETURNING full_name`,
+      [fullName, req.user.id, current.full_name]
+    );
+    if (updated.rows.length) {
+      return res.json({ data: { applied: true, fullName: updated.rows[0].full_name } });
+    }
+
+    const latest = await pool.query('SELECT full_name FROM users WHERE id = $1', [req.user.id]);
+    return res.json({ data: { applied: false, fullName: latest.rows[0]?.full_name || '' } });
+  } catch (err) {
+    console.error('POST /signup-profile error', err);
+    return res.status(500).json({
+      error: {
+        code: 'SIGNUP_PROFILE_UPDATE_FAILED',
+        message: 'We could not save your signup name.',
         details: null,
       },
     });

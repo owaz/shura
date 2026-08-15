@@ -5,8 +5,9 @@
 1. Client enters Auth0 Universal Login for login or signup.
 2. Auth0 Action requires email verification for database users and emits client claims.
 3. `/api/auth/session` links/creates the local `users` row and reports onboarding status.
-4. Incomplete clients are routed through resumable portal onboarding.
-5. Completion persists profile, matching preferences, goals/notes, and a completion timestamp.
+4. For same-browser client signup, the verified session reconciles the pending signup full name through `/api/auth/signup-profile`; the backend replaces only an empty or known Auth0 fallback name.
+5. Incomplete clients are routed through resumable portal onboarding.
+6. Completion persists profile, matching preferences, goals/notes, and a completion timestamp.
 
 The separate short questionnaire can attempt therapist auto-assignment and send an administrative email. It is distinct from the longer tokenized intake form.
 
