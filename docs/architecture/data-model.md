@@ -39,8 +39,10 @@ This is a relationship map, not a complete column diagram. Read the current SQL 
 - `auth0_sub` is unique within each identity table.
 - `therapist_clients` preserves relationship history. Migration 011 enforces at most one `active` assignment per client with a partial unique index.
 - A therapist/date/time can have at most one non-cancelled legacy booking. Newer session code also checks timestamp overlaps against duration and blocked times.
+- Migration 013 adds a database trigger that takes the shared per-therapist advisory transaction lock and rejects overlapping active timestamp ranges with SQLSTATE `23P01`. This makes overlapping non-cancelled bookings a database error even when their start times differ; transaction locks and live overlap checks still provide actionable application errors.
 - One review is allowed per booking.
 - Razorpay webhook `event_id` and payment-booking-intent `order_id` are unique.
+- Portal payment intents store the UTC scheduled time, duration, client/therapist timezones, source, provider payment reference, and explicit refund-required conflict state. Legacy intents retain `intent_source = 'legacy'` so existing consumers continue through the legacy compatibility finalizer.
 - One client-preferences row exists per client; one configured calendar integration exists per therapist/provider; one calendar-event mapping exists per booking/integration.
 - Intake tokens are unique and one active/current token record is retained per user.
 
@@ -77,3 +79,5 @@ Do not run E2E bootstrap/seed unless `E2E_DATABASE_SAFE_TO_MUTATE=true` points t
 The database retains legacy pairs such as `booking_date/date`, `booking_time/time`, `client_id/user_id`, and both `amount_cents`/`amount_paise` semantics. Current payment code often uses an `amount_cents` name for Razorpay's smallest INR unit (paise). Do not rename or convert monetary fields without tracing every query and provider request.
 
 New portal scheduling uses `scheduled_at TIMESTAMPTZ` and IANA timezones. Migrations 007/008 explicitly preserve the historical `Asia/Kolkata` interpretation of legacy date/time fields. Avoid server-local timezone conversions.
+
+Portal bookings classify payment as `paid`, `free`, or `covered`. Client coverage is the server-side `users.sessions_covered` flag; it is never accepted from a booking request. Migration 013 uses only built-in PostgreSQL range and advisory-lock features. It preserves historical rows while enforcing overlap rejection on every future insert or relevant update; an overlapping legacy row must be reconciled before it can be rescheduled or otherwise rewritten.

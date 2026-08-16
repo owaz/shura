@@ -12,7 +12,7 @@
 | --- | --- |
 | `/api/auth` | Auth0 session projection, public approved therapists, client/therapist profiles, questionnaire, legacy-disabled auth endpoints, reflections |
 | `/api/admin`, `/api/admin/auth` | admin assignment, therapist/client lifecycle, statistics/profile; password login is disabled |
-| `/api/client` | client bootstrap, onboarding, profile/preferences, assigned therapist, account lifecycle; mounts `/sessions` |
+| `/api/client` | client bootstrap, onboarding, profile/preferences, assigned therapist, booking/availability/recovery/calendar download, account lifecycle; mounts `/sessions` |
 | `/api/bookings` | therapist availability/blocked times, public slots, legacy booking management |
 | `/api/payments` | Razorpay orders, verified finalization, webhook, payment lists |
 | `/api/intake`, `/api/therapist/intake` | issue/consume intake links and assigned-client intake access |
@@ -34,11 +34,23 @@
 
 Newer client portal routes use `{ data, pagination }` and structured `{ error: { code, message, details } }` responses from `utils/apiResponse.js`. Older routes return several incompatible shapes. Preserve compatibility intentionally; prefer the structured format for new APIs and update callers together.
 
+Milestone 5 client booking contracts are:
+
+- `GET /api/client/booking-options/:therapistId`
+- `GET /api/client/availability/:therapistId?from=YYYY-MM-DD&to=YYYY-MM-DD&sessionType=video&durationMinutes=50`
+- `POST /api/client/bookings`
+- `POST /api/client/bookings/verify-payment`
+- `GET /api/client/bookings/intents/:orderId`
+- `GET /api/client/bookings/:bookingId/calendar.ics`
+
+All are client-authenticated. Therapist eligibility is selected through the authenticated client's active assignment rather than a browser owner ID, and calendar/intent recovery queries include client ownership.
+
 ## Service and policy boundaries
 
 - Auth0 Management API: `services/auth0Management.js`
 - Azure Blob: `services/azureBlobStorage.js`
 - Razorpay refunds: `services/razorpayRefunds.js`
+- Client booking orchestration: `services/clientBookingService.js`
 - Video provider contract: `services/video/videoProvider.js`
 - Calendar OAuth/event sync: `utils/calendarIntegrations.js`
 - Email templates/delivery: `utils/emailService.js`

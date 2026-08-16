@@ -21,11 +21,13 @@ const { sanitizeImageMetadata } = require('../utils/imageSanitization');
 const { toAssignedTherapist } = require('../utils/clientTherapist');
 const { sendTherapistReleaseNotification } = require('../utils/emailService');
 const clientSessionsRouter = require('./clientSessions');
+const clientBookingsRouter = require('./clientBookings');
 
 const router = express.Router();
 router.use(requireClient);
 router.use(csrfProtection);
 router.use('/sessions', clientSessionsRouter);
+router.use(clientBookingsRouter);
 
 const mutationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

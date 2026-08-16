@@ -1,5 +1,5 @@
 import { apiFetch } from '../../config/api';
-import type { AssignedTherapist, ClientOptions, ClientPreferences, ClientProfile, ClientSession, OnboardingData, Pagination, SessionAvailability } from './clientPortalTypes';
+import type { AssignedTherapist, BookingAvailability, BookingCreationResult, BookingIntentStatus, BookingOptions, ClientOptions, ClientPreferences, ClientProfile, ClientSession, ConfirmedBooking, OnboardingData, Pagination, SessionAvailability } from './clientPortalTypes';
 
 export class PortalApiError extends Error {
   code: string;
@@ -99,4 +99,20 @@ export const clientPortalApi = {
   joinSession: (id: number) => request<{ mode: string; url?: string; joinUrl?: string }>(`/client/sessions/${id}/join`, {
     method: 'POST',
   }),
+  getBookingOptions: (therapistId: number) => request<BookingOptions>(`/client/booking-options/${therapistId}`),
+  getBookingAvailability: (therapistId: number, from: string, to: string, sessionType: string, durationMinutes: number) =>
+    request<BookingAvailability>(`/client/availability/${therapistId}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sessionType=${encodeURIComponent(sessionType)}&durationMinutes=${durationMinutes}`),
+  createBooking: (body: { therapistId: number; sessionType: string; durationMinutes: number; scheduledAt: string }) =>
+    request<BookingCreationResult>('/client/bookings', { method: 'POST', body: JSON.stringify(body) }),
+  verifyBookingPayment: (body: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }) =>
+    request<{ status: 'completed'; booking: ConfirmedBooking; replayed: boolean }>('/client/bookings/verify-payment', { method: 'POST', body: JSON.stringify(body) }),
+  recoverBookingIntent: (orderId: string) => request<{ intent: BookingIntentStatus }>(`/client/bookings/intents/${encodeURIComponent(orderId)}`),
+  downloadBookingCalendar: async (bookingId: number) => {
+    const response = await apiFetch(`/client/bookings/${bookingId}/calendar.ics`);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new PortalApiError(payload?.error?.message || 'The calendar file could not be downloaded.', payload?.error?.code);
+    }
+    return response.blob();
+  },
 };

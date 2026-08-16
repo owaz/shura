@@ -32,7 +32,11 @@ const navItems: Array<{ to: string; label: string; icon: IconName; mobile?: bool
 
 const titleForPath = (pathname: string) => {
   const item = navItems.find(({ to }) => to === pathname);
-  return item?.label || (pathname === '/portal/onboarding' ? 'Welcome to Shura' : 'Client Portal');
+  return item?.label || (pathname === '/portal/onboarding'
+    ? 'Welcome to Shura'
+    : pathname === '/portal/book'
+      ? 'Book a Session'
+      : 'Client Portal');
 };
 
 const initials = (name?: string, email?: string) => {

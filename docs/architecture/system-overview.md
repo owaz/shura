@@ -56,7 +56,7 @@ See the subsystem-specific architecture documents for invariants and current gap
 
 Do not infer completion from the presence of a route or page:
 
-- Client profile, preferences, assigned therapist, and session management have backend-backed portal pages.
+- Client profile, preferences, assigned therapist, booking, and session management have backend-backed portal pages.
 - Client portal home and billing are explicit placeholders.
 - Several therapist portal pages still use mock data or partial API integration, including payments/chat/calls.
 - Public therapist pages fall back to checked-in mock data if API loading fails.

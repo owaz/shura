@@ -10,6 +10,8 @@ The older `therapist_availability` and `therapist_time_off` tables remain in the
 
 Booking creation and paid finalization use PostgreSQL advisory transaction locks by therapist and date. They recheck availability/blocked times and rely on unique/index constraints to reject races. Client rescheduling locks the booking row, then uses the same therapist/date lock and overlap checks before updating both `scheduled_at` and legacy `date/time` fields.
 
+Portal booking serializes final creation per therapist with an advisory lock and migration 013 additionally rejects overlapping active timestamp ranges at the database level. Availability generation uses each rule's IANA timezone, converts candidates to the authenticated client's saved timezone, and remains advisory: every creation/finalization performs the checks again.
+
 Do not split these checks from the transaction or trust a slot list previously shown by the frontend. Database time and indexes are the final conflict authority.
 
 Supported session types are `video`, `audio`, and `text`. Portal therapist duration options are constrained to 30, 50, or 80 minutes; booking records default to 50 minutes where absent.
@@ -42,6 +44,16 @@ The preferred flow separates payment intent from booking creation:
 The webhook requires `X-Razorpay-Event-Id`, verifies the raw request body with `RAZORPAY_WEBHOOK_SECRET`, and inserts the event ID before processing to deduplicate delivery. `payment.failed`, `refund.processed`, and `refund.failed` update durable status.
 
 Legacy “booking first, then order/verify” endpoints remain. Avoid new consumers; preserve them only deliberately.
+
+The client portal uses the same decision with client-scoped routes under `/api/client/bookings`. It stores `intent_source = 'client_portal'` so the signed Razorpay webhook can use the duration/timezone-aware finalizer while legacy intents remain compatible. Replayed browser verification or webhook delivery locks the intent and returns its existing booking without repeating notification/email/calendar side effects.
+
+If payment succeeds after the assignment/offering/availability changed or another booking won the slot, the portal intent becomes `conflict`, records the provider payment reference, and sets `requires_refund = true` with `refund_status = 'required'`. No booking is created. The owned intent-recovery endpoint exposes this operational state without exposing provider secrets. Refund execution/reconciliation remains an explicit operational follow-up rather than being silently assumed complete.
+
+## Portal pricing and covered sessions
+
+The browser sends type, duration, and UTC slot only. For 30, 50, and 80 minute portal sessions, the server proportionally derives the INR smallest-unit amount from `therapists.rate_60min` and rounds to the nearest smallest unit. A client with `users.sessions_covered = true`, a disabled `client_portal_features.paymentEnabled` setting, or a zero derived rate follows the locked confirmed-booking path without creating a Razorpay order. The booking records whether it was `paid`, `covered`, or `free`.
+
+Confirmed clients can download an authenticated RFC 5545 `.ics` file containing appointment metadata only. It uses UTC start/end values for Google, Apple, and Outlook interoperability and excludes intake, notes, messages, and provider credentials.
 
 ## Cancellation and refunds
 

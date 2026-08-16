@@ -9,6 +9,7 @@ const {
   sendBookingNotificationToTherapist,
 } = require('../utils/emailService');
 const { syncBookingToConnectedCalendars } = require('../utils/calendarIntegrations');
+const { finalizePaidBookingIntent: finalizePortalBookingIntent } = require('../services/clientBookingService');
 
 const dispatchBookingNotifications = (emailData) => {
   void Promise.allSettled([
@@ -679,11 +680,14 @@ router.post('/webhook', async (req, res) => {
         return res.status(400).json({ error: 'Invalid payment.captured payload' });
       }
 
-      const finalizeResult = await finalizeIntentBookingAndPayment({
-        orderId,
-        paymentId,
-      });
-      if (finalizeResult.status === 'intent_not_found') {
+      const intentSource = await pool.query(
+        `SELECT intent_source FROM payment_booking_intents WHERE order_id = $1`,
+        [orderId]
+      );
+      const finalizeResult = intentSource.rows[0]?.intent_source === 'client_portal'
+        ? await finalizePortalBookingIntent({ orderId, paymentId })
+        : await finalizeIntentBookingAndPayment({ orderId, paymentId });
+      if (finalizeResult.status === 'intent_not_found' || finalizeResult.status === 'not_found') {
         await pool.query(
           `UPDATE payments
            SET status = 'completed', completed_at = NOW(), updated_at = NOW(), razorpay_payment_id = COALESCE(razorpay_payment_id, $2)

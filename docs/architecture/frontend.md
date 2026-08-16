@@ -10,7 +10,7 @@ The project has no separate application-state library, form framework, frontend 
 
 - Public: home, about, services, therapist discovery/profile, Shura Hub, contact, and network pages.
 - Authentication/application: client/admin/therapist login entry points, signup, email verification, therapist application/status/onboarding, and questionnaire.
-- Client: payment plus `/portal/*` onboarding, sessions, therapist, profile, preferences, and placeholder home/billing pages.
+- Client: legacy payment plus `/portal/*` onboarding, booking, sessions, therapist, profile, preferences, and placeholder home/billing pages.
 - Therapist: `/therapist-portal/*` dashboard, calendar, profile, payments, chat, calls, and intake forms.
 - Admin: therapist approval UI.
 - Tokenized/public workflows: intake form and success page.
@@ -42,6 +42,7 @@ Socket.IO clients must provide the access token in the handshake `auth` object. 
 ## UI/data maturity constraints
 
 - `pages/client-portal/clientPortalApi.ts` and associated types define the most consistent API-backed client portal surface.
+- `/portal/book` is the portal-native four-step booking flow. It preserves the selected type, duration, and slot across recoverable failures, loads live availability in the client timezone, invokes Razorpay only when the server says payment is required, and downloads authenticated `.ics` calendar files after confirmation.
 - Therapist discovery fetches the backend but has local fallback therapist data.
 - `ClientChatPage` begins with mock content; therapist chat, therapist payments, and call pages contain substantial mock/placeholder behavior.
 - Content in `HealingHubPage.tsx` is checked-in editorial content, not provider-fetched or clinically reviewed by code.

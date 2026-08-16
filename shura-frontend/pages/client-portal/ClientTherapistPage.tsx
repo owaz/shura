@@ -166,7 +166,7 @@ const ClientTherapistPage: React.FC = () => {
               {therapist.sessionTypes.map((type) => <span key={type} className="rounded-full border border-[#DCCDBF] bg-white px-3 py-1.5 text-sm capitalize text-brown-soft">{type === 'audio' ? 'Audio only' : type}</span>)}
             </div>
             <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
-              <button type="button" onClick={() => navigate(`/therapist/${therapist.id}`, { state: { fromPortal: true } })} className="rounded-full bg-[#8C4F3A] px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-[#74402F] focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2">Book a Session</button>
+              <button type="button" onClick={() => navigate(`/portal/book?therapist=${therapist.id}`)} className="rounded-full bg-[#8C4F3A] px-6 py-3 font-semibold text-white shadow-sm transition hover:bg-[#74402F] focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2">Book a Session</button>
               {messagingEnabled && <button type="button" onClick={() => navigate(`/chat/${therapist.id}`)} className="rounded-full border border-[#9CA995] bg-[#F2F6EF] px-6 py-3 font-semibold text-[#40573C] transition hover:bg-[#E7EFE3] focus:outline-none focus:ring-2 focus:ring-[#70866A] focus:ring-offset-2">Send Message</button>}
             </div>
           </div>
