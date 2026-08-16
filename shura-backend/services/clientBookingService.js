@@ -410,17 +410,40 @@ const verifyPaymentSignature = ({ orderId, paymentId, signature }) => {
 };
 
 const markIntentConflict = async ({ orderId, paymentId, failureCode = 'SLOT_CONFLICT' }) => {
-  const { rows } = await pool.query(
-    `UPDATE payment_booking_intents
-     SET status = 'conflict', provider_payment_id = COALESCE(provider_payment_id, $2),
-         failure_code = $3, requires_refund = TRUE,
-         refund_status = COALESCE(refund_status, 'required'),
-         conflicted_at = COALESCE(conflicted_at, NOW()), updated_at = NOW()
-     WHERE order_id = $1
-     RETURNING *`,
-    [orderId, paymentId, failureCode]
-  );
-  return rows[0] || null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT * FROM payment_booking_intents WHERE order_id = $1 FOR UPDATE`,
+      [orderId]
+    );
+    const intent = rows[0];
+    if (!intent) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    if (intent.status === 'completed' || intent.status === 'conflict') {
+      await client.query('COMMIT');
+      return intent;
+    }
+    const { rows: updated } = await client.query(
+      `UPDATE payment_booking_intents
+       SET status = 'conflict', provider_payment_id = COALESCE(provider_payment_id, $2),
+           failure_code = $3, requires_refund = TRUE,
+           refund_status = COALESCE(refund_status, 'required'),
+           conflicted_at = COALESCE(conflicted_at, NOW()), updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [intent.id, paymentId, failureCode]
+    );
+    await client.query('COMMIT');
+    return updated[0] || null;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 const finalizePaidBookingIntent = async ({ orderId, paymentId, expectedClientId = null }) => {
@@ -526,6 +549,10 @@ const finalizePaidBookingIntent = async ({ orderId, paymentId, expectedClientId 
     if (paidConflictCodes.has(error.code)) {
       const failureCode = ['23P01', '23505'].includes(error.code) ? 'SLOT_CONFLICT' : error.code;
       const conflictedIntent = await markIntentConflict({ orderId, paymentId, failureCode });
+      if (conflictedIntent && conflictedIntent.status === 'completed' && conflictedIntent.booking_id) {
+        const winningBooking = await loadOwnedBooking(conflictedIntent.client_id, conflictedIntent.booking_id);
+        return { status: 'completed', booking: bookingDtoFromRow(winningBooking), replayed: true };
+      }
       return { status: 'conflict', intent: conflictedIntent };
     }
     throw error;

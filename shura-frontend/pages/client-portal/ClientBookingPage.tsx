@@ -166,8 +166,10 @@ const ClientBookingPage: React.FC = () => {
   useEffect(() => { if (!loading) headingRef.current?.focus(); }, [loading, step]);
 
   const today = options ? dateKey(new Date(), options.clientTimezone) : '';
+  const availabilityRequestRef = useRef(0);
   const loadAvailability = useCallback(async () => {
     if (!therapistId || !options || !sessionType || !durationMinutes || !today) return;
+    const requestId = ++availabilityRequestRef.current;
     setAvailabilityLoading(true);
     setAvailabilityError('');
     try {
@@ -178,13 +180,15 @@ const ClientBookingPage: React.FC = () => {
         sessionType,
         durationMinutes
       );
+      if (requestId !== availabilityRequestRef.current) return;
       setAvailability(result);
       setSelectedDay('');
       setSelectedSlot('');
     } catch (error) {
+      if (requestId !== availabilityRequestRef.current) return;
       setAvailabilityError(error instanceof Error ? error.message : 'Available times could not be loaded.');
     } finally {
-      setAvailabilityLoading(false);
+      if (requestId === availabilityRequestRef.current) setAvailabilityLoading(false);
     }
   }, [durationMinutes, options, sessionType, therapistId, today]);
 
@@ -209,16 +213,20 @@ const ClientBookingPage: React.FC = () => {
   const duration = options?.durations.find((item) => item.minutes === durationMinutes) || null;
 
   const chooseType = (value: string) => {
+    availabilityRequestRef.current += 1;
     setSessionType(value);
     setAvailability(null);
     setAvailabilityError('');
+    setAvailabilityLoading(false);
     setSelectedSlot('');
     setActionError('');
   };
   const chooseDuration = (value: number) => {
+    availabilityRequestRef.current += 1;
     setDurationMinutes(value);
     setAvailability(null);
     setAvailabilityError('');
+    setAvailabilityLoading(false);
     setSelectedSlot('');
     setActionError('');
   };

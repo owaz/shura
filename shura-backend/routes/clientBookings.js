@@ -124,6 +124,7 @@ router.get('/bookings/:bookingId/calendar.ics', async (req, res) => {
       durationMinutes: booking.duration_minutes,
       therapistName: booking.therapist_name,
       sessionType: booking.session_type,
+      status: booking.status,
     });
     res.set({
       'Content-Type': 'text/calendar; charset=utf-8',

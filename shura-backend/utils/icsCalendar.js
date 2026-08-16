@@ -23,9 +23,10 @@ const foldLine = (line) => {
   return chunks.join('\r\n ');
 };
 
-const buildBookingIcs = ({ bookingId, scheduledAt, durationMinutes, therapistName, sessionType }) => {
+const buildBookingIcs = ({ bookingId, scheduledAt, durationMinutes, therapistName, sessionType, status }) => {
   const start = new Date(scheduledAt);
   const end = new Date(start.getTime() + Number(durationMinutes) * 60_000);
+  const icsStatus = String(status || '').toLowerCase() === 'cancelled' ? 'CANCELLED' : 'CONFIRMED';
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
@@ -38,8 +39,8 @@ const buildBookingIcs = ({ bookingId, scheduledAt, durationMinutes, therapistNam
     `DTSTART:${utcStamp(start)}`,
     `DTEND:${utcStamp(end)}`,
     `SUMMARY:${escapeIcs(`Shura ${sessionType} session with ${therapistName}`)}`,
-    `DESCRIPTION:${escapeIcs('Your confirmed Shura session. Open the Shura client portal for session details.')}`,
-    'STATUS:CONFIRMED',
+    `DESCRIPTION:${escapeIcs(icsStatus === 'CANCELLED' ? 'This Shura session has been cancelled.' : 'Your confirmed Shura session. Open the Shura client portal for session details.')}`,
+    `STATUS:${icsStatus}`,
     'TRANSP:OPAQUE',
     'END:VEVENT',
     'END:VCALENDAR',
