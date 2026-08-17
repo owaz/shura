@@ -60,13 +60,17 @@ The current implementation collects suicidal-thought information but does not im
 
 Sessions use therapist availability/timezone and exclude blocked/overlapping time. Supported modes are video, audio, and text. Portal durations are 30, 50, and 80 minutes.
 
+Portal clients can book only their active approved therapist. The flow defaults to saved type/duration preferences when the therapist supports them, otherwise to the first supported offering. Slot lists are live guidance rather than reservations; the server rechecks the offering, active assignment, weekly rule, blocked time, and overlaps in the final transaction.
+
 Defaults: join 10 minutes before start; reschedule until 24 hours before; cancel until session end; refund only for a paid captured payment cancelled at least 24 hours before. Policies can be changed in `platform_settings`, so API-provided policy text/actions should drive UI behavior.
 
 Only completed sessions can receive a review, and each booking can receive one rating of 1–5 plus at most 1,000 characters of comment.
 
 ## Pricing and money
 
-The implemented paid flow uses INR and derives the payable smallest-unit amount from the approved therapist's configured 60-minute rate. The Word pricing document contains exploratory ranges, packages, sliding scale, after-hours, and cancellation proposals; these are not implemented business rules.
+The implemented paid flow uses INR. Portal prices for 30, 50, and 80 minutes are proportional to the approved therapist's configured 60-minute rate and rounded to the nearest provider smallest unit. The server derives this amount and does not accept a booking price from the browser. The Word pricing document contains exploratory ranges, packages, sliding scale, after-hours, and cancellation proposals; these are not implemented business rules.
+
+Sessions are covered when the authenticated client's server-side `sessions_covered` flag is enabled. When portal payment is disabled or the derived price is zero, the session is classified as free. Covered/free sessions use the same transactional slot checks as paid finalization but do not invoke Razorpay.
 
 The schema uses historically inconsistent monetary names (`amount_cents`, `amount_paise`). Treat existing values as provider smallest units where current Razorpay code does so; do not infer a currency conversion solely from a column name.
 

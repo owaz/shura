@@ -19,6 +19,7 @@ The legacy route creates a booking before payment and updates it after verificat
 ## Consequences
 
 - A slot is not reserved during checkout and can be lost after payment, creating a conflict/refund support case.
+- Portal conflicts are persisted on the payment intent with the provider payment reference and an explicit refund-required status; they never create a placeholder booking.
 - Verification and webhook paths must share idempotent finalization logic.
 - Provider calls and PostgreSQL cannot be one atomic transaction; reconciliation is required.
 - Money units and price derivation must remain server-controlled.

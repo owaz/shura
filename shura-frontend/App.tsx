@@ -49,6 +49,7 @@ const ClientProfilePage = lazy(() => import('./pages/client-portal/ClientProfile
 const ClientPreferencesPage = lazy(() => import('./pages/client-portal/ClientPreferencesPage'));
 const ClientSessionsPage = lazy(() => import('./pages/client-portal/ClientSessionsPage'));
 const ClientTherapistPage = lazy(() => import('./pages/client-portal/ClientTherapistPage'));
+const ClientBookingPage = lazy(() => import('./pages/client-portal/ClientBookingPage'));
 
 const RouteLoadingFallback: React.FC<{ contained?: boolean }> = ({ contained = false }) => (
   <div className={`flex items-center justify-center bg-[#FAF7F2] px-6 ${contained ? 'min-h-[50vh]' : 'min-h-screen'}`} role="status" aria-live="polite">
@@ -280,6 +281,7 @@ const App: React.FC = () => {
               <Route path="/portal/home" element={<PortalPlaceholderPage eyebrow="Where Faith Meets Healing" title="Welcome home" description="Your sessions, therapist details, and gentle wellbeing guidance will appear here." />} />
               <Route path="/portal/sessions" element={<ClientSessionsPage />} />
               <Route path="/portal/therapist" element={<ClientTherapistPage />} />
+              <Route path="/portal/book" element={<ClientBookingPage />} />
               <Route path="/portal/profile" element={<ClientProfilePage />} />
               <Route path="/portal/preferences" element={<ClientPreferencesPage />} />
               <Route path="/portal/billing" element={<PortalPlaceholderPage eyebrow="Your payments" title="Billing" description="Your payment methods, receipts, and transaction history will appear here." />} />

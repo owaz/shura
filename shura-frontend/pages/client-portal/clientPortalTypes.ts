@@ -148,3 +148,67 @@ export interface SessionAvailability {
   timezone: string;
   slots: Array<{ scheduledAt: string }>;
 }
+
+export interface BookingOptions {
+  therapist: { id: number; name: string; imageUrl: string };
+  sessionTypes: Array<'video' | 'audio' | 'text'>;
+  durations: Array<{
+    minutes: 30 | 50 | 80;
+    kind: 'paid' | 'free' | 'covered';
+    amountMinor: number;
+    currency: string;
+    paymentRequired: boolean;
+  }>;
+  defaults: {
+    sessionType: 'video' | 'audio' | 'text' | null;
+    durationMinutes: 30 | 50 | 80 | null;
+  };
+  clientTimezone: string;
+  therapistTimezone: string;
+  timezoneDiffers: boolean;
+  paymentEnabled: boolean;
+  sessionsCovered: boolean;
+}
+
+export interface BookingAvailability {
+  clientTimezone: string;
+  therapistTimezone: string;
+  timezoneDiffers: boolean;
+  slots: Array<{ scheduledAt: string; therapistTimezone: string }>;
+}
+
+export interface ConfirmedBooking {
+  id: number;
+  therapist: { id: number; name: string };
+  scheduledAt: string;
+  durationMinutes: number;
+  sessionType: 'video' | 'audio' | 'text';
+  status: string;
+  payment: {
+    kind: 'paid' | 'free' | 'covered';
+    amountMinor: number;
+    currency: string;
+  };
+  clientTimezone: string;
+  calendarDownloadUrl: string;
+}
+
+export type BookingCreationResult =
+  | { kind: 'confirmed'; booking: ConfirmedBooking }
+  | {
+      kind: 'payment_required';
+      intent: { orderId: string; status: string };
+      checkout: { keyId: string; orderId: string; amountMinor: number; currency: string };
+    };
+
+export interface BookingIntentStatus {
+  orderId: string;
+  status: string;
+  amountMinor: number;
+  currency: string;
+  requiresRefund: boolean;
+  refundStatus: string | null;
+  failureCode: string | null;
+  booking: ConfirmedBooking | null;
+  updatedAt: string;
+}

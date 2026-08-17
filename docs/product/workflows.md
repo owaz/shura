@@ -38,12 +38,16 @@ Token values must not be logged or exposed beyond the recipient. Intake submissi
 
 ## Discovery, booking, and payment
 
-1. User browses approved therapists and requests slots for a date.
-2. Unauthenticated/legacy booking can create a pending booking; the preferred paid-slot flow creates a Razorpay order/intention first.
-3. Successful signed payment verification or signed capture webhook rechecks the slot and atomically creates confirmed booking/payment rows.
-4. Booking confirmation emails and connected-calendar creation happen after database finalization.
+1. A portal client opens the four-step flow for their active approved therapist, with supported saved preferences used as defaults.
+2. Shura derives duration pricing and live slots on the server, rendering times in the client's saved IANA timezone.
+3. Covered/free sessions recheck and create a confirmed booking inside one locked transaction without Razorpay.
+4. Paid sessions create a Razorpay order and durable portal intent without reserving the slot.
+5. Successful signed browser verification or signed capture webhook locks the intent, rechecks assignment/offering/availability/overlap, and atomically creates confirmed booking/payment rows.
+6. Booking notification, confirmation emails, and connected-calendar creation run tolerantly after database finalization. The client can separately download an owned `.ics` file.
 
-Payment does not reserve a slot until finalization. A competing client can take it; the paid intent becomes conflicted and requires an operational refund/recovery path. The repository does not fully define that customer-support workflow.
+Unauthenticated/legacy booking and payment routes remain for compatibility. New portal consumers use the structured `/api/client` contracts.
+
+Payment does not reserve a slot until finalization. A competing booking or eligibility change can prevent finalization; the paid intent becomes conflicted and visibly requires a refund. The intent-recovery API preserves that state, while provider refund execution/reconciliation still requires an operational workflow.
 
 ## Session management
 

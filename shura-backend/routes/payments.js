@@ -9,6 +9,7 @@ const {
   sendBookingNotificationToTherapist,
 } = require('../utils/emailService');
 const { syncBookingToConnectedCalendars } = require('../utils/calendarIntegrations');
+const { finalizePaidBookingIntent: finalizePortalBookingIntent } = require('../services/clientBookingService');
 
 const dispatchBookingNotifications = (emailData) => {
   void Promise.allSettled([
@@ -671,63 +672,79 @@ router.post('/webhook', async (req, res) => {
       return res.json({ received: true, duplicate: true });
     }
 
-    if (event.event === 'payment.captured') {
-      const paymentEntity = event.payload?.payment?.entity;
-      const orderId = paymentEntity?.order_id;
-      const paymentId = paymentEntity?.id;
-      if (!orderId || !paymentId) {
-        return res.status(400).json({ error: 'Invalid payment.captured payload' });
-      }
+    try {
+      if (event.event === 'payment.captured') {
+        const paymentEntity = event.payload?.payment?.entity;
+        const orderId = paymentEntity?.order_id;
+        const paymentId = paymentEntity?.id;
+        if (!orderId || !paymentId) {
+          throw Object.assign(new Error('Invalid payment.captured payload'), { statusCode: 400 });
+        }
 
-      const finalizeResult = await finalizeIntentBookingAndPayment({
-        orderId,
-        paymentId,
-      });
-      if (finalizeResult.status === 'intent_not_found') {
+        const intentSource = await pool.query(
+          `SELECT intent_source FROM payment_booking_intents WHERE order_id = $1`,
+          [orderId]
+        );
+        const finalizeResult = intentSource.rows[0]?.intent_source === 'client_portal'
+          ? await finalizePortalBookingIntent({ orderId, paymentId })
+          : await finalizeIntentBookingAndPayment({ orderId, paymentId });
+        if (finalizeResult.status === 'intent_not_found' || finalizeResult.status === 'not_found') {
+          await pool.query(
+            `UPDATE payments
+             SET status = 'completed', completed_at = NOW(), updated_at = NOW(), razorpay_payment_id = COALESCE(razorpay_payment_id, $2)
+             WHERE razorpay_order_id = $1`,
+            [orderId, paymentId]
+          );
+        }
+      }
+      if (event.event === 'payment.failed') {
+        const orderId = event.payload?.payment?.entity?.order_id;
+        if (!orderId) {
+          throw Object.assign(new Error('Invalid payment.failed payload'), { statusCode: 400 });
+        }
         await pool.query(
           `UPDATE payments
-           SET status = 'completed', completed_at = NOW(), updated_at = NOW(), razorpay_payment_id = COALESCE(razorpay_payment_id, $2)
-           WHERE razorpay_order_id = $1`,
-          [orderId, paymentId]
+           SET status = 'failed', updated_at = NOW()
+           WHERE razorpay_order_id = $1 AND status != 'completed'`,
+          [orderId]
+        );
+        await pool.query(
+          `UPDATE payment_booking_intents
+           SET status = 'failed', updated_at = NOW()
+           WHERE order_id = $1 AND status NOT IN ('completed', 'conflict')`,
+          [orderId]
         );
       }
-    }
-    if (event.event === 'payment.failed') {
-      const orderId = event.payload?.payment?.entity?.order_id;
-      if (!orderId) {
-        return res.status(400).json({ error: 'Invalid payment.failed payload' });
+      if (event.event === 'refund.processed' || event.event === 'refund.failed') {
+        const refundEntity = event.payload?.refund?.entity;
+        if (!refundEntity?.id || !refundEntity?.payment_id) {
+          throw Object.assign(new Error(`Invalid ${event.event} payload`), { statusCode: 400 });
+        }
+        const processed = event.event === 'refund.processed';
+        await pool.query(
+          `UPDATE payments
+           SET status = CASE WHEN $1 THEN 'refunded' ELSE status END,
+               refund_status = CASE WHEN $1 THEN 'completed' ELSE 'failed' END,
+               razorpay_refund_id = $2,
+               refund_amount_cents = COALESCE($3, refund_amount_cents),
+               refund_failure_reason = CASE WHEN $1 THEN NULL ELSE 'Razorpay reported that the refund failed.' END,
+               refunded_at = CASE WHEN $1 THEN NOW() ELSE refunded_at END,
+               updated_at = NOW()
+           WHERE razorpay_payment_id = $4`,
+          [processed, refundEntity.id, refundEntity.amount || null, refundEntity.payment_id]
+        );
       }
-      await pool.query(
-        `UPDATE payments
-         SET status = 'failed', updated_at = NOW()
-         WHERE razorpay_order_id = $1 AND status != 'completed'`,
-        [orderId]
-      );
-      await pool.query(
-        `UPDATE payment_booking_intents
-         SET status = 'failed', updated_at = NOW()
-         WHERE order_id = $1 AND status NOT IN ('completed', 'conflict')`,
-        [orderId]
-      );
-    }
-    if (event.event === 'refund.processed' || event.event === 'refund.failed') {
-      const refundEntity = event.payload?.refund?.entity;
-      if (!refundEntity?.id || !refundEntity?.payment_id) {
-        return res.status(400).json({ error: `Invalid ${event.event} payload` });
+    } catch (processingError) {
+      const isPermanentRejection = Number(processingError.statusCode) >= 400 && Number(processingError.statusCode) < 500;
+      if (!isPermanentRejection) {
+        // Allow Razorpay to retry: remove the dedup marker so a retried delivery
+        // is not treated as an already-processed duplicate.
+        await pool.query(`DELETE FROM razorpay_webhook_events WHERE event_id = $1`, [eventIdHeader]).catch(() => {});
       }
-      const processed = event.event === 'refund.processed';
-      await pool.query(
-        `UPDATE payments
-         SET status = CASE WHEN $1 THEN 'refunded' ELSE status END,
-             refund_status = CASE WHEN $1 THEN 'completed' ELSE 'failed' END,
-             razorpay_refund_id = $2,
-             refund_amount_cents = COALESCE($3, refund_amount_cents),
-             refund_failure_reason = CASE WHEN $1 THEN NULL ELSE 'Razorpay reported that the refund failed.' END,
-             refunded_at = CASE WHEN $1 THEN NOW() ELSE refunded_at END,
-             updated_at = NOW()
-         WHERE razorpay_payment_id = $4`,
-        [processed, refundEntity.id, refundEntity.amount || null, refundEntity.payment_id]
-      );
+      if (processingError.statusCode) {
+        return res.status(processingError.statusCode).json({ error: processingError.message });
+      }
+      throw processingError;
     }
 
     res.json({ received: true });
