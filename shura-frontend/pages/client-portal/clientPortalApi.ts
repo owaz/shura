@@ -1,5 +1,5 @@
 import { apiFetch } from '../../config/api';
-import type { AssignedTherapist, BookingAvailability, BookingCreationResult, BookingIntentStatus, BookingOptions, ClientOptions, ClientPreferences, ClientProfile, ClientSession, ConfirmedBooking, OnboardingData, Pagination, SessionAvailability } from './clientPortalTypes';
+import type { AssignedTherapist, BookingAvailability, BookingCreationResult, BookingIntentStatus, BookingOptions, ClientDashboardSummary, ClientNotification, ClientOptions, ClientPreferences, ClientProfile, ClientSession, ConfirmedBooking, OnboardingData, Pagination, QuoteOfTheDay, SessionAvailability } from './clientPortalTypes';
 
 export class PortalApiError extends Error {
   code: string;
@@ -46,6 +46,18 @@ const requestPaginated = async <T>(path: string): Promise<{ data: T[]; paginatio
   return { data: payload.data || [], pagination: payload.pagination };
 };
 
+export const PORTAL_NOTIFICATIONS_CHANGED_EVENT = 'shura:portal-notifications-changed';
+
+export const notifyPortalNotificationsChanged = () => {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(PORTAL_NOTIFICATIONS_CHANGED_EVENT));
+};
+
+const withNotificationRefresh = async <T>(promise: Promise<T>): Promise<T> => {
+  const value = await promise;
+  notifyPortalNotificationsChanged();
+  return value;
+};
+
 export const clientPortalApi = {
   getProfile: () => request<{ profile: ClientProfile; preferences: ClientPreferences }>('/client/profile'),
   updateProfile: (profile: Partial<ClientProfile>) => request<{ profile: ClientProfile }>('/client/profile', {
@@ -76,22 +88,28 @@ export const clientPortalApi = {
     body: JSON.stringify({ confirmation: 'DELETE' }),
   }),
   getAssignedTherapist: () => request<{ therapist: AssignedTherapist | null }>('/client/therapist'),
-  releaseTherapist: () => request<{ released: boolean; therapistId: number | null; notificationSent?: boolean }>('/client/therapist/release', {
+  releaseTherapist: () => withNotificationRefresh(request<{ released: boolean; therapistId: number | null; notificationSent?: boolean }>('/client/therapist/release', {
     method: 'POST',
-  }),
+  })),
+  getDashboard: () => request<ClientDashboardSummary>('/client/dashboard'),
+  getQuoteOfTheDay: () => request<QuoteOfTheDay>('/platform/quote-of-the-day'),
+  getNotificationCount: () => request<{ unreadCount: number }>('/client/notifications/count'),
+  getNotifications: (page = 1, limit = 10) => requestPaginated<ClientNotification>(`/client/notifications?page=${page}&limit=${limit}`),
+  markNotificationRead: (id: string) => request<{ id: string; readAt: string }>(`/client/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' }),
+  markAllNotificationsRead: () => request<{ updated: number; unreadCount: number }>('/client/notifications/read-all', { method: 'PATCH' }),
   getSessions: (status: 'upcoming' | 'past' | 'cancelled', page = 1, limit = 20) =>
     requestPaginated<ClientSession>(`/client/sessions?status=${status}&page=${page}&limit=${limit}`),
   getSession: (id: number) => request<{ session: ClientSession }>(`/client/sessions/${id}`),
   getSessionAvailability: (id: number, from: string, to: string) =>
     request<SessionAvailability>(`/client/sessions/${id}/availability?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
-  rescheduleSession: (id: number, scheduledAt: string) => request<{ session: ClientSession }>(`/client/sessions/${id}/reschedule`, {
+  rescheduleSession: (id: number, scheduledAt: string) => withNotificationRefresh(request<{ session: ClientSession }>(`/client/sessions/${id}/reschedule`, {
     method: 'PATCH',
     body: JSON.stringify({ scheduledAt }),
-  }),
-  cancelSession: (id: number, reason: string) => request<{ session: ClientSession; refundStatus: string | null }>(`/client/sessions/${id}/cancel`, {
+  })),
+  cancelSession: (id: number, reason: string) => withNotificationRefresh(request<{ session: ClientSession; refundStatus: string | null }>(`/client/sessions/${id}/cancel`, {
     method: 'POST',
     body: JSON.stringify({ reason }),
-  }),
+  })),
   reviewSession: (id: number, rating: number, comment: string) => request<{ review: { id: number; rating: number; comment: string | null } }>(`/client/sessions/${id}/review`, {
     method: 'POST',
     body: JSON.stringify({ rating, comment }),
@@ -103,9 +121,9 @@ export const clientPortalApi = {
   getBookingAvailability: (therapistId: number, from: string, to: string, sessionType: string, durationMinutes: number) =>
     request<BookingAvailability>(`/client/availability/${therapistId}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sessionType=${encodeURIComponent(sessionType)}&durationMinutes=${durationMinutes}`),
   createBooking: (body: { therapistId: number; sessionType: string; durationMinutes: number; scheduledAt: string }) =>
-    request<BookingCreationResult>('/client/bookings', { method: 'POST', body: JSON.stringify(body) }),
+    withNotificationRefresh(request<BookingCreationResult>('/client/bookings', { method: 'POST', body: JSON.stringify(body) })),
   verifyBookingPayment: (body: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }) =>
-    request<{ status: 'completed'; booking: ConfirmedBooking; replayed: boolean }>('/client/bookings/verify-payment', { method: 'POST', body: JSON.stringify(body) }),
+    withNotificationRefresh(request<{ status: 'completed'; booking: ConfirmedBooking; replayed: boolean }>('/client/bookings/verify-payment', { method: 'POST', body: JSON.stringify(body) })),
   recoverBookingIntent: (orderId: string) => request<{ intent: BookingIntentStatus }>(`/client/bookings/intents/${encodeURIComponent(orderId)}`),
   downloadBookingCalendar: async (bookingId: number) => {
     const response = await apiFetch(`/client/bookings/${bookingId}/calendar.ics`);

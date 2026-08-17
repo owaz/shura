@@ -10,6 +10,7 @@ const {
 } = require('../utils/emailService');
 const { syncBookingToConnectedCalendars } = require('../utils/calendarIntegrations');
 const { finalizePaidBookingIntent: finalizePortalBookingIntent } = require('../services/clientBookingService');
+const { createClientNotification } = require('../services/clientNotifications');
 
 const dispatchBookingNotifications = (emailData) => {
   void Promise.allSettled([
@@ -688,13 +689,35 @@ router.post('/webhook', async (req, res) => {
         const finalizeResult = intentSource.rows[0]?.intent_source === 'client_portal'
           ? await finalizePortalBookingIntent({ orderId, paymentId })
           : await finalizeIntentBookingAndPayment({ orderId, paymentId });
+        if (finalizeResult.status === 'conflict' && finalizeResult.intent?.client_id) {
+          await createClientNotification(pool, {
+            clientId: finalizeResult.intent.client_id,
+            type: 'payment_conflict',
+            title: 'Booking needs attention',
+            body: 'Your payment was received, but the selected time is no longer available. A refund is required.',
+            metadata: { requiresRefund: true },
+            dedupeKey: `payment-conflict:${orderId}`,
+          });
+        }
         if (finalizeResult.status === 'intent_not_found' || finalizeResult.status === 'not_found') {
-          await pool.query(
+          const completedPayment = await pool.query(
             `UPDATE payments
              SET status = 'completed', completed_at = NOW(), updated_at = NOW(), razorpay_payment_id = COALESCE(razorpay_payment_id, $2)
-             WHERE razorpay_order_id = $1`,
+             WHERE razorpay_order_id = $1
+             RETURNING client_id, booking_id`,
             [orderId, paymentId]
           );
+          const target = completedPayment.rows[0];
+          if (target?.client_id) {
+            await createClientNotification(pool, {
+              clientId: target.client_id,
+              type: 'payment_completed',
+              title: 'Payment confirmed',
+              body: 'Your session payment has been confirmed.',
+              metadata: { bookingId: target.booking_id || null },
+              dedupeKey: `payment-completed:${orderId}`,
+            });
+          }
         }
       }
       if (event.event === 'payment.failed') {
@@ -702,18 +725,35 @@ router.post('/webhook', async (req, res) => {
         if (!orderId) {
           throw Object.assign(new Error('Invalid payment.failed payload'), { statusCode: 400 });
         }
-        await pool.query(
+        const failedPayments = await pool.query(
           `UPDATE payments
            SET status = 'failed', updated_at = NOW()
            WHERE razorpay_order_id = $1 AND status != 'completed'`,
           [orderId]
         );
-        await pool.query(
+        const failedIntents = await pool.query(
           `UPDATE payment_booking_intents
            SET status = 'failed', updated_at = NOW()
            WHERE order_id = $1 AND status NOT IN ('completed', 'conflict')`,
           [orderId]
         );
+        const owner = await pool.query(
+          `SELECT client_id, booking_id FROM payments WHERE razorpay_order_id = $1
+           UNION ALL
+           SELECT client_id, booking_id FROM payment_booking_intents WHERE order_id = $1
+           LIMIT 1`,
+          [orderId]
+        );
+        if ((failedPayments.rowCount || failedIntents.rowCount) && owner.rows[0]?.client_id) {
+          await createClientNotification(pool, {
+            clientId: owner.rows[0].client_id,
+            type: 'payment_failed',
+            title: 'Payment was not completed',
+            body: 'No paid session was confirmed. You can return to booking and try again.',
+            metadata: { bookingId: owner.rows[0].booking_id || null },
+            dedupeKey: `payment-failed:${orderId}`,
+          });
+        }
       }
       if (event.event === 'refund.processed' || event.event === 'refund.failed') {
         const refundEntity = event.payload?.refund?.entity;
@@ -721,7 +761,7 @@ router.post('/webhook', async (req, res) => {
           throw Object.assign(new Error(`Invalid ${event.event} payload`), { statusCode: 400 });
         }
         const processed = event.event === 'refund.processed';
-        await pool.query(
+        const paymentUpdate = await pool.query(
           `UPDATE payments
            SET status = CASE WHEN $1 THEN 'refunded' ELSE status END,
                refund_status = CASE WHEN $1 THEN 'completed' ELSE 'failed' END,
@@ -730,9 +770,23 @@ router.post('/webhook', async (req, res) => {
                refund_failure_reason = CASE WHEN $1 THEN NULL ELSE 'Razorpay reported that the refund failed.' END,
                refunded_at = CASE WHEN $1 THEN NOW() ELSE refunded_at END,
                updated_at = NOW()
-           WHERE razorpay_payment_id = $4`,
+           WHERE razorpay_payment_id = $4
+           RETURNING client_id, booking_id`,
           [processed, refundEntity.id, refundEntity.amount || null, refundEntity.payment_id]
         );
+        const target = paymentUpdate.rows[0];
+        if (target?.client_id) {
+          await createClientNotification(pool, {
+            clientId: target.client_id,
+            type: processed ? 'refund_processed' : 'refund_failed',
+            title: processed ? 'Refund completed' : 'Refund needs attention',
+            body: processed
+              ? 'Your session refund has been completed.'
+              : 'Your session refund could not be completed automatically. Shura support will need to review it.',
+            metadata: { bookingId: target.booking_id || null },
+            dedupeKey: `refund:${eventIdHeader}`,
+          });
+        }
       }
     } catch (processingError) {
       const isPermanentRejection = Number(processingError.statusCode) >= 400 && Number(processingError.statusCode) < 500;

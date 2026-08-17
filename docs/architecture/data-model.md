@@ -45,6 +45,8 @@ This is a relationship map, not a complete column diagram. Read the current SQL 
 - Portal payment intents store the UTC scheduled time, duration, client/therapist timezones, source, provider payment reference, and explicit refund-required conflict state. Legacy intents retain `intent_source = 'legacy'` so existing consumers continue through the legacy compatibility finalizer.
 - One client-preferences row exists per client; one configured calendar integration exists per therapist/provider; one calendar-event mapping exists per booking/integration.
 - Intake tokens are unique and one active/current token record is retained per user.
+- Notifications can carry a per-client `dedupe_key`; migration 014 enforces uniqueness only when a key is present so provider retries can avoid duplicate client events without constraining ordinary notifications.
+- Daily faith-content rows have a stable reference key, content kind, source/translation attribution, and explicit human editorial state. Client delivery requires both `editorial_status = 'approved'` and `is_active = TRUE`; insertion alone never publishes a quote.
 
 ## Schema sources
 
@@ -81,3 +83,5 @@ The database retains legacy pairs such as `booking_date/date`, `booking_time/tim
 New portal scheduling uses `scheduled_at TIMESTAMPTZ` and IANA timezones. Migrations 007/008 explicitly preserve the historical `Asia/Kolkata` interpretation of legacy date/time fields. Avoid server-local timezone conversions.
 
 Portal bookings classify payment as `paid`, `free`, or `covered`. Client coverage is the server-side `users.sessions_covered` flag; it is never accepted from a booking request. Migration 013 uses only built-in PostgreSQL range and advisory-lock features. It preserves historical rows while enforcing overlap rejection on every future insert or relevant update; an overlapping legacy row must be reconciled before it can be rescheduled or otherwise rewritten.
+
+The daily quote date boundary is UTC and selection is deterministic over the approved active set ordered by row ID. Changing that set can change which quote maps to a date; it is editorial content state, not a user preference or timezone calculation.

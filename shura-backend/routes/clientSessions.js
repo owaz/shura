@@ -5,6 +5,7 @@ const { errorResponse, parsePagination, paginatedResponse } = require('../utils/
 const { getImageReadUrl } = require('../services/azureBlobStorage');
 const { getVideoProvider, VideoProviderNotConfiguredError } = require('../services/video/videoProvider');
 const { refundPayment } = require('../services/razorpayRefunds');
+const { createClientNotification } = require('../services/clientNotifications');
 const {
   normalizePolicies,
   normalizeSessionStatus,
@@ -489,6 +490,18 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
          WHERE id = $3`,
         [refundStatus, refund.id, payment.id]
       );
+      await createClientNotification(pool, {
+        clientId: req.clientId,
+        type: refundStatus === 'completed' ? 'refund_processed' : 'refund_pending',
+        title: refundStatus === 'completed' ? 'Refund completed' : 'Refund processing',
+        body: refundStatus === 'completed'
+          ? 'Your session refund has been completed.'
+          : 'Your refund request is still being processed.',
+        metadata: { bookingId: booking.id },
+        dedupeKey: `refund-booking:${booking.id}:${refundStatus}`,
+      }).catch((notificationError) => {
+        console.error('Refund notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
+      });
     } catch (err) {
       refundStatus = 'failed';
       console.error('Razorpay cancellation refund error', err);
@@ -497,6 +510,16 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
          WHERE id = $2`,
         [String(err.message || 'Refund request failed').slice(0, 1000), payment.id]
       );
+      await createClientNotification(pool, {
+        clientId: req.clientId,
+        type: 'refund_failed',
+        title: 'Refund needs attention',
+        body: 'Your refund could not be completed automatically. Shura support will need to review it.',
+        metadata: { bookingId: booking.id },
+        dedupeKey: `refund-booking:${booking.id}:failed`,
+      }).catch((notificationError) => {
+        console.error('Refund notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
+      });
     }
   }
   if (!alreadyCancelled) {

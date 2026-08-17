@@ -1,4 +1,5 @@
 const pool = require('../db');
+const { createClientNotification } = require('../services/clientNotifications');
 
 /**
  * Automatically match a client with suitable therapists based on intake form data
@@ -132,6 +133,17 @@ async function autoAssignTherapist(userId, intakeFormData) {
        RETURNING *`,
       [bestMatch.id, userId]
     );
+
+    await createClientNotification(pool, {
+      clientId: userId,
+      type: 'therapist_assigned',
+      title: 'Your therapist is ready',
+      body: `You have been matched with ${bestMatch.full_name}.`,
+      metadata: { therapistId: bestMatch.id },
+      dedupeKey: `therapist-assigned:${result.rows[0].id}`,
+    }).catch((notificationError) => {
+      console.error('Auto-assignment notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
+    });
 
     console.log(`Auto-assigned client ${userId} to therapist ${bestMatch.full_name} (score: ${bestMatch.score})`);
 

@@ -77,3 +77,5 @@ The schema uses historically inconsistent monetary names (`amount_cents`, `amoun
 ## Faith-centered scope
 
 The platform markets faith-centered/faith-aware care and lets clients express Islamic-approach preferences. Research material lists Islamic psychology concepts, practitioner types, and therapy techniques. The repository does not establish clinical credentials, theological review, medical efficacy, crisis coverage, or regulatory compliance for that content. Changes to clinical/religious claims require appropriate human review outside code inference.
+
+Daily faith content has a technical publication gate: a row must be marked both human-approved and active before the API can return it. The migration 014 starter set contains sourced Qur'an Arabic and attributed English renderings, but remains inactive and pending review. A qualified human reviewer must verify wording, reference, translation, context, and pastoral suitability before activation; application code must not infer or silently grant approval. The Arabic source is the attributed Tanzil Quran Text v1.1 under its CC BY 3.0 terms, and must remain verbatim.

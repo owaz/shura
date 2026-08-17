@@ -11,6 +11,14 @@
 
 The separate short questionnaire can attempt therapist auto-assignment and send an administrative email. It is distinct from the longer tokenized intake form.
 
+## Client home and notifications
+
+1. The authenticated home loads one dashboard summary containing the client's next active session, assigned approved therapist, session counts, and feature flags.
+2. Session actions use the same server policy calculations and mutation contracts as session management. The browser countdown is presentational; the join endpoint re-enforces the opening time.
+3. The shared portal header loads an unread count and a client-owned paginated notification list. Clients may mark one or all notifications read.
+4. Booking, reschedule, cancellation, payment/refund, assignment, and release paths create typed notification metadata. The API converts only recognized types into internal portal actions and does not accept a stored arbitrary navigation URL.
+5. The quote endpoint chooses one approved active entry for the server's UTC date. If editorial review has not activated any entry, the home shows a preparation state rather than unreviewed religious text.
+
 ## Therapist application and approval
 
 1. Therapist signs up through Auth0 with intended role `therapist`; metadata begins `pending`.

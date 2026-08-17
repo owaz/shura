@@ -212,3 +212,48 @@ export interface BookingIntentStatus {
   booking: ConfirmedBooking | null;
   updatedAt: string;
 }
+
+export interface ClientDashboardSummary {
+  greetingName: string;
+  timezone: string;
+  memberSince: string;
+  nextSession: ClientSession | null;
+  therapist: {
+    id: number;
+    name: string;
+    credentials: string[];
+    specialisations: string[];
+    imageUrl: string;
+  } | null;
+  stats: {
+    completed: number;
+    upcoming: number;
+  };
+  features: {
+    messagingEnabled: boolean;
+  };
+}
+
+export interface QuoteOfTheDay {
+  date: string;
+  dateBoundary: 'UTC';
+  quote: {
+    id: number;
+    arabicText: string;
+    englishTranslation: string;
+    source: string;
+    arabicAttribution: string | null;
+    translationAttribution: string | null;
+  } | null;
+  editorialReviewRequired: boolean;
+}
+
+export interface ClientNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+  action: { label: string; href: string } | null;
+}

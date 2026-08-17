@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Logo } from '../../components/Logo';
 import { useAuth } from '../../contexts/AuthContext';
+import ClientNotificationsMenu from './ClientNotificationsMenu';
 
 type IconName = 'home' | 'calendar' | 'heart' | 'user' | 'settings' | 'card' | 'logout' | 'bell' | 'menu' | 'close';
 
@@ -121,11 +122,7 @@ const ClientPortalLayout: React.FC = () => {
             <h1 className="font-serif text-xl font-semibold text-brown-dark md:text-2xl">{pageTitle}</h1>
           </div>
           <div className="flex items-center gap-3">
-            <button type="button" className="relative rounded-full p-2 text-brown-soft hover:bg-sand" aria-label="Notifications">
-              <Icon name="bell" />
-              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#B76243] px-1 text-[9px] font-bold text-white" aria-hidden="true">0</span>
-              <span className="sr-only">0 unread notifications</span>
-            </button>
+            <ClientNotificationsMenu />
             <div className="relative">
               <button type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-9 w-9 items-center justify-center rounded-full bg-[#DDAF91] text-xs font-bold text-brown-dark ring-2 ring-white" aria-label="Open account menu" aria-expanded={menuOpen}>{initials(currentUser?.full_name, currentUser?.email)}</button>
               {menuOpen && <div className="absolute right-0 mt-2 w-44 rounded-xl border border-sand bg-white p-1 shadow-lg">

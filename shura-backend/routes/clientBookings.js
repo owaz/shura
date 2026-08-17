@@ -1,8 +1,10 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const pool = require('../db');
 const { errorResponse } = require('../utils/apiResponse');
 const { buildBookingIcs } = require('../utils/icsCalendar');
 const { validateDateRange } = require('../utils/clientBookingPolicy');
+const { createClientNotification } = require('../services/clientNotifications');
 const {
   bookingOptionsDto,
   createPaidBookingIntent,
@@ -91,6 +93,16 @@ router.post('/bookings/verify-payment', bookingLimiter, async (req, res) => {
     const result = await finalizePaidBookingIntent({ orderId, paymentId, expectedClientId: req.clientId });
     if (result.status === 'not_found') return errorResponse(res, 404, 'BOOKING_INTENT_NOT_FOUND', 'This booking payment could not be found.');
     if (result.status === 'conflict') {
+      await createClientNotification(pool, {
+        clientId: req.clientId,
+        type: 'payment_conflict',
+        title: 'Booking needs attention',
+        body: 'Your payment was received, but the selected time is no longer available. A refund is required.',
+        metadata: { requiresRefund: true },
+        dedupeKey: `payment-conflict:${orderId}`,
+      }).catch((notificationError) => {
+        console.error('Payment conflict notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
+      });
       return errorResponse(res, 409, 'PAID_SLOT_CONFLICT', 'Your payment was received, but this slot is no longer available. A refund is required.', {
         orderId,
         intentStatus: 'conflict',
