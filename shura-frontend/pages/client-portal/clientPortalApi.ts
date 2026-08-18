@@ -1,5 +1,5 @@
 import { apiFetch } from '../../config/api';
-import type { AssignedTherapist, BookingAvailability, BookingCreationResult, BookingIntentStatus, BookingOptions, ClientDashboardSummary, ClientNotification, ClientOptions, ClientPreferences, ClientProfile, ClientSession, ConfirmedBooking, OnboardingData, Pagination, QuoteOfTheDay, SessionAvailability } from './clientPortalTypes';
+import type { AssignedTherapist, BookingAvailability, BookingCreationResult, BookingIntentStatus, BookingOptions, ClientBillingSummary, ClientBillingTransaction, ClientDashboardSummary, ClientNotification, ClientOptions, ClientPreferences, ClientProfile, ClientSession, ConfirmedBooking, OnboardingData, Pagination, QuoteOfTheDay, SessionAvailability } from './clientPortalTypes';
 
 export class PortalApiError extends Error {
   code: string;
@@ -97,6 +97,19 @@ export const clientPortalApi = {
   getNotifications: (page = 1, limit = 10) => requestPaginated<ClientNotification>(`/client/notifications?page=${page}&limit=${limit}`),
   markNotificationRead: (id: string) => request<{ id: string; readAt: string }>(`/client/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' }),
   markAllNotificationsRead: () => request<{ updated: number; unreadCount: number }>('/client/notifications/read-all', { method: 'PATCH' }),
+  getBillingSummary: () => request<ClientBillingSummary>('/client/billing/summary'),
+  getBillingTransactions: (page = 1, limit = 20) =>
+    requestPaginated<ClientBillingTransaction>(`/client/billing/transactions?page=${page}&limit=${limit}`),
+  downloadBillingReceipt: async (id: string) => {
+    const response = await apiFetch(`/client/billing/receipt/${encodeURIComponent(id)}`);
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new PortalApiError(payload?.error?.message || 'The receipt could not be downloaded.', payload?.error?.code);
+    }
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = /filename="([A-Za-z0-9._-]+)"/.exec(disposition);
+    return { blob: await response.blob(), filename: match?.[1] || `shura-receipt-${id}.pdf` };
+  },
   getSessions: (status: 'upcoming' | 'past' | 'cancelled', page = 1, limit = 20) =>
     requestPaginated<ClientSession>(`/client/sessions?status=${status}&page=${page}&limit=${limit}`),
   getSession: (id: number) => request<{ session: ClientSession }>(`/client/sessions/${id}`),

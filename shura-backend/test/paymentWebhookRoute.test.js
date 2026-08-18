@@ -126,3 +126,21 @@ test('payment failed webhook deterministically prefers payment owner', async () 
   assert.equal(notification.params[1], 'payment_failed');
   assert.deepEqual(JSON.parse(notification.params[4]), { bookingId: 22 });
 });
+
+test('legacy client payment reads and verification reject non-client roles before querying', () => {
+  for (const [path, method] of [
+    ['/verify', 'post'],
+    ['/status/:payment_id', 'get'],
+    ['/my-payments', 'get'],
+  ]) {
+    const layer = router.stack.find((item) => item.route?.path === path && item.route.methods[method]);
+    assert.ok(layer, `Missing ${method.toUpperCase()} ${path}`);
+    const roleGuard = layer.route.stack[1].handle;
+    const res = response();
+    let continued = false;
+    roleGuard({ user: { id: 7, role: 'therapist' } }, res, () => { continued = true; });
+    assert.equal(res.statusCode, 403);
+    assert.deepEqual(res.body, { error: 'Client access required' });
+    assert.equal(continued, false);
+  }
+});

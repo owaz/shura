@@ -176,6 +176,13 @@ const createRazorpayClient = () => {
 
 const auth = authenticateToken;
 
+const requireAuthenticatedClient = (req, res, next) => {
+  if (req.user?.role !== 'client') {
+    return res.status(403).json({ error: 'Client access required' });
+  }
+  return next();
+};
+
 const verifyRazorpaySignature = ({ orderId, paymentId, signature }) => {
   if (!process.env.RAZORPAY_KEY_SECRET) {
     throw new Error('Razorpay credentials are not configured');
@@ -565,7 +572,7 @@ router.post('/verify-and-finalize-booking', auth, async (req, res) => {
  * Verify Razorpay payment and update booking status (legacy endpoint)
  * Body: { razorpay_payment_id, razorpay_order_id, razorpay_signature, booking_id }
  */
-router.post('/verify', auth, async (req, res) => {
+router.post('/verify', auth, requireAuthenticatedClient, async (req, res) => {
   try {
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature, booking_id } = req.body;
     const user_id = req.user.id;
@@ -615,7 +622,7 @@ router.post('/verify', auth, async (req, res) => {
  * GET /api/payments/status/:payment_id
  * Get payment status
  */
-router.get('/status/:payment_id', auth, async (req, res) => {
+router.get('/status/:payment_id', auth, requireAuthenticatedClient, async (req, res) => {
   try {
     const { payment_id } = req.params;
     const user_id = req.user.id;
@@ -825,7 +832,7 @@ router.post('/webhook', async (req, res) => {
  * GET /api/payments/my-payments
  * Get payment history for logged-in user
  */
-router.get('/my-payments', auth, async (req, res) => {
+router.get('/my-payments', auth, requireAuthenticatedClient, async (req, res) => {
   try {
     const user_id = req.user.id;
 
@@ -847,8 +854,8 @@ router.get('/my-payments', auth, async (req, res) => {
 
     return res.json({ payments: result.rows });
   } catch (err) {
-    console.error('Get payments error:', err);
-    return res.status(500).json({ error: err.message });
+    console.error('Get payments error:', { code: err?.code || 'PAYMENT_HISTORY_FAILED' });
+    return res.status(500).json({ error: 'Failed to fetch payment history' });
   }
 });
 

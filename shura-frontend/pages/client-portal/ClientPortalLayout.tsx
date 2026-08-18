@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Logo } from '../../components/Logo';
 import { useAuth } from '../../contexts/AuthContext';
 import ClientNotificationsMenu from './ClientNotificationsMenu';
+import { clientPortalApi } from './clientPortalApi';
 
 type IconName = 'home' | 'calendar' | 'heart' | 'user' | 'settings' | 'card' | 'logout' | 'bell' | 'menu' | 'close';
 
@@ -60,7 +61,17 @@ const ClientPortalLayout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [billingEnabled, setBillingEnabled] = useState(false);
   const pageTitle = useMemo(() => titleForPath(location.pathname), [location.pathname]);
+  const visibleNavItems = useMemo(() => navItems.filter((item) => item.to !== '/portal/billing' || billingEnabled), [billingEnabled]);
+
+  useEffect(() => {
+    let active = true;
+    clientPortalApi.getSettings()
+      .then((settings) => { if (active) setBillingEnabled(settings.features?.billingEnabled === true); })
+      .catch(() => { if (active) setBillingEnabled(false); });
+    return () => { active = false; };
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -84,7 +95,7 @@ const ClientPortalLayout: React.FC = () => {
         {mobile && <button type="button" onClick={() => setSidebarOpen(false)} className="rounded-lg p-2 text-brown-soft hover:bg-sand" aria-label="Close navigation"><Icon name="close" /></button>}
       </div>
       <ul className="space-y-1">
-        {navItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <li key={item.to}>
             <NavLink to={item.to} onClick={() => setSidebarOpen(false)} className={linkClass} title={desktopCollapsed && !mobile ? item.label : undefined}>
               <Icon name={item.icon} className="h-5 w-5 shrink-0" />
@@ -128,7 +139,7 @@ const ClientPortalLayout: React.FC = () => {
               {menuOpen && <div className="absolute right-0 mt-2 w-44 rounded-xl border border-sand bg-white p-1 shadow-lg">
                 <button type="button" onClick={() => { setMenuOpen(false); navigate('/portal/profile'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand">My Profile</button>
                 <button type="button" onClick={() => { setMenuOpen(false); navigate('/portal/preferences'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand md:hidden">Preferences</button>
-                <button type="button" onClick={() => { setMenuOpen(false); navigate('/portal/billing'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand md:hidden">Billing</button>
+                {billingEnabled && <button type="button" onClick={() => { setMenuOpen(false); navigate('/portal/billing'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand md:hidden">Billing</button>}
                 <button type="button" onClick={handleLogout} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand">Sign Out</button>
               </div>}
             </div>
@@ -138,7 +149,7 @@ const ClientPortalLayout: React.FC = () => {
       </div>
 
       <nav aria-label="Mobile client portal navigation" className="fixed inset-x-0 bottom-0 z-30 flex border-t border-sand bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] pt-1 shadow-[0_-4px_18px_rgba(92,80,67,0.08)] md:hidden">
-        {navItems.filter((item) => item.mobile).map((item) => (
+        {visibleNavItems.filter((item) => item.mobile).map((item) => (
           <NavLink key={item.to} to={item.to} className={({ isActive }) => `flex flex-1 flex-col items-center gap-1 rounded-lg py-2 text-[11px] ${isActive ? 'font-semibold text-[#A75035]' : 'text-brown-soft'}`}>
             <Icon name={item.icon} className="h-5 w-5" />{item.label === 'My Sessions' ? 'Sessions' : item.label.replace('My ', '')}
           </NavLink>

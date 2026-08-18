@@ -47,6 +47,7 @@ This is a relationship map, not a complete column diagram. Read the current SQL 
 - Intake tokens are unique and one active/current token record is retained per user.
 - Notifications can carry a per-client `dedupe_key`; migration 014 enforces uniqueness only when a key is present so provider retries can avoid duplicate client events without constraining ordinary notifications.
 - Daily faith-content rows have a stable reference key, content kind, source/translation attribution, and explicit human editorial state. Client delivery requires both `editorial_status = 'approved'` and `is_active = TRUE`; insertion alone never publishes a quote.
+- Client billing history combines durable `payments` rows with `payment_booking_intents` that do not have a matching payment by ID or Razorpay order. Completed intents are not shown twice; captured conflict intents remain visible through their refund lifecycle even when no booking/payment row was created.
 
 ## Schema sources
 
@@ -71,7 +72,7 @@ Treat this as legacy compatibility debt. Do not add new schema changes there. Ne
 2. Prefer additive, backward-compatible changes; write explicit constraints/indexes and data backfills.
 3. Ensure destructive or type-changing operations account for real legacy data and can run transactionally.
 4. Update queries, API mapping, fixtures, and focused tests together.
-5. Verify a base-schema-plus-all-migrations install and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior.
+5. Verify a base-schema-plus-all-migrations install and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior. Migration 015 adds client/date composite indexes used by paginated billing history without changing payment data.
 6. Update this document and any product/API documentation if the durable model or rule changed.
 
 Do not run E2E bootstrap/seed unless `E2E_DATABASE_SAFE_TO_MUTATE=true` points to an isolated, disposable non-production database.

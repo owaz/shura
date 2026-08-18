@@ -23,6 +23,7 @@ const { sendTherapistReleaseNotification } = require('../utils/emailService');
 const clientSessionsRouter = require('./clientSessions');
 const clientBookingsRouter = require('./clientBookings');
 const clientDashboardRouter = require('./clientDashboard');
+const clientBillingRouter = require('./clientBilling');
 
 const router = express.Router();
 router.use(requireClient);
@@ -30,6 +31,7 @@ router.use(csrfProtection);
 router.use('/sessions', clientSessionsRouter);
 router.use(clientBookingsRouter);
 router.use(clientDashboardRouter);
+router.use(clientBillingRouter);
 
 const mutationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

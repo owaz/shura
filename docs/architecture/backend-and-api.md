@@ -12,7 +12,7 @@
 | --- | --- |
 | `/api/auth` | Auth0 session projection, public approved therapists, client/therapist profiles, questionnaire, legacy-disabled auth endpoints, reflections |
 | `/api/admin`, `/api/admin/auth` | admin assignment, therapist/client lifecycle, statistics/profile; password login is disabled |
-| `/api/client` | client bootstrap, home dashboard, notifications, onboarding, profile/preferences, assigned therapist, booking/availability/recovery/calendar download, account lifecycle; mounts `/sessions` |
+| `/api/client` | client bootstrap, home dashboard, notifications, onboarding, profile/preferences, assigned therapist, booking/availability/recovery/calendar download, billing/receipts, account lifecycle; mounts `/sessions` |
 | `/api/bookings` | therapist availability/blocked times, public slots, legacy booking management |
 | `/api/payments` | Razorpay orders, verified finalization, webhook, payment lists |
 | `/api/intake`, `/api/therapist/intake` | issue/consume intake links and assigned-client intake access |
@@ -53,11 +53,20 @@ Milestone 6 client-home contracts are:
 
 Dashboard summary queries run in parallel to avoid a browser waterfall. Notification writes use `services/clientNotifications.js` with optional per-client deduplication keys; booking/session, payment/refund, assignment, and release events may be eventually consistent with their originating provider side effect.
 
+Milestone 7 client-billing contracts are:
+
+- `GET /api/client/billing/summary` returns the server-owned billing mode, one-time-at-booking payment capability, upcoming-session payment/coverage state, and the configured refund policy.
+- `GET /api/client/billing/transactions?page=&limit=` returns a client-owned, deduplicated projection over payment rows and unmatched booking intents. This preserves pending/failed checkouts and captured slot-conflict refund states that may have no payment row.
+- `GET /api/client/billing/receipt/:id` accepts only typed IDs returned by the history API, rechecks ownership in SQL, and generates a private, non-cacheable PDF from payment and appointment metadata.
+
+The billing API never returns Razorpay signatures, webhook payloads, card data, provider secrets, failure details, therapy notes, intake responses, or messages. Current Razorpay checkout does not implement saved payment methods or scheduled future charges.
+
 ## Service and policy boundaries
 
 - Auth0 Management API: `services/auth0Management.js`
 - Azure Blob: `services/azureBlobStorage.js`
 - Razorpay refunds: `services/razorpayRefunds.js`
+- Client PDF receipts: `services/clientReceiptPdf.js`
 - Client booking orchestration: `services/clientBookingService.js`
 - Client notification insertion: `services/clientNotifications.js`
 - Video provider contract: `services/video/videoProvider.js`

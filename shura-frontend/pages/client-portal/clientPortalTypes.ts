@@ -257,3 +257,61 @@ export interface ClientNotification {
   createdAt: string;
   action: { label: string; href: string } | null;
 }
+
+export type ClientBillingMode = 'paid' | 'covered' | 'free' | 'disabled';
+
+export type ClientBillingStatus =
+  | 'paid'
+  | 'pending'
+  | 'failed'
+  | 'refunded'
+  | 'refund_required'
+  | 'refund_pending'
+  | 'refund_failed';
+
+export interface ClientUpcomingCharge {
+  bookingId: number;
+  sessionDate: string;
+  therapist: string;
+  amountMinor: number;
+  currency: string;
+  chargeDate: string | null;
+  kind: 'paid' | 'covered' | 'free';
+  status: ClientBillingStatus | 'covered' | 'free';
+  explanation: string;
+}
+
+export interface ClientBillingSummary {
+  mode: ClientBillingMode;
+  billingEnabled: boolean;
+  paymentEnabled: boolean;
+  sessionsCovered: boolean;
+  savedPaymentMethodsSupported: false;
+  savedPaymentMethod: null;
+  chargeTiming: 'at_booking';
+  timezone: string;
+  upcomingCharges: ClientUpcomingCharge[];
+  refundPolicy: {
+    text: string;
+    refundableUntilHoursBeforeSession: number;
+  };
+}
+
+export interface ClientBillingTransaction {
+  id: string;
+  reference: string;
+  date: string;
+  description: string;
+  amountMinor: number;
+  currency: string;
+  status: ClientBillingStatus;
+  refundAmountMinor: number;
+  receiptAvailable: boolean;
+  appointment: {
+    bookingId: number | null;
+    scheduledAt: string;
+    durationMinutes: number;
+    sessionType: 'video' | 'audio' | 'text' | 'intro';
+    therapist: string;
+  } | null;
+}
