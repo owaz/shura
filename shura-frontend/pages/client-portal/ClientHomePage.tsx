@@ -88,8 +88,7 @@ const ClientHomePage: React.FC = () => {
       const result = await clientPortalApi.joinSession(nextSession.id);
       const target = result.joinUrl || result.url;
       if (!target) throw new Error('The session link is not available yet.');
-      if (target.startsWith('/')) window.location.assign(target);
-      else window.open(target, '_blank', 'noopener,noreferrer');
+      window.location.assign(target);
     } catch (joinError) {
       setToast({ kind: 'error', message: joinError instanceof PortalApiError ? joinError.message : 'We could not open your session.' });
     } finally {

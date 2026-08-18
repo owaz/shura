@@ -129,10 +129,13 @@ const ClientNotificationsMenu: React.FC = () => {
   };
 
   const visibleCount = unreadCount > 99 ? '99+' : String(unreadCount);
+  const notificationLabel = unreadCount > 0
+    ? `Notifications, ${visibleCount} unread ${unreadCount === 1 ? 'notification' : 'notifications'}`
+    : 'Notifications, no unread notifications';
 
   return (
     <div ref={root} className="relative">
-      <button ref={trigger} type="button" onClick={() => setOpen((value) => !value)} className="relative rounded-full p-2 text-brown-soft hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2" aria-label="Notifications" aria-expanded={open} aria-controls="client-notification-panel">
+      <button ref={trigger} type="button" onClick={() => setOpen((value) => !value)} className="relative rounded-full p-2 text-brown-soft hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2" aria-label={notificationLabel} aria-expanded={open} aria-controls="client-notification-panel">
         <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
         {unreadCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#B76243] px-1 text-[9px] font-bold text-white" aria-hidden="true">{visibleCount}</span>}
         <span className="sr-only">{unreadCount} unread {unreadCount === 1 ? 'notification' : 'notifications'}</span>

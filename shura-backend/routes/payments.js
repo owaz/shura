@@ -774,7 +774,16 @@ router.post('/webhook', async (req, res) => {
            RETURNING client_id, booking_id`,
           [processed, refundEntity.id, refundEntity.amount || null, refundEntity.payment_id]
         );
-        const target = paymentUpdate.rows[0];
+        const intentUpdate = await pool.query(
+          `UPDATE payment_booking_intents
+           SET refund_status = CASE WHEN $1 THEN 'completed' ELSE 'failed' END,
+               requires_refund = CASE WHEN $1 THEN FALSE ELSE requires_refund END,
+               updated_at = NOW()
+           WHERE provider_payment_id = $2
+           RETURNING client_id, booking_id`,
+          [processed, refundEntity.payment_id]
+        );
+        const target = paymentUpdate.rows[0] || intentUpdate.rows[0];
         if (target?.client_id) {
           await createClientNotification(pool, {
             clientId: target.client_id,

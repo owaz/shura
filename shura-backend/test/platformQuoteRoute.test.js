@@ -4,7 +4,11 @@ const pool = require('../db');
 const router = require('../routes/platform');
 
 const originalQuery = pool.query;
-test.afterEach(() => { pool.query = originalQuery; });
+const RealDate = Date;
+test.afterEach(() => {
+  pool.query = originalQuery;
+  global.Date = RealDate;
+});
 
 const quoteHandler = () => {
   const layer = router.stack.find((item) => item.route?.path === '/quote-of-the-day' && item.route.methods.get);
@@ -34,4 +38,22 @@ test('daily quote query only selects active human-approved rows', async () => {
   assert.equal(res.body.data.dateBoundary, 'UTC');
   assert.equal(res.body.data.quote, null);
   assert.equal(res.body.data.editorialReviewRequired, true);
+});
+
+test('daily quote cache is capped at the current UTC day boundary', async () => {
+  class MockDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : ['2026-08-18T23:59:59.500Z']));
+    }
+    static now() {
+      return new RealDate('2026-08-18T23:59:59.500Z').getTime();
+    }
+  }
+  global.Date = MockDate;
+  pool.query = async () => ({ rows: [] });
+
+  const res = response();
+  await quoteHandler()({}, res);
+
+  assert.equal(res.headers['Cache-Control'], 'public, max-age=1');
 });

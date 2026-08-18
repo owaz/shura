@@ -34,7 +34,9 @@ router.get('/quote-of-the-day', async (_req, res) => {
       arabicAttribution: rows[0].arabic_attribution || null,
       translationAttribution: rows[0].translation_attribution || null,
     } : null;
-    res.set('Cache-Control', 'public, max-age=300');
+    const nextUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    const maxAge = Math.max(0, Math.min(300, Math.ceil((nextUtcMidnight - now.getTime()) / 1000)));
+    res.set('Cache-Control', `public, max-age=${maxAge}`);
     return res.json({
       data: {
         date,

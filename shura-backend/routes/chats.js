@@ -29,8 +29,13 @@ const ensureClientSelectedAssignment = async (client_id, therapist_id) => {
     `INSERT INTO therapist_clients (therapist_id, client_id, status, assignment_source, assigned_at)
      VALUES ($1, $2, 'active', 'client_selected', NOW())
      ON CONFLICT (therapist_id, client_id)
-     DO UPDATE SET status = 'active', assignment_source = 'client_selected', assigned_at = NOW()
-     RETURNING id`,
+     DO UPDATE SET status = 'active',
+                   assignment_source = 'client_selected',
+                   assigned_at = CASE
+                     WHEN therapist_clients.status IS DISTINCT FROM 'active' THEN NOW()
+                     ELSE therapist_clients.assigned_at
+                   END
+     RETURNING id, to_char(assigned_at AT TIME ZONE 'UTC', 'YYYYMMDDHH24MISS.US') AS activation_key`,
     [therapist_id, client_id]
   );
 
@@ -40,7 +45,7 @@ const ensureClientSelectedAssignment = async (client_id, therapist_id) => {
     title: 'Your therapist is ready',
     body: `You are now connected with ${therapist.rows[0].full_name}.`,
     metadata: { therapistId: therapist_id },
-    dedupeKey: `therapist-assigned:${assignment.rows[0].id}`,
+    dedupeKey: `therapist-assigned:${assignment.rows[0].id}:${assignment.rows[0].activation_key}`,
   }).catch((notificationError) => {
     console.error('Client-selected assignment notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
   });
