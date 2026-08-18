@@ -33,6 +33,9 @@ const sessionTypeLabel = (value) => ({
 const mapUpcomingItem = (row) => {
   const kind = ['paid', 'covered', 'free'].includes(row.payment_kind) ? row.payment_kind : 'paid';
   const paymentStatus = normalizedBillingStatus({ status: row.payment_status });
+  const paidExplanation = paymentStatus === 'paid'
+    ? 'Paid securely at booking. Shura does not schedule an automatic future charge.'
+    : `Payment status: ${statusLabel(paymentStatus)}. Shura does not schedule an automatic future charge.`;
   return {
     bookingId: Number(row.id),
     sessionDate: row.scheduled_at,
@@ -46,7 +49,7 @@ const mapUpcomingItem = (row) => {
       ? 'Covered by your plan. No charge will be made.'
       : kind === 'free'
         ? 'No payment is required for this session.'
-        : 'Paid securely at booking. Shura does not schedule an automatic future charge.',
+       : paidExplanation,
   };
 };
 

@@ -45,6 +45,42 @@ test('billing summary derives covered mode and policy from server-owned data', a
   assert.equal(res.body.data.refundPolicy.refundableUntilHoursBeforeSession, 24);
 });
 
+test('billing summary does not mark pending paid sessions as paid', async () => {
+  pool.query = async (sql, params) => {
+    if (/FROM users/.test(sql)) {
+      assert.deepEqual(params, [42]);
+      return { rows: [{ sessions_covered: false, timezone: 'Asia/Dubai' }] };
+    }
+    if (/FROM platform_settings/.test(sql)) {
+      return { rows: [
+        { setting_key: 'client_portal_features', setting_value: { billingEnabled: true, paymentEnabled: true } },
+        { setting_key: 'session_policies', setting_value: {} },
+      ] };
+    }
+    if (/FROM bookings/.test(sql)) {
+      return { rows: [{
+        id: 10,
+        scheduled_at: '2026-08-20T12:00:00.000Z',
+        payment_kind: 'paid',
+        booking_amount_minor: 125000,
+        booking_currency: 'INR',
+        therapist_name: 'Dr Example',
+        payment_amount_minor: null,
+        payment_currency: null,
+        payment_status: 'pending',
+        completed_at: null,
+        payment_created_at: null,
+      }] };
+    }
+    throw new Error(`Unexpected query: ${sql}`);
+  };
+  const res = response();
+  await routeHandler('/billing/summary', 'get')({ clientId: 42 }, res);
+  assert.equal(res.body.data.upcomingCharges[0].status, 'pending');
+  assert.match(res.body.data.upcomingCharges[0].explanation, /Payment status: Pending/);
+  assert.doesNotMatch(res.body.data.upcomingCharges[0].explanation, /Paid securely/);
+});
+
 test('transaction history scopes both sources to the client and avoids intent duplicates', async () => {
   let query;
   pool.query = async (sql, params) => {

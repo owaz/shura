@@ -1,4 +1,5 @@
 const receiptIdPattern = /^(payment|intent)-([1-9]\d*)$/;
+const maxReceiptNumericId = '2147483647';
 
 const billingMode = ({ billingEnabled, paymentEnabled, sessionsCovered }) => {
   if (billingEnabled !== true) return 'disabled';
@@ -32,7 +33,12 @@ const receiptAvailable = ({ source, status, providerPaymentPresent = false }) =>
 
 const parseReceiptId = (value) => {
   const match = receiptIdPattern.exec(String(value || ''));
-  return match ? { source: match[1], id: Number(match[2]) } : null;
+  if (!match) return null;
+  const id = match[2];
+  if (id.length > maxReceiptNumericId.length || (id.length === maxReceiptNumericId.length && id > maxReceiptNumericId)) {
+    return null;
+  }
+  return { source: match[1], id: Number(id) };
 };
 
 const billingRecordId = (source, id) => `${source}-${id}`;
