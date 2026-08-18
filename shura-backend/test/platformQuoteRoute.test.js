@@ -57,3 +57,21 @@ test('daily quote cache is capped at the current UTC day boundary', async () => 
 
   assert.equal(res.headers['Cache-Control'], 'public, max-age=1');
 });
+
+test('daily quote cache uses the remaining UTC day lifetime', async () => {
+  class MockDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : ['2026-08-18T12:00:00.000Z']));
+    }
+    static now() {
+      return new RealDate('2026-08-18T12:00:00.000Z').getTime();
+    }
+  }
+  global.Date = MockDate;
+  pool.query = async () => ({ rows: [] });
+
+  const res = response();
+  await quoteHandler()({}, res);
+
+  assert.equal(res.headers['Cache-Control'], 'public, max-age=43200');
+});

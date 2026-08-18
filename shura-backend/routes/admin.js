@@ -156,6 +156,7 @@ router.post('/assign', requireAdmin, async (req, res) => {
           title: 'Your therapist is ready',
           body: `You have been assigned to ${therapistCheck.rows[0].full_name}.`,
           metadata: { therapistId },
+          dedupeKey: `therapist-assigned:${existingAssignment.rows[0].id}`,
         }).catch((notificationError) => {
           console.error('Assignment notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
         });

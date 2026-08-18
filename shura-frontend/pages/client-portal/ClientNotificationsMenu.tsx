@@ -125,7 +125,7 @@ const ClientNotificationsMenu: React.FC = () => {
     await markRead(notification);
     if (!notification.action) return;
     setOpen(false);
-    navigate(notification.action.href);
+    if (notification.action.href.startsWith('/')) navigate(notification.action.href);
   };
 
   const visibleCount = unreadCount > 99 ? '99+' : String(unreadCount);
