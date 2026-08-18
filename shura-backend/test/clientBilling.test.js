@@ -15,7 +15,7 @@ const decodeUtf16Hex = (hex) => hex.match(/.{4}/g).map((part) => String.fromCode
 const parseCMap = (stream) => {
   const chars = new Map();
   for (const block of stream.matchAll(/\d+\s+beginbfrange([\s\S]*?)endbfrange/g)) {
-    for (const line of block[1].matchAll(/<([0-9a-f]+)>\s+<([0-9a-f]+)>\s+\[((?:\s*<[0-9a-f]+>\s*)+)\]/gi)) {
+    for (const line of block[1].matchAll(/<([0-9a-f]+)>\s+<([0-9a-f]+)>\s+\[([^\]]+)\]/gi)) {
       let cid = Number.parseInt(line[1], 16);
       for (const unicode of line[3].matchAll(/<([0-9a-f]+)>/gi)) {
         chars.set(cid, decodeUtf16Hex(unicode[1]));
