@@ -125,7 +125,7 @@ const ClientNotificationsMenu: React.FC = () => {
     await markRead(notification);
     if (!notification.action) return;
     const href = notification.action.href;
-    if (!href.startsWith('/') || href.startsWith('//')) {
+    if (!/^\/(?!\/)/.test(href)) {
       setError('This notification action is unavailable.');
       return;
     }

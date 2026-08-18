@@ -254,7 +254,7 @@ router.patch('/notifications/read-all', notificationMutationLimiter, async (req,
 
 router.patch('/notifications/:id/read', notificationMutationLimiter, async (req, res) => {
   if (!/^\d+$/.test(String(req.params.id || ''))) {
-    return errorResponse(res, 400, 'INVALID_NOTIFICATION_ID', 'Choose a valid notification.');
+    return errorResponse(res, 400, 'INVALID_NOTIFICATION_ID', 'The notification ID is invalid.');
   }
   try {
     const { rows } = await pool.query(

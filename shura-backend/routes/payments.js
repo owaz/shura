@@ -748,7 +748,7 @@ router.post('/webhook', async (req, res) => {
            LIMIT 1`,
           [orderId]
         );
-        if ((failedPayments.rowCount || failedIntents.rowCount) && owner.rows[0]?.client_id) {
+        if ((Number(failedPayments.rowCount) > 0 || Number(failedIntents.rowCount) > 0) && owner.rows[0]?.client_id) {
           await createClientNotification(pool, {
             clientId: owner.rows[0].client_id,
             type: 'payment_failed',
