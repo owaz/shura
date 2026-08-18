@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { clientPortalApi } from './clientPortalApi';
 import type { ClientSession, SessionAvailability } from './clientPortalTypes';
 import { inputClass } from './PortalUi';
@@ -46,6 +46,8 @@ export const sessionTypeLabel = (type: string) => type === 'audio' ? 'Audio Only
 
 export const Dialog: React.FC<React.PropsWithChildren<{ title: string; description?: string; onClose: () => void; size?: string }>> = ({ title, description, onClose, size = 'max-w-2xl', children }) => {
   const panel = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     panel.current?.querySelector<HTMLElement>('button, [href], input, textarea, select')?.focus();
@@ -63,9 +65,9 @@ export const Dialog: React.FC<React.PropsWithChildren<{ title: string; descripti
   };
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center bg-brown-dark/45 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={panel} role="dialog" aria-modal="true" aria-labelledby="session-dialog-title" aria-describedby={description ? 'session-dialog-description' : undefined} onKeyDown={handleKeys} className={`max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-[#E4D6C9] bg-[#FAF7F2] p-5 shadow-2xl md:p-7 ${size}`}>
+      <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onKeyDown={handleKeys} className={`max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-[#E4D6C9] bg-[#FAF7F2] p-5 shadow-2xl md:p-7 ${size}`}>
         <div className="flex items-start gap-4">
-          <div><h2 id="session-dialog-title" className="font-serif text-2xl font-semibold text-brown-dark">{title}</h2>{description && <p id="session-dialog-description" className="mt-2 text-sm leading-6 text-brown-soft">{description}</p>}</div>
+          <div><h2 id={titleId} className="font-serif text-2xl font-semibold text-brown-dark">{title}</h2>{description && <p id={descriptionId} className="mt-2 text-sm leading-6 text-brown-soft">{description}</p>}</div>
           <button type="button" onClick={onClose} className="ml-auto rounded-lg p-2 text-xl leading-none text-brown-soft hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A]" aria-label="Close dialog">×</button>
         </div>
         <div className="mt-6">{children}</div>

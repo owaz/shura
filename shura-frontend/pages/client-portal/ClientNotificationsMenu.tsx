@@ -4,7 +4,8 @@ import { clientPortalApi, PORTAL_NOTIFICATIONS_CHANGED_EVENT } from './clientPor
 import type { ClientNotification, Pagination } from './clientPortalTypes';
 
 const relativeTime = (value: string) => {
-  const elapsedSeconds = Math.round((new Date(value).getTime() - Date.now()) / 1000);
+  const secondsAgo = Math.round((Date.now() - new Date(value).getTime()) / 1000);
+  const elapsedSeconds = -secondsAgo;
   const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
   if (Math.abs(elapsedSeconds) < 60) return formatter.format(elapsedSeconds, 'second');
   const minutes = Math.round(elapsedSeconds / 60);

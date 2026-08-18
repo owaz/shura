@@ -86,7 +86,7 @@ const ClientHomePage: React.FC = () => {
     setJoining(true);
     try {
       const result = await clientPortalApi.joinSession(nextSession.id);
-      const target = result.joinUrl || result.url;
+      const target = result.url;
       if (!target) throw new Error('The session link is not available yet.');
       window.location.assign(target);
     } catch (joinError) {

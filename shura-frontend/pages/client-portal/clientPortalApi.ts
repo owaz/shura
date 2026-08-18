@@ -114,7 +114,7 @@ export const clientPortalApi = {
     method: 'POST',
     body: JSON.stringify({ rating, comment }),
   }),
-  joinSession: (id: number) => request<{ mode: string; url?: string; joinUrl?: string }>(`/client/sessions/${id}/join`, {
+  joinSession: (id: number) => request<{ mode: string; url?: string }>(`/client/sessions/${id}/join`, {
     method: 'POST',
   }),
   getBookingOptions: (therapistId: number) => request<BookingOptions>(`/client/booking-options/${therapistId}`),
