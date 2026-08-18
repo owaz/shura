@@ -50,6 +50,7 @@ const ClientPreferencesPage = lazy(() => import('./pages/client-portal/ClientPre
 const ClientSessionsPage = lazy(() => import('./pages/client-portal/ClientSessionsPage'));
 const ClientTherapistPage = lazy(() => import('./pages/client-portal/ClientTherapistPage'));
 const ClientBookingPage = lazy(() => import('./pages/client-portal/ClientBookingPage'));
+const ClientHomePage = lazy(() => import('./pages/client-portal/ClientHomePage'));
 
 const RouteLoadingFallback: React.FC<{ contained?: boolean }> = ({ contained = false }) => (
   <div className={`flex items-center justify-center bg-[#FAF7F2] px-6 ${contained ? 'min-h-[50vh]' : 'min-h-screen'}`} role="status" aria-live="polite">
@@ -278,7 +279,7 @@ const App: React.FC = () => {
           <Route element={<ClientPortalGuard />}>
             <Route path="/portal/onboarding" element={<ClientOnboardingPage />} />
             <Route element={<ClientPortalLayout />}>
-              <Route path="/portal/home" element={<PortalPlaceholderPage eyebrow="Where Faith Meets Healing" title="Welcome home" description="Your sessions, therapist details, and gentle wellbeing guidance will appear here." />} />
+              <Route path="/portal/home" element={<ClientHomePage />} />
               <Route path="/portal/sessions" element={<ClientSessionsPage />} />
               <Route path="/portal/therapist" element={<ClientTherapistPage />} />
               <Route path="/portal/book" element={<ClientBookingPage />} />

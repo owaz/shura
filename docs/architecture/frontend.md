@@ -10,7 +10,7 @@ The project has no separate application-state library, form framework, frontend 
 
 - Public: home, about, services, therapist discovery/profile, Shura Hub, contact, and network pages.
 - Authentication/application: client/admin/therapist login entry points, signup, email verification, therapist application/status/onboarding, and questionnaire.
-- Client: legacy payment plus `/portal/*` onboarding, booking, sessions, therapist, profile, preferences, and placeholder home/billing pages.
+- Client: legacy payment plus `/portal/*` home, onboarding, booking, sessions, therapist, profile, preferences, notifications, and a placeholder billing page.
 - Therapist: `/therapist-portal/*` dashboard, calendar, profile, payments, chat, calls, and intake forms.
 - Admin: therapist approval UI.
 - Tokenized/public workflows: intake form and success page.
@@ -42,6 +42,8 @@ Socket.IO clients must provide the access token in the handshake `auth` object. 
 ## UI/data maturity constraints
 
 - `pages/client-portal/clientPortalApi.ts` and associated types define the most consistent API-backed client portal surface.
+- `/portal/home` loads a single authenticated dashboard summary for profile, next-session, assigned-therapist, feature, and statistics data. Its session controls reuse the session-management API contracts and server-computed action times. The shared portal header owns a paginated notification menu and unread count; mutations request a count refresh, with focus and interval refresh as eventual-consistency fallbacks.
+- The home quote card consumes the public UTC daily quote contract. It renders an explicit review/preparation state when no human-approved active entry is available; religious text is never supplied from a frontend fallback.
 - `/portal/book` is the portal-native four-step booking flow. It preserves the selected type, duration, and slot across recoverable failures, loads live availability in the client timezone, invokes Razorpay only when the server says payment is required, and downloads authenticated `.ics` calendar files after confirmation.
 - Therapist discovery fetches the backend but has local fallback therapist data.
 - `ClientChatPage` begins with mock content; therapist chat, therapist payments, and call pages contain substantial mock/placeholder behavior.

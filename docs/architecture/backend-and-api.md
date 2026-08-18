@@ -12,7 +12,7 @@
 | --- | --- |
 | `/api/auth` | Auth0 session projection, public approved therapists, client/therapist profiles, questionnaire, legacy-disabled auth endpoints, reflections |
 | `/api/admin`, `/api/admin/auth` | admin assignment, therapist/client lifecycle, statistics/profile; password login is disabled |
-| `/api/client` | client bootstrap, onboarding, profile/preferences, assigned therapist, booking/availability/recovery/calendar download, account lifecycle; mounts `/sessions` |
+| `/api/client` | client bootstrap, home dashboard, notifications, onboarding, profile/preferences, assigned therapist, booking/availability/recovery/calendar download, account lifecycle; mounts `/sessions` |
 | `/api/bookings` | therapist availability/blocked times, public slots, legacy booking management |
 | `/api/payments` | Razorpay orders, verified finalization, webhook, payment lists |
 | `/api/intake`, `/api/therapist/intake` | issue/consume intake links and assigned-client intake access |
@@ -45,12 +45,21 @@ Milestone 5 client booking contracts are:
 
 All are client-authenticated. Therapist eligibility is selected through the authenticated client's active assignment rather than a browser owner ID, and calendar/intent recovery queries include client ownership.
 
+Milestone 6 client-home contracts are:
+
+- `GET /api/client/dashboard` returns the client greeting/timezone/member date, aggregate session counts, the next active session with server-computed actions, the active approved therapist summary, and feature flags in one request.
+- `GET /api/client/notifications/count` and `GET /api/client/notifications?page=&limit=` are client-owned reads. `PATCH /api/client/notifications/:id/read` and `PATCH /api/client/notifications/read-all` are ownership-scoped mutations. The API derives navigation actions from known event types and does not expose or trust arbitrary metadata URLs.
+- `GET /api/platform/quote-of-the-day` selects deterministically for the server's current UTC date from rows that are both active and human-approved. It returns an explicit null quote when none qualify.
+
+Dashboard summary queries run in parallel to avoid a browser waterfall. Notification writes use `services/clientNotifications.js` with optional per-client deduplication keys; booking/session, payment/refund, assignment, and release events may be eventually consistent with their originating provider side effect.
+
 ## Service and policy boundaries
 
 - Auth0 Management API: `services/auth0Management.js`
 - Azure Blob: `services/azureBlobStorage.js`
 - Razorpay refunds: `services/razorpayRefunds.js`
 - Client booking orchestration: `services/clientBookingService.js`
+- Client notification insertion: `services/clientNotifications.js`
 - Video provider contract: `services/video/videoProvider.js`
 - Calendar OAuth/event sync: `utils/calendarIntegrations.js`
 - Email templates/delivery: `utils/emailService.js`

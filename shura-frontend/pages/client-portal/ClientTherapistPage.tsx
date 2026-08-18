@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { clientPortalApi } from './clientPortalApi';
 import type { AssignedTherapist } from './clientPortalTypes';
 import { ErrorState, PageSkeleton, PortalCard, Toast } from './PortalUi';
@@ -86,6 +86,7 @@ const ReleaseDialog: React.FC<{
 
 const ClientTherapistPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [therapist, setTherapist] = useState<AssignedTherapist | null>(null);
   const [messagingEnabled, setMessagingEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -112,6 +113,11 @@ const ClientTherapistPage: React.FC = () => {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (loading || !therapist || searchParams.get('release') !== '1') return;
+    setReleaseOpen(true);
+    navigate('/portal/therapist', { replace: true });
+  }, [loading, navigate, searchParams, therapist]);
 
   const availabilityByDay = useMemo(() => {
     const result = new Map<number, AssignedTherapist['availability']>();

@@ -11,6 +11,7 @@
   --color-ivory: #FFFCF5;
   --font-sans: "Inter", sans-serif;
   --font-serif: "Playfair Display", serif;
+  --font-arabic: "Noto Naskh Arabic", "Amiri", serif;
 }
 
 @keyframes modal-enter {
@@ -71,3 +72,13 @@ body {
   transition: opacity 0.7s cubic-bezier(0.17, 0.55, 0.55, 1), transform 0.7s cubic-bezier(0.17, 0.55, 0.55, 1);
 }
 .scroll-animate.is-visible { opacity: 1; transform: translateY(0); }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-modal-enter,
+  .animate-fade-in,
+  .animate-popup-enter,
+  .scroll-animate {
+    animation: none !important;
+    transition: none !important;
+  }
+}

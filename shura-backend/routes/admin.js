@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { createClientNotification } = require('../services/clientNotifications');
 const { findMatchingTherapists } = require('../utils/matchingService');
 const { requireAdmin } = require('../middleware/auth');
 const { assignRoles, searchUsers, setBlocked, updateAppMetadata } = require('../services/auth0Management');
@@ -149,6 +150,16 @@ router.post('/assign', requireAdmin, async (req, res) => {
           'UPDATE therapist_clients SET status = $1, assigned_at = NOW() WHERE id = $2',
           ['active', existingAssignment.rows[0].id]
         );
+        await createClientNotification(pool, {
+          clientId,
+          type: 'therapist_assigned',
+          title: 'Your therapist is ready',
+          body: `You have been assigned to ${therapistCheck.rows[0].full_name}.`,
+          metadata: { therapistId },
+          dedupeKey: `therapist-assigned:${existingAssignment.rows[0].id}`,
+        }).catch((notificationError) => {
+          console.error('Assignment notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
+        });
         return res.json({ 
           message: 'Client assignment reactivated',
           assignment: { id: existingAssignment.rows[0].id, therapistId, clientId, status: 'active' }
@@ -165,6 +176,17 @@ router.post('/assign', requireAdmin, async (req, res) => {
        RETURNING id, therapist_id, client_id, assigned_at, status, assignment_source`,
       [therapistId, clientId, 'active', 'manual']
     );
+
+    await createClientNotification(pool, {
+      clientId,
+      type: 'therapist_assigned',
+      title: 'Your therapist is ready',
+      body: `You have been assigned to ${therapistCheck.rows[0].full_name}.`,
+      metadata: { therapistId },
+      dedupeKey: `therapist-assigned:${result.rows[0].id}`,
+    }).catch((notificationError) => {
+      console.error('Assignment notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
+    });
 
     res.status(201).json({ 
       message: 'Client assigned successfully',

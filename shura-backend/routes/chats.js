@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const { authenticateToken } = require('../middleware/auth');
+const { createClientNotification } = require('../services/clientNotifications');
 
 // Middleware to authenticate chat requests
 const auth = authenticateToken;
@@ -18,19 +19,36 @@ const canAccessConversation = async (client_id, therapist_id) => {
 
 const ensureClientSelectedAssignment = async (client_id, therapist_id) => {
   const therapist = await pool.query(
-    'SELECT id FROM therapists WHERE id = $1 AND status = $2',
+    'SELECT id, full_name FROM therapists WHERE id = $1 AND status = $2',
     [therapist_id, 'approved']
   );
 
   if (!therapist.rows.length) return false;
 
-  await pool.query(
+  const assignment = await pool.query(
     `INSERT INTO therapist_clients (therapist_id, client_id, status, assignment_source, assigned_at)
      VALUES ($1, $2, 'active', 'client_selected', NOW())
      ON CONFLICT (therapist_id, client_id)
-     DO UPDATE SET status = 'active', assignment_source = 'client_selected', assigned_at = NOW()`,
+     DO UPDATE SET status = 'active',
+                   assignment_source = 'client_selected',
+                   assigned_at = CASE
+                     WHEN therapist_clients.status IS DISTINCT FROM 'active' THEN NOW()
+                     ELSE therapist_clients.assigned_at
+                   END
+     RETURNING id, to_char(assigned_at AT TIME ZONE 'UTC', 'YYYYMMDDHH24MISS.US') AS activation_key`,
     [therapist_id, client_id]
   );
+
+  await createClientNotification(pool, {
+    clientId: client_id,
+    type: 'therapist_assigned',
+    title: 'Your therapist is ready',
+    body: `You are now connected with ${therapist.rows[0].full_name}.`,
+    metadata: { therapistId: therapist_id },
+    dedupeKey: `therapist-assigned:${assignment.rows[0].id}:${assignment.rows[0].activation_key}`,
+  }).catch((notificationError) => {
+    console.error('Client-selected assignment notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
+  });
 
   return true;
 };
