@@ -1,6 +1,8 @@
-# Azure Container Apps Consolidation — Feasibility Assessment
+# Historical: Azure Container Apps consolidation feasibility assessment
 
-## 1. Current State Analysis
+> Historical design assessment. The consolidation it proposed is now implemented by the root `Dockerfile`, Express production static serving, and `.github/workflows/deploy-aca.yml`. Sections describing “current state,” missing Docker/CI, custom JWT authentication, Cloudinary uploads, or proposed code snippets describe the pre-implementation repository. Use [the current deployment runbook](DEPLOYMENT_GUIDE.md) and [integrations/deployment architecture](architecture/integrations-and-deployment.md) for operational work.
+
+## 1. Historical pre-consolidation state analysis
 
 ### Repository Structure
 ```

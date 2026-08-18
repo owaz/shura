@@ -1,4 +1,6 @@
-# Comprehensive Client Intake Questionnaire
+# Reference: Comprehensive client intake questionnaire
+
+> **Product/reference material, not an approved clinical protocol or authoritative schema.** The implemented intake fields and access rules live in current migrations/routes and are summarized in [`../docs/product/workflows.md`](../docs/product/workflows.md). Any clinical, safeguarding, legal, or theological use requires qualified review.
 ## For Therapist Evaluation and Understanding
 
 This questionnaire helps therapists understand clients' backgrounds, concerns, and needs to provide personalized mental health support aligned with Islamic values.

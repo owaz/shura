@@ -1,4 +1,6 @@
-# Shura - Pre-Production Deployment Checklist
+# Legacy: Shura pre-production deployment checklist
+
+> **Legacy checklist — do not use for current releases.** Railway/Vercel, custom-password admin bootstrap, and Cloudinary instructions below are not the selected main-branch architecture. Use [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md), [`docs/LOCAL_E2E_SETUP.md`](docs/LOCAL_E2E_SETUP.md), and current source/configuration.
 
 ## ✅ Completed Items
 

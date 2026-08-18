@@ -1,4 +1,6 @@
-# Client Assignment System
+# Legacy: Client assignment system guide
+
+> **Legacy API guide.** Some route names, response shapes, and reassignment behavior below predate the one-active-therapist constraint and current Auth0 authorization. Use [`../docs/product/workflows.md`](../docs/product/workflows.md), [`../docs/product/domain-model-and-rules.md`](../docs/product/domain-model-and-rules.md), and current `routes/admin.js` before changing or calling these endpoints.
 
 ## Overview
 The client assignment system allows administrators to assign clients to therapists for personalized mental health support.

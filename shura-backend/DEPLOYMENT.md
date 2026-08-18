@@ -1,4 +1,6 @@
-# SHURA Backend - Production Deployment Guide
+# Legacy: Shura backend production deployment guide
+
+> **Legacy split-backend deployment guide — do not use for the selected production path.** Main branch builds the frontend and backend into one Azure Container Apps image. Use [`../docs/DEPLOYMENT_GUIDE.md`](../docs/DEPLOYMENT_GUIDE.md) and the root `Dockerfile`/workflow.
 
 ## 📋 Pre-Deployment Checklist
 

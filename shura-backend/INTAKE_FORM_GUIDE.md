@@ -1,4 +1,6 @@
-# Client Intake Form System - User Guide
+# Legacy: Client intake-form system guide
+
+> **Legacy workflow/API guide.** It contains older URLs, request examples, and implementation assumptions. Use [`../docs/product/workflows.md`](../docs/product/workflows.md), [`../docs/architecture/authentication-and-security.md`](../docs/architecture/authentication-and-security.md), and current intake route code. Intake tokens and responses are sensitive authorization/clinical data.
 
 ## Overview
 The intake form system allows you to send comprehensive questionnaires to clients via email. When clients complete the form, you receive all their responses automatically.

@@ -1,5 +1,7 @@
 # Email Notification Setup Guide
 
+> This is a provider-specific Gmail SMTP reference, not a complete deployment or delivery guarantee. Current email calls are best-effort and have no durable retry queue. Keep credentials server-side and use [`../docs/architecture/integrations-and-deployment.md`](../docs/architecture/integrations-and-deployment.md) for current boundaries.
+
 ## Gmail Configuration for Nodemailer
 
 To enable email notifications for therapist applications, you need to set up Gmail App Passwords.
@@ -50,7 +52,7 @@ node server.js
 
 ### Step 5: Test the Email Notification
 
-1. Go to your website: http://localhost:3000
+1. Go to your local website: http://localhost:3006
 2. Navigate to the therapist signup page
 3. Fill out the application form
 4. Submit the application

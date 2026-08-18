@@ -34,7 +34,7 @@
 
 Newer client portal routes use `{ data, pagination }` and structured `{ error: { code, message, details } }` responses from `utils/apiResponse.js`. Older routes return several incompatible shapes. Preserve compatibility intentionally; prefer the structured format for new APIs and update callers together.
 
-Milestone 5 client booking contracts are:
+Current client booking contracts are:
 
 - `GET /api/client/booking-options/:therapistId`
 - `GET /api/client/availability/:therapistId?from=YYYY-MM-DD&to=YYYY-MM-DD&sessionType=video&durationMinutes=50`
@@ -45,7 +45,7 @@ Milestone 5 client booking contracts are:
 
 All are client-authenticated. Therapist eligibility is selected through the authenticated client's active assignment rather than a browser owner ID, and calendar/intent recovery queries include client ownership.
 
-Milestone 6 client-home contracts are:
+Current client-home and notification contracts are:
 
 - `GET /api/client/dashboard` returns the client greeting/timezone/member date, aggregate session counts, the next active session with server-computed actions, the active approved therapist summary, and feature flags in one request.
 - `GET /api/client/notifications/count` and `GET /api/client/notifications?page=&limit=` are client-owned reads. `PATCH /api/client/notifications/:id/read` and `PATCH /api/client/notifications/read-all` are ownership-scoped mutations. The API derives navigation actions from known event types and does not expose or trust arbitrary metadata URLs.
@@ -53,7 +53,7 @@ Milestone 6 client-home contracts are:
 
 Dashboard summary queries run in parallel to avoid a browser waterfall. Notification writes use `services/clientNotifications.js` with optional per-client deduplication keys; booking/session, payment/refund, assignment, and release events may be eventually consistent with their originating provider side effect.
 
-Milestone 7 client-billing contracts are:
+Current client-billing contracts are:
 
 - `GET /api/client/billing/summary` returns the server-owned billing mode, one-time-at-booking payment capability, upcoming-session payment/coverage state, and the configured refund policy.
 - `GET /api/client/billing/transactions?page=&limit=` returns a client-owned, deduplicated projection over payment rows and unmatched booking intents. This preserves pending/failed checkouts and captured slot-conflict refund states that may have no payment row.
