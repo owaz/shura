@@ -72,6 +72,8 @@ The implemented paid flow uses INR. Portal prices for 30, 50, and 80 minutes are
 
 Sessions are covered when the authenticated client's server-side `sessions_covered` flag is enabled. When portal payment is disabled or the derived price is zero, the session is classified as free. Covered/free sessions use the same transactional slot checks as paid finalization but do not invoke Razorpay.
 
+Client billing has four display modes: disabled when the billing feature is off, covered when `sessions_covered` is enabled, free when portal payment is disabled, and paid otherwise. The mode affects presentation but does not rewrite historical transactions. Current Razorpay checkout is one-time payment at booking; saved methods, subscriptions, and deferred automatic charges are not implemented.
+
 The schema uses historically inconsistent monetary names (`amount_cents`, `amount_paise`). Treat existing values as provider smallest units where current Razorpay code does so; do not infer a currency conversion solely from a column name.
 
 ## Faith-centered scope

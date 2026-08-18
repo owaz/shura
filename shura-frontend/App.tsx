@@ -43,7 +43,6 @@ const IntakeSuccessPage = lazy(() => import('./pages/IntakeSuccessPage'));
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
 const AdminTherapistApprovalsPage = lazy(() => import('./pages/AdminTherapistApprovalsPage'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
-const PortalPlaceholderPage = lazy(() => import('./pages/client-portal/PortalPlaceholderPage'));
 const ClientOnboardingPage = lazy(() => import('./pages/client-portal/ClientOnboardingPage'));
 const ClientProfilePage = lazy(() => import('./pages/client-portal/ClientProfilePage'));
 const ClientPreferencesPage = lazy(() => import('./pages/client-portal/ClientPreferencesPage'));
@@ -51,6 +50,7 @@ const ClientSessionsPage = lazy(() => import('./pages/client-portal/ClientSessio
 const ClientTherapistPage = lazy(() => import('./pages/client-portal/ClientTherapistPage'));
 const ClientBookingPage = lazy(() => import('./pages/client-portal/ClientBookingPage'));
 const ClientHomePage = lazy(() => import('./pages/client-portal/ClientHomePage'));
+const ClientBillingPage = lazy(() => import('./pages/client-portal/ClientBillingPage'));
 
 const RouteLoadingFallback: React.FC<{ contained?: boolean }> = ({ contained = false }) => (
   <div className={`flex items-center justify-center bg-[#FAF7F2] px-6 ${contained ? 'min-h-[50vh]' : 'min-h-screen'}`} role="status" aria-live="polite">
@@ -285,7 +285,7 @@ const App: React.FC = () => {
               <Route path="/portal/book" element={<ClientBookingPage />} />
               <Route path="/portal/profile" element={<ClientProfilePage />} />
               <Route path="/portal/preferences" element={<ClientPreferencesPage />} />
-              <Route path="/portal/billing" element={<PortalPlaceholderPage eyebrow="Your payments" title="Billing" description="Your payment methods, receipts, and transaction history will appear here." />} />
+              <Route path="/portal/billing" element={<ClientBillingPage />} />
             </Route>
           </Route>
 

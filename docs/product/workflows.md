@@ -57,6 +57,14 @@ Unauthenticated/legacy booking and payment routes remain for compatibility. New 
 
 Payment does not reserve a slot until finalization. A competing booking or eligibility change can prevent finalization; the paid intent becomes conflicted and visibly requires a refund. The intent-recovery API preserves that state, while provider refund execution/reconciliation still requires an operational workflow.
 
+## Client billing and receipts
+
+1. The authenticated client loads a server-derived paid, covered, free, or disabled billing mode and the current cancellation/refund policy.
+2. Upcoming sessions show whether payment was completed at booking, covered, or free; the UI does not imply an automatic future charge.
+3. Paginated history combines durable payment records with unmatched booking intents, preserving failed/pending checkout and captured conflict-refund states without duplicating completed intents.
+4. A receipt download uses the typed billing record ID returned by history. The backend rechecks ownership and capture state before generating a private PDF containing payment and appointment metadata only.
+5. Saved payment-method controls are absent because the current Razorpay integration does not implement a secure customer/token lifecycle.
+
 ## Session management
 
 Clients list sessions as upcoming, past, or cancelled. Within policy they can reschedule or cancel. Changes are transactional, audited in `client_session_events`, and followed by notifications, email, and calendar sync. Eligible Razorpay refunds are asynchronous relative to cancellation and can be pending or failed.

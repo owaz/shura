@@ -61,6 +61,14 @@ Client cancellation updates booking/event/notification state first. If the polic
 
 Because provider calls are outside the database transaction, retries must remain idempotent and operations need visibility for failed/pending refunds. Do not equate a cancelled booking with a completed refund.
 
+## Client billing and receipts
+
+The client billing page is a read-only view over Shura's durable Razorpay/payment state. Paid sessions are charged once during checkout; Shura does not schedule automatic future charges and does not store or manage saved payment methods. Covered and free sessions retain explicit booking classifications without creating misleading card controls.
+
+Billing history combines payment rows with unmatched payment-booking intents so pending/failed checkout attempts and paid slot conflicts remain visible. A matching payment ID or Razorpay order suppresses the intent copy. Refund-required, pending, completed, and failed states remain distinct.
+
+Receipts are generated on demand by the backend. Their typed record IDs are client-owned, and the receipt lookup includes the authenticated client ID. PDFs contain only a Shura transaction reference, amount/currency, payment/refund status and dates, therapist, and appointment metadata; they exclude clinical content, unnecessary client PII, raw provider payloads, signatures, and secrets. Receipt responses are private and non-cacheable.
+
 ## Calendar synchronization
 
 New bookings, reschedules, and cancellations asynchronously create/update/delete Google or Outlook events for connected therapist integrations. `booking_calendar_events` records provider IDs, status, last error, and sync time. Database success does not guarantee calendar success; user-facing and operational flows must tolerate `failed` sync status.
