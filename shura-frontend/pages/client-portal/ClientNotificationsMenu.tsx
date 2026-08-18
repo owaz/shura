@@ -124,8 +124,13 @@ const ClientNotificationsMenu: React.FC = () => {
   const followAction = async (notification: ClientNotification) => {
     await markRead(notification);
     if (!notification.action) return;
+    const href = notification.action.href;
+    if (!href.startsWith('/') || href.startsWith('//')) {
+      setError('This notification action is unavailable.');
+      return;
+    }
     setOpen(false);
-    if (notification.action.href.startsWith('/')) navigate(notification.action.href);
+    navigate(href);
   };
 
   const visibleCount = unreadCount > 99 ? '99+' : String(unreadCount);

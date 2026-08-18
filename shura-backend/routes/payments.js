@@ -738,9 +738,13 @@ router.post('/webhook', async (req, res) => {
           [orderId]
         );
         const owner = await pool.query(
-          `SELECT client_id, booking_id FROM payments WHERE razorpay_order_id = $1
-           UNION ALL
-           SELECT client_id, booking_id FROM payment_booking_intents WHERE order_id = $1
+          `SELECT client_id, booking_id
+           FROM (
+             SELECT client_id, booking_id, 0 AS source_order FROM payments WHERE razorpay_order_id = $1
+             UNION ALL
+             SELECT client_id, booking_id, 1 AS source_order FROM payment_booking_intents WHERE order_id = $1
+           ) owner
+           ORDER BY source_order
            LIMIT 1`,
           [orderId]
         );

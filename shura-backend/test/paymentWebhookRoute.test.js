@@ -79,3 +79,50 @@ test('refund webhooks reconcile booking intents without payment rows', async () 
   assert.equal(notification.params[0], 7);
   assert.equal(notification.params[1], 'refund_processed');
 });
+
+test('payment failed webhook deterministically prefers payment owner', async () => {
+  process.env.RAZORPAY_WEBHOOK_SECRET = 'test_webhook_secret';
+  const event = {
+    event: 'payment.failed',
+    payload: { payment: { entity: { order_id: 'order_failed' } } },
+  };
+  const rawBody = JSON.stringify(event);
+  const signature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET)
+    .update(rawBody)
+    .digest('hex');
+  let ownerQuery;
+  let notification;
+  pool.query = async (sql, params) => {
+    if (/INSERT INTO razorpay_webhook_events/.test(sql)) return { rows: [{ event_id: 'evt_failed' }] };
+    if (/UPDATE payments/.test(sql)) return { rows: [], rowCount: 1 };
+    if (/UPDATE payment_booking_intents/.test(sql)) return { rows: [], rowCount: 0 };
+    if (/ORDER BY source_order/.test(sql)) {
+      ownerQuery = { sql, params };
+      return { rows: [{ client_id: 11, booking_id: 22 }] };
+    }
+    if (/INSERT INTO notifications/.test(sql)) {
+      notification = { sql, params };
+      return { rows: [{ id: 56 }] };
+    }
+    throw new Error(`Unexpected query: ${sql}`);
+  };
+
+  const res = response();
+  await webhookHandler()({
+    headers: {
+      'x-razorpay-event-id': 'evt_failed',
+      'x-razorpay-signature': signature,
+    },
+    rawBody,
+    body: event,
+  }, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(ownerQuery.params, ['order_failed']);
+  assert.match(ownerQuery.sql, /0 AS source_order FROM payments/);
+  assert.match(ownerQuery.sql, /1 AS source_order FROM payment_booking_intents/);
+  assert.equal(notification.params[0], 11);
+  assert.equal(notification.params[1], 'payment_failed');
+  assert.deepEqual(JSON.parse(notification.params[4]), { bookingId: 22 });
+});
