@@ -26,6 +26,7 @@ The implementation-maturity section in [System overview](architecture/system-ove
 - [Integrations and deployment](architecture/integrations-and-deployment.md): email, calendars, storage, monitoring, Docker, and Azure Container Apps.
 - [Resend email replacement feasibility](architecture/email-resend-feasibility.md): current application-email inventory, Resend capability and privacy assessment, migration options, decision gates, and recommended target architecture.
 - [Email classification](architecture/email-classification.md): Phase 0 gate 4 analysis; all application-generated emails classified as mandatory vs. preference-controlled; idempotency gaps identified; implementation checklist for Phase 1/2.
+- [Email production inventory](architecture/email-production-inventory.md): Phase 0 gate 5; current production configuration audit; confirms `EMAIL_USER`, `EMAIL_PASSWORD`, `ADMIN_EMAIL` are NOT in GitHub Actions workflow; identifies gaps requiring Azure access and stakeholder input.
 
 ## Product and domain
 
