@@ -1,4 +1,6 @@
 const nodemailer = require('nodemailer');
+const pool = require('../db');
+const { sendEmail: sendViaResend } = require('./resendAdapter');
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -24,6 +26,23 @@ const multilineOrFallback = (value, fallback = 'Not provided') => {
 
 const frontendBaseUrl = () => (process.env.FRONTEND_URL || 'http://localhost:3006').replace(/\/$/, '');
 const frontendUrl = (path = '/') => `${frontendBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
+
+// Send email via Resend (if configured) or fall back to Gmail
+const sendEmailViaProvider = async (mailOptions) => {
+  if (process.env.RESEND_API_KEY) {
+    // Use Resend API
+    return await sendViaResend(mailOptions);
+  } else {
+    // Fall back to Gmail/SMTP (backward compatibility)
+    const transporter = createTransporter();
+    try {
+      await transporter.sendMail(mailOptions);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+};
 
 // Create reusable transporter
 const createTransporter = () => {
@@ -57,8 +76,6 @@ const createTransporter = () => {
 // Send new therapist application notification to admin
 const sendTherapistApplicationNotification = async (therapistData) => {
   try {
-    const transporter = createTransporter();
-    
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.ADMIN_EMAIL,
@@ -133,9 +150,14 @@ const sendTherapistApplicationNotification = async (therapistData) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`✅ Application notification sent to admin for: ${therapistData.email}`);
-    return { success: true };
+    const result = await sendEmailViaProvider(mailOptions);
+    if (result.success) {
+      console.log(`✅ Application notification sent to admin for: ${therapistData.email}`);
+      return result;
+    } else {
+      console.error('❌ Error sending therapist application email:', result.error);
+      return { success: false, error: result.error };
+    }
   } catch (error) {
     console.error('❌ Error sending therapist application email:', error);
     return { success: false, error: error.message };
@@ -424,6 +446,18 @@ const formatBookingDate = (value) => {
 
 const sendBookingConfirmation = async (bookingData) => {
   try {
+    // Check if client has opted in to booking confirmation emails
+    if (bookingData.clientId) {
+      const { rows } = await pool.query(
+        'SELECT notification_booking_confirmation FROM users WHERE id = $1',
+        [bookingData.clientId]
+      );
+      if (rows.length > 0 && rows[0].notification_booking_confirmation === false) {
+        console.log(`⏭️  Booking confirmation skipped (preference disabled) for: ${bookingData.clientEmail}`);
+        return { success: true, skipped: true };
+      }
+    }
+
     const transporter = createTransporter();
     const mailOptions = {
       from: process.env.EMAIL_USER,
@@ -449,9 +483,14 @@ const sendBookingConfirmation = async (bookingData) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`✅ Booking confirmation sent to: ${bookingData.clientEmail}`);
-    return { success: true };
+    const result = await sendEmailViaProvider(mailOptions);
+    if (result.success) {
+      console.log(`✅ Booking confirmation sent to: ${bookingData.clientEmail}`);
+      return result;
+    } else {
+      console.error('❌ Error sending booking confirmation email:', result.error);
+      return { success: false, error: result.error };
+    }
   } catch (error) {
     console.error('❌ Error sending booking confirmation email:', error);
     return { success: false, error: error.message };
