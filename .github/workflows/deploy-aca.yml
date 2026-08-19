@@ -99,6 +99,7 @@ jobs:
             AUTH0_M2M_CLIENT_SECRET=secretref:auth0-m2m-client-secret
             AUTH0_ROLE_THERAPIST_ID=secretref:auth0-role-therapist-id
             RESEND_API_KEY=secretref:resend-api-key
+            RESEND_FROM_EMAIL=secretref:resend-from-email
 
   deploy-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -140,3 +141,4 @@ jobs:
             AUTH0_M2M_CLIENT_SECRET=secretref:auth0-m2m-client-secret
             AUTH0_ROLE_THERAPIST_ID=secretref:auth0-role-therapist-id
             RESEND_API_KEY=secretref:resend-api-key
+            RESEND_FROM_EMAIL=secretref:resend-from-email

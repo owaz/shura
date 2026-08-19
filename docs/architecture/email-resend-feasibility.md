@@ -8,13 +8,13 @@ Resend can replace Gmail SMTP for Shura's application-generated email without ch
 
 The recommended target is the **Resend HTTP API behind an application-owned email boundary, backed by a durable PostgreSQL outbox and signed webhook processing**. This provides better provider error handling, idempotency, delivery visibility, and retry control than changing the SMTP host while preserving the current best-effort design.
 
-Implementation should not begin until these gates are resolved:
+The following rollout decisions are accepted for the current India-focused deployment:
 
 1. **Do not send full intake responses through Resend.** The current administrative intake email includes mental-health concerns, trauma history, medications, relationship information, spiritual information, and suicidality answers. Replace it with a minimal notification that directs an authorized admin to Shura.
-2. **Complete privacy/legal review.** Resend documents that account data, email metadata, logs, and API records are stored in the United States even when another sending region is selected. Its public material documents a DPA, SCCs, GDPR support, and SOC 2 Type II, but does not establish HIPAA support or availability of a BAA. Shura must decide its applicable legal and contractual requirements rather than infer suitability from SOC 2.
-3. **Define durable delivery semantics.** Current sends are not queued, retried durably, or recorded. Several helpers turn provider failures into successful promise resolutions, so callers can silently lose mail. A provider migration should correct that contract rather than reproduce it.
-4. **Classify consent and preferences.** Booking, assignment, and session emails do not consistently consult stored client preferences. Reminder preferences exist, but no reminder scheduler was found. Required transactional notices and optional reminders need separate rules.
-5. **Verify live operational facts.** The repository cannot establish the active Azure secrets, DNS ownership, sending domain, real send volume, current Gmail use, or contractual Resend plan.
+2. **US data residency is accepted and HIPAA is out of scope for this deployment.** Do not include sensitive intake answers or other unnecessary health information in email. This decision must be revisited before expanding to a regulated healthcare deployment.
+3. **Use durable delivery semantics as implementation work.** The provider boundary accepts stable event keys now; the PostgreSQL outbox, retries, and signed delivery webhooks remain the next reliability phase.
+4. **Enforce consent in application code.** Booking confirmations require the client identity and respect `notification_booking_confirmation`; reminder scheduling and additional preference policies remain separate future implementation work.
+5. **Production rollout condition.** Azure must contain both `resend-api-key` and a verified-domain `resend-from-email`. Staging delivery must be verified before production activation.
 
 Auth0-managed verification, password-reset, and identity emails are explicitly outside this assessment.
 

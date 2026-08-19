@@ -366,6 +366,7 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
     if (emailDataDetails) {
       dispatchBookingNotifications({
         bookingId: bookingResult.rows[0].id,
+        clientId: intent.client_id,
         clientName: emailDataDetails.client_name,
         clientEmail: emailDataDetails.client_email,
         therapistName: emailDataDetails.therapist_name,
