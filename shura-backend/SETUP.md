@@ -1,4 +1,6 @@
-# Shura Backend Setup Guide
+# Legacy: Shura backend setup guide
+
+> **Legacy setup guide — do not execute against a current database.** It predates Auth0-only interactive login, the port 5001/3006 local contract, and the base-schema-plus-ordered-migrations lifecycle. Use [`../docs/LOCAL_E2E_SETUP.md`](../docs/LOCAL_E2E_SETUP.md).
 
 ## Quick Start
 

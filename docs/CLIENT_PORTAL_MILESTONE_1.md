@@ -1,4 +1,6 @@
-# Client Portal — Milestone 1
+# Historical: Client portal milestone 1
+
+> Historical milestone note. The portal has since added backend-backed session management, booking, dashboard/notifications, billing history, and PDF receipts through migrations `012`–`015`. Use [the documentation index](README.md), [frontend architecture](architecture/frontend.md), [backend/API architecture](architecture/backend-and-api.md), and [product workflows](product/workflows.md) for current behavior. The video-provider limitation below remains current.
 
 ## Deployment order
 

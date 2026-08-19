@@ -47,6 +47,7 @@ In local development, Vite runs on port 3006 and the backend is configured on po
 - Tokenized intake forms and intake-based therapist matching
 - Availability, booking, client session management, payment, refund, and calendar synchronization
 - Client home dashboard, notification inbox, and review-gated daily faith content
+- Client billing history and private, authenticated PDF receipts
 - Persistent chat plus Socket.IO delivery
 - Experimental/placeholder call signaling and an intentionally unconfigured secure video-provider interface
 - Private image upload and short-lived read access
@@ -57,8 +58,8 @@ See the subsystem-specific architecture documents for invariants and current gap
 
 Do not infer completion from the presence of a route or page:
 
-- Client home, profile, preferences, assigned therapist, booking, and session management have backend-backed portal pages.
-- Client portal billing remains an explicit placeholder.
+- Client home/dashboard, notifications, onboarding, profile, preferences, assigned therapist, booking, session management, billing history, and receipt downloads have backend-backed portal surfaces.
+- Client billing supports one-time Razorpay checkout at booking, covered/free classifications, refund-state visibility, and receipts. Saved cards, subscriptions, deferred automatic charges, and automated conflict-refund reconciliation are not implemented.
 - Several therapist portal pages still use mock data or partial API integration, including payments/chat/calls.
 - Public therapist pages fall back to checked-in mock data if API loading fails.
 - `services/video/videoProvider.js` deliberately rejects room creation/access until a provider is selected.

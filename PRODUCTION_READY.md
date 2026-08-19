@@ -1,4 +1,6 @@
-# ✅ API Configuration & Production Readiness - COMPLETED
+# Legacy: API configuration and production-readiness claim
+
+> **Historical claim — the repository as a whole is not verified production-ready.** This file predates the current Auth0, Azure Container Apps, migration, storage, client-portal, and provider boundaries. Use [`docs/README.md`](docs/README.md), especially the system-overview maturity section and current deployment runbook. Secure video/audio and several therapist/legacy surfaces remain incomplete.
 
 ## 🎯 What Was Done
 

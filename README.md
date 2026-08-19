@@ -26,3 +26,5 @@ npm run build
 For local runtime configuration, copy `shura-backend/.env.example` to `.env` and `shura-frontend/.env.example` to `.env.local`. Keep only browser-safe `VITE_*` identifiers in the frontend file. A fresh disposable database needs the documented base-schema bootstrap before `npm run migrate`; follow the E2E runbook rather than older setup guides.
 
 The production `Dockerfile` builds the SPA and serves it from the Express process. Pushes to `main` are configured to build and deploy the image to staging and production Azure Container Apps through `.github/workflows/deploy-aca.yml`.
+
+Current client-portal code is API-backed through dashboard/notifications, onboarding, profile/preferences, assigned therapist, booking, sessions, billing history, and PDF receipts. Secure video/audio remains unconfigured, and several therapist-facing or legacy surfaces remain partial or mock-backed. Use the implementation-maturity section in `docs/architecture/system-overview.md` before describing a flow as complete.

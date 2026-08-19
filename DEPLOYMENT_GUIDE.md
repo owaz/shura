@@ -1,6 +1,6 @@
 # Shura Auth0 Deployment Guide
 
-This guide migrates Shura from custom JWT auth to Auth0 using the code in this repository.
+This Auth0 companion describes tenant configuration used by the current code. For the complete production release path, begin with [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md). Current source, Auth0 Actions, environment examples, and live tenant configuration outrank this page.
 
 ## 1. Configure Auth0 tenant basics
 
@@ -21,6 +21,8 @@ This guide migrates Shura from custom JWT auth to Auth0 using the code in this r
    - Authorize it against Auth0 Management API with scopes:
      - `read:users`
      - `update:users`
+     - `delete:users`
+     - `create:user_tickets`
      - `read:roles`
      - `create:role_members`
 3. **API**
@@ -78,16 +80,16 @@ Set:
 - `VITE_API_URL`
 - `VITE_WS_URL`
 
-## 7. Apply database migration
+## 7. Apply database migrations
 
-Run backend migrations so local records support Auth0 identity mapping:
+For an existing database, run every pending ordered migration:
 
 ```bash
 cd shura-backend
 npm run migrate
 ```
 
-This applies `006_add_auth0_identity_columns.sql` to add `auth0_sub` mapping fields and status support.
+Migration `006_add_auth0_identity_columns.sql` adds Auth0 mappings, but the application also depends on all later ordered migrations. A truly empty database first needs the one-time legacy-compatible base bootstrap described in [`docs/LOCAL_E2E_SETUP.md`](docs/LOCAL_E2E_SETUP.md); `npm run migrate` alone does not create every base identity table. Never use the disposable E2E bootstrap against staging or production.
 
 ## 8. Admin bootstrap
 
@@ -117,3 +119,5 @@ On first login, backend links or creates a corresponding local `admins` record u
 9. Therapist login succeeds after approval.
 10. Admin reject/suspend/reactivate endpoints update status and block/unblock behavior.
 11. Protected API routes reject invalid audience/issuer tokens.
+
+Pending therapists are blocked by the checked-in post-login Action, so the first-login/application ordering depends on live tenant configuration. Verify that flow end to end rather than assuming the repository alone proves it.

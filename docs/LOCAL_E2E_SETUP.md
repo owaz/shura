@@ -176,9 +176,11 @@ Verify `http://localhost:5001/api/health`, then open `http://localhost:3006`. Si
 Check each role and the following client flows:
 
 - Authentication, logout, refresh, route protection, and role redirects.
-- Onboarding, profile, preferences, dashboard, assigned therapist, and settings.
+- Onboarding, profile, preferences, dashboard, notifications, assigned therapist, and settings.
+- Portal booking for paid and covered/free paths, slot-conflict handling, payment-intent recovery, and owned `.ics` downloads.
 - Upcoming/past/cancelled session lists and session details.
-- Rescheduling, cancellation, review submission, receipts, and database persistence.
+- Rescheduling, cancellation, review submission, billing modes/history, owned PDF receipts, refund-state visibility, and database persistence.
+- Daily quote preparation state unless a qualified human reviewer has approved and activated content; do not activate seeded faith content merely for a smoke test.
 - Responsive desktop/mobile layouts, browser console errors, failed network requests, and unauthorized API responses.
 - Video join returns the intentional provider-not-configured response until a replacement video provider is selected.
 

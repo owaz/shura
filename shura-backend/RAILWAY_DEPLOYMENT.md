@@ -1,4 +1,6 @@
-# Shura Backend - Deployment Instructions
+# Legacy: Shura backend Railway deployment instructions
+
+> **Legacy alternative deployment guide.** Railway/Vercel is not the configured main-branch delivery path, and the admin/password/schema instructions below do not match current Auth0 and migration rules. Use [`../docs/DEPLOYMENT_GUIDE.md`](../docs/DEPLOYMENT_GUIDE.md).
 
 ## Railway Deployment (Backend)
 
