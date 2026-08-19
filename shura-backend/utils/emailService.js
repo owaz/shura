@@ -374,66 +374,32 @@ const sendIntakeFormSubmission = async (clientEmail, clientName, formData) => {
       to: process.env.ADMIN_EMAIL,
       subject: `📋 Intake Form Completed - ${String(clientName || 'Client')}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
           <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
             <h1 style="color: #ffffff; margin: 0;">Intake Form Submission</h1>
           </div>
           
           <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px;">Client Information</h2>
-            <p><strong>Name:</strong> ${textOrFallback(clientName)}</p>
-            <p><strong>Email:</strong> ${textOrFallback(clientEmail)}</p>
+            <p style="font-size: 16px; color: #333;">A new client intake form has been submitted.</p>
             
-            <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Personal & Background</h2>
-            <p><strong>Marital Status:</strong> ${textOrFallback(formData.maritalStatus, 'Not provided')}</p>
-            <p><strong>Children:</strong> ${formData.hasChildren === 'Yes' ? `Yes - ${textOrFallback(formData.childrenDetails, 'Not provided')}` : textOrFallback(formData.hasChildren, 'Not provided')}</p>
-            <p><strong>Living Situation:</strong> ${textOrFallback(formData.livingSituation, 'Not provided')}</p>
-            <p><strong>Religious Practice:</strong> ${textOrFallback(formData.religiousPractice, 'Not provided')}</p>
-            <p><strong>Prayer Frequency:</strong> ${textOrFallback(formData.prayerFrequency, 'Not provided')}</p>
-            <p><strong>Quran Engagement:</strong> ${textOrFallback(formData.quranEngagement, 'Not provided')}</p>
-            <p><strong>Community Involvement:</strong> ${textOrFallback(formData.communityInvolvement, 'Not provided')}</p>
+            <div style="margin: 24px 0; padding: 16px; background-color: #f8f5f0; border-radius: 8px;">
+              <p style="margin: 6px 0; color: #555;"><strong>Client Name:</strong> ${textOrFallback(clientName)}</p>
+              <p style="margin: 6px 0; color: #555;"><strong>Client Email:</strong> ${textOrFallback(clientEmail)}</p>
+              <p style="margin: 6px 0; color: #555;"><strong>Submission Time:</strong> ${new Date().toLocaleString('en-IN')}</p>
+            </div>
             
-            <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Mental Health Concerns</h2>
-            <p><strong>Main Concerns:</strong><br/>${multilineOrFallback(formData.mainConcerns)}</p>
-            <p><strong>Duration:</strong> ${textOrFallback(formData.concernDuration, 'Not provided')}</p>
-            <p><strong>Severity:</strong> ${textOrFallback(formData.concernSeverity, 'Not provided')}/10</p>
-            <p><strong>Therapy Goals:</strong><br/>${multilineOrFallback(formData.therapyGoals)}</p>
-            
-            <p><strong>Mood Symptoms:</strong> ${listOrFallback(formData.moodSymptoms)}</p>
-            <p><strong>Anxiety Symptoms:</strong> ${listOrFallback(formData.anxietySymptoms)}</p>
-            <p><strong>Sleep Issues:</strong> ${listOrFallback(formData.sleepIssues)}</p>
-            
-            <p style="background-color: ${formData.suicidalThoughts === 'Yes, currently' ? '#ffebee' : '#f5f5f5'}; padding: 10px; border-radius: 5px;">
-              <strong>Suicidal Thoughts:</strong> ${textOrFallback(formData.suicidalThoughts, 'Not provided')}
-              ${formData.suicidalDetails ? `<br/><strong>Details:</strong> ${textOrFallback(formData.suicidalDetails)}` : ''}
+            <p style="color: #555; line-height: 1.6;">
+              Please log in to the admin portal to review the full intake form details securely.
             </p>
             
-            <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Health & Support</h2>
-            <p><strong>Trauma History:</strong> ${listOrFallback(formData.traumaHistory)}</p>
-            <p><strong>Relationship Quality:</strong> ${textOrFallback(formData.relationshipQuality, 'Not provided')}</p>
-            <p><strong>Relationship Difficulties:</strong> ${listOrFallback(formData.relationshipDifficulties)}</p>
-            <p><strong>Social Support:</strong> ${textOrFallback(formData.socialSupport, 'Not provided')}</p>
-            
-            <p><strong>Physical Health:</strong> ${textOrFallback(formData.physicalHealth, 'Not provided')}</p>
-            <p><strong>Medical Conditions:</strong> ${textOrFallback(formData.medicalConditions, 'Not provided')}</p>
-            <p><strong>Current Medications:</strong> ${textOrFallback(formData.currentMedications, 'Not provided')}</p>
-            
-            <p><strong>Previous Therapy:</strong> ${textOrFallback(formData.previousTherapy, 'Not provided')}
-              ${formData.previousTherapyDetails ? `<br/>${textOrFallback(formData.previousTherapyDetails)}` : ''}
+            <p style="color: #666; font-size: 12px; margin-top: 24px; line-height: 1.6;">
+              <strong>Note:</strong> For privacy and security, detailed intake information is not included in this email. 
+              Access full details through the secure admin portal where all sensitive health information is encrypted and access-controlled.
             </p>
             
-            <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Spiritual & Coping</h2>
-            <p><strong>Coping Mechanisms:</strong> ${listOrFallback(formData.copingMechanisms)}</p>
-            <p><strong>Spiritual Connection:</strong> ${textOrFallback(formData.spiritualConnection, 'Not provided')}</p>
-            
-            ${formData.additionalInfo ? `
-              <h2 style="color: #8B7355; border-bottom: 2px solid #8B7355; padding-bottom: 10px; margin-top: 30px;">Additional Information</h2>
-              <p>${multilineOrFallback(formData.additionalInfo)}</p>
-            ` : ''}
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #8B7355; font-size: 12px;">
-            <p>This is an automated notification from Shura Platform</p>
+            <div style="text-align: center; margin-top: 20px; color: #8B7355; font-size: 12px;">
+              <p>This is an automated notification from Shura Platform</p>
+            </div>
           </div>
         </div>
       `,
