@@ -28,6 +28,7 @@ The implementation-maturity section in [System overview](architecture/system-ove
 - [Email classification](architecture/email-classification.md): Phase 0 gate 4 analysis; all application-generated emails classified as mandatory vs. preference-controlled; idempotency gaps identified; implementation checklist for Phase 1/2.
 - [Email production inventory](architecture/email-production-inventory.md): Phase 0 gate 5; current production configuration audit; confirms `EMAIL_USER`, `EMAIL_PASSWORD`, `ADMIN_EMAIL` are NOT in GitHub Actions workflow; identifies gaps requiring Azure access and stakeholder input.
 - [Email volume and SLA worksheet](architecture/email-volume-sla-worksheet.md): Phase 0 gate 4 measurement form; structured worksheet for capturing monthly send volume, peak rates, criticality per email type, SLA requirements, compliance constraints, and cost analysis.
+- [Email legal and privacy review](architecture/email-legal-privacy-review.md): Phase 0 gate 2; comprehensive checklist for HIPAA/BAA, GDPR data transfer, retention policies, vendor assessment, DPA review, and compliance sign-off; **BLOCKS Phase 1** until completed.
 
 ## Product and domain
 
