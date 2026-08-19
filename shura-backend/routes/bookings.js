@@ -303,6 +303,7 @@ router.post('/', authenticateToken, async (req, res) => {
       
       const emailData = {
         bookingId: booking.id,
+        clientId: user_id,
         clientName: client.full_name,
         clientEmail: client.email,
         therapistName: therapist.full_name,
@@ -478,6 +479,7 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
     // Send cancellation emails
     const emailData = {
       bookingId: booking.id,
+      clientId: booking.user_id,
       clientName: booking.client_name,
       clientEmail: booking.client_email,
       therapistName: booking.therapist_name,

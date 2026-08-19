@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const pool = require('../db');
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -424,6 +425,18 @@ const formatBookingDate = (value) => {
 
 const sendBookingConfirmation = async (bookingData) => {
   try {
+    // Check if client has opted in to booking confirmation emails
+    if (bookingData.clientId) {
+      const { rows } = await pool.query(
+        'SELECT notification_booking_confirmation FROM users WHERE id = $1',
+        [bookingData.clientId]
+      );
+      if (rows.length > 0 && rows[0].notification_booking_confirmation === false) {
+        console.log(`⏭️  Booking confirmation skipped (preference disabled) for: ${bookingData.clientEmail}`);
+        return { success: true, skipped: true };
+      }
+    }
+
     const transporter = createTransporter();
     const mailOptions = {
       from: process.env.EMAIL_USER,
