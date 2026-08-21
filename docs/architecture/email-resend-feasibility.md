@@ -258,7 +258,7 @@ Classify messages before migration:
 - **Administrative alerts:** should contain the minimum information needed to direct an authorized admin to Shura.
 - **Marketing/newsletter:** separate consent, unsubscribe, audience, and content lifecycle.
 
-For intake submission, use wording such as “A client completed an intake form; sign in to review it” with an authenticated portal link. Do not include answers, clinical flags, client email, or a reusable intake token in the message.
+For intake submission and client onboarding alerts, use wording such as “A client completed an intake form; sign in to review it” with an authenticated portal link. Do not include questionnaire concerns, free-text notes, answers, clinical flags, client email, or a reusable intake token in the message.
 
 ## Future implementation phases
 

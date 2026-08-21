@@ -165,9 +165,9 @@ const sendTherapistApplicationNotification = async (therapistData) => {
       `,
     };
 
-    const result = await sendEmailViaProvider(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions, 'therapist_application');
     if (result.success) {
-      console.log(`✅ Application notification sent to admin for: ${therapistData.email}`);
+      console.log('✅ Email sent: therapist_application');
       return result;
     } else {
       console.error('❌ Error sending therapist application email:', result.error);
@@ -234,9 +234,9 @@ const sendTherapistApprovalEmail = async (therapistEmail, therapistName) => {
       `,
     };
 
-    const result = await sendEmailViaProvider(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions, 'therapist_approval');
     if (!result.success) throw new Error(result.error);
-    console.log(`✅ Approval email sent to: ${therapistEmail}`);
+    console.log('✅ Email sent: therapist_approval');
     return { success: true };
   } catch (error) {
     console.error('❌ Error sending approval email:', error);
@@ -247,8 +247,6 @@ const sendTherapistApprovalEmail = async (therapistEmail, therapistName) => {
 // Send client signup notification to admin
 const sendClientSignupNotification = async (clientData) => {
   try {
-    const hasQuestionnaire = clientData.concerns && clientData.concerns.length > 0;
-    
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.ADMIN_EMAIL,
@@ -282,30 +280,9 @@ const sendClientSignupNotification = async (clientData) => {
               </tr>
             </table>
             
-            ${hasQuestionnaire ? `
-            <div style="margin-top: 30px; padding: 20px; background-color: #f8f5f0; border-radius: 8px; border-left: 4px solid #8B7355;">
-              <h3 style="color: #8B7355; margin-top: 0;">📋 Questionnaire Responses:</h3>
-              
-              <div style="margin-bottom: 15px;">
-                <strong style="color: #8B7355;">Primary Concerns:</strong><br>
-                <span style="color: #555;">${listOrFallback(clientData.concerns)}</span>
-              </div>
-              
-              <div style="margin-bottom: 15px;">
-                <strong style="color: #8B7355;">Therapist Gender Preference:</strong><br>
-                <span style="color: #555;">${textOrFallback(clientData.genderPreference, 'Not provided')}</span>
-              </div>
-              
-              <div>
-                <strong style="color: #8B7355;">Additional Notes:</strong><br>
-                <span style="color: #555; white-space: pre-wrap;">${textOrFallback(clientData.additionalNotes, 'Not provided')}</span>
-              </div>
-            </div>
-            ` : `
             <div style="margin-top: 30px; padding: 20px; background-color: #fff8e1; border-radius: 8px; border-left: 4px solid #ffc107;">
-              <p style="color: #666; margin: 0;">⚠️ Questionnaire not yet completed by client</p>
+              <p style="color: #666; margin: 0;">Please sign in to the admin portal to review the client's onboarding details securely.</p>
             </div>
-            `}
             
             <div style="margin-top: 30px; padding: 20px; background-color: #f8f5f0; border-radius: 8px; border-left: 4px solid #8B7355;">
               <h3 style="color: #8B7355; margin-top: 0;">Client Activity:</h3>
@@ -326,9 +303,9 @@ const sendClientSignupNotification = async (clientData) => {
       `,
     };
 
-    const result = await sendEmailViaProvider(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions, 'client_signup');
     if (!result.success) throw new Error(result.error);
-    console.log(`✅ Client signup notification sent to admin for: ${textOrFallback(clientData.email)}`);
+    console.log('✅ Email sent: client_signup');
     return { success: true };
   } catch (error) {
     console.error('❌ Error sending client signup email:', error);
@@ -391,9 +368,9 @@ const sendIntakeFormLink = async (clientEmail, clientName, intakeLink) => {
       `,
     };
 
-    const result = await sendEmailViaProvider(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions, 'intake_link');
     if (!result.success) throw new Error(result.error);
-    console.log(`✅ Intake form link sent to: ${clientEmail}`);
+    console.log('✅ Email sent: intake_link');
     return { success: true };
   } catch (error) {
     console.error('❌ Error sending intake form link:', error);
@@ -441,9 +418,9 @@ const sendIntakeFormSubmission = async (clientEmail, clientName, formData) => {
       `,
     };
 
-    const result = await sendEmailViaProvider(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions, 'intake_submission');
     if (!result.success) throw new Error(result.error);
-    console.log(`✅ Intake form submission notification sent for: ${clientEmail}`);
+    console.log('✅ Email sent: intake_submission');
     return { success: true };
   } catch (error) {
     console.error('❌ Error sending intake form submission email:', error);
@@ -472,7 +449,7 @@ const sendBookingConfirmation = async (bookingData) => {
       return { success: false, error: 'Booking confirmation client was not found' };
     }
     if (rows[0].notification_booking_confirmation === false) {
-      console.log(`⏭️  Booking confirmation skipped (preference disabled) for: ${bookingData.clientEmail}`);
+      console.log(`⏭️  Email skipped: booking_confirmation (${bookingData.bookingId})`);
       return { success: true, skipped: true };
     }
 
@@ -501,9 +478,9 @@ const sendBookingConfirmation = async (bookingData) => {
       `,
     };
 
-    const result = await sendEmailViaProvider(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions, 'booking_confirmation');
     if (result.success) {
-      console.log(`✅ Booking confirmation sent to: ${bookingData.clientEmail}`);
+      console.log('✅ Email sent: booking_confirmation');
       return result;
     } else {
       console.error('❌ Error sending booking confirmation email:', result.error);
@@ -542,9 +519,9 @@ const sendBookingNotificationToTherapist = async (bookingData) => {
       `,
     };
 
-    const result = await sendEmailViaProvider(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions, 'booking_notification');
     if (!result.success) throw new Error(result.error);
-    console.log(`✅ Booking notification sent to therapist: ${bookingData.therapistEmail}`);
+    console.log('✅ Email sent: booking_notification');
     return { success: true };
   } catch (error) {
     console.error('❌ Error sending therapist booking notification:', error);
@@ -554,7 +531,7 @@ const sendBookingNotificationToTherapist = async (bookingData) => {
 
 const sendTherapistReleaseNotification = async ({ therapistEmail, therapistName, clientName }) => {
   try {
-    const result = await sendEmailViaProvider({
+    const mailOptions = {
       from: process.env.EMAIL_USER,
       to: therapistEmail,
       subject: 'Shura client assignment update',
@@ -571,8 +548,10 @@ const sendTherapistReleaseNotification = async ({ therapistEmail, therapistName,
         </div>
       `,
       idempotencyKey: `therapist-release:${therapistEmail}:${clientName}`,
-    });
+    };
+    const result = await sendEmailViaProvider(mailOptions, 'therapist_release');
     if (!result.success) throw new Error(result.error);
+    console.log('✅ Email sent: therapist_release');
     return { success: true };
   } catch (error) {
     console.error('Error sending therapist release notification:', error);
@@ -606,14 +585,14 @@ const sendSessionRescheduledNotifications = async (session) => {
         subject: 'Your Shura session has been rescheduled',
         html: shell(session.client_name || session.clientName, `Your session with ${textOrFallback(session.therapist_name || session.therapistName)} has been moved.`),
         idempotencyKey: `session-rescheduled:client:${session.booking_id || session.bookingId}`,
-      }),
+      }, 'session_rescheduled'),
       sendEmailViaProvider({
         from: process.env.EMAIL_USER,
         to: session.therapist_email || session.therapistEmail,
         subject: 'A Shura session has been rescheduled',
         html: shell(session.therapist_name || session.therapistName, `${textOrFallback(session.client_name || session.clientName)} has moved their session.`),
         idempotencyKey: `session-rescheduled:therapist:${session.booking_id || session.bookingId}`,
-      }),
+      }, 'session_rescheduled'),
     ]);
     return { success: results.every((result) => result.status === 'fulfilled') };
   } catch (error) {
@@ -636,14 +615,14 @@ const sendSessionCancellationNotifications = async (session) => {
         subject: 'Your Shura session has been cancelled',
         html: shell(session.client_name || session.clientName, `Your session with ${textOrFallback(session.therapist_name || session.therapistName)} has been cancelled.`, true),
         idempotencyKey: `session-cancelled:client:${session.booking_id || session.bookingId}`,
-      }),
+      }, 'session_cancelled'),
       sendEmailViaProvider({
         from: process.env.EMAIL_USER,
         to: session.therapist_email || session.therapistEmail,
         subject: 'A Shura session has been cancelled',
         html: shell(session.therapist_name || session.therapistName, `${textOrFallback(session.client_name || session.clientName)} has cancelled their session.`, false),
         idempotencyKey: `session-cancelled:therapist:${session.booking_id || session.bookingId}`,
-      }),
+      }, 'session_cancelled'),
     ]);
     return { success: results.every((result) => result.status === 'fulfilled') };
   } catch (error) {
