@@ -89,6 +89,8 @@ Monitor:
 - webhook endpoint failures and dedupe volume
 - rows older than 30 days whose `payload_purged_at` remains null
 
+Alert routing, cross-provider incident handling, and refund/account-deletion reconciliation are defined in [Production readiness and incident operations](../PRODUCTION_READINESS.md).
+
 Interpret a domain API success as durable email intent, not proof of delivery. Use outbox state plus Resend provider IDs for delivery investigation. Logs should identify event type or opaque row/event IDs, never recipient addresses, intake tokens, message bodies, or raw webhook payloads.
 
 Reminder scheduling, SMS reminders, newsletters/campaigns, and platform-update email delivery are not part of this subsystem today.

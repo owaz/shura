@@ -47,7 +47,7 @@ router.get('/integrations', requireTherapist, async (req, res) => {
 
     res.json({ integrations });
   } catch (err) {
-    console.error('Calendar integrations list error:', err);
+    console.error('Calendar integrations list error', { code: err?.code || 'CALENDAR_LIST_FAILED' });
     res.status(500).json({ error: 'Failed to load calendar integrations' });
   }
 });
@@ -64,7 +64,7 @@ router.get('/:provider/connect', requireTherapist, async (req, res) => {
 
     res.json({ authUrl: buildAuthorizationUrl({ provider, therapistId: req.user.id }) });
   } catch (err) {
-    console.error('Calendar connect error:', err);
+    console.error('Calendar connect error', { code: err?.code || 'CALENDAR_CONNECT_FAILED' });
     res.status(500).json({ error: 'Failed to start calendar connection' });
   }
 });
@@ -90,7 +90,7 @@ router.get('/:provider/callback', async (req, res) => {
 
     res.redirect(`${frontendBaseUrl()}/therapist-portal/calendar?calendar=connected&provider=${provider}`);
   } catch (err) {
-    console.error('Calendar callback error:', err);
+    console.error('Calendar callback error', { code: err?.code || 'CALENDAR_CALLBACK_FAILED' });
     res.redirect(`${frontendBaseUrl()}/therapist-portal/calendar?calendar=failed&provider=${provider}`);
   }
 });
@@ -114,7 +114,7 @@ router.delete('/:provider', requireTherapist, async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error('Calendar disconnect error:', err);
+    console.error('Calendar disconnect error', { code: err?.code || 'CALENDAR_DISCONNECT_FAILED' });
     res.status(500).json({ error: 'Failed to disconnect calendar' });
   }
 });

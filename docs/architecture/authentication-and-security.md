@@ -10,7 +10,7 @@ The required tenant-side code is checked into `auth0-actions/`:
 - First post-login action enforces email verification for database users; forbids social login for therapist/admin; blocks pending/rejected/suspended therapists; and writes namespaced role, status, and email claims.
 - Second post-login action requires MFA for every admin login and does not remember the browser.
 
-The action namespace is fixed in action code as `https://shura.com`; backend configuration must match it. If role claims are missing, backend middleware currently defaults to `client/active`, so deploying and testing the actions is a security requirement, not optional metadata.
+The action namespace is fixed in action code as `https://shura.com`; backend configuration must match it. The API fails closed when role or status claims are missing or unsupported. Deploying and testing the Actions remains required because a valid identity token without application claims cannot enter an application role.
 
 ## Local identity mapping
 
@@ -38,7 +38,7 @@ For new queries, select the resource through the authenticated owner/relationshi
 
 The frontend stores Auth0 SDK cache and a copied access token in browser storage. This makes XSS prevention critical. The API uses explicit bearer headers and generally omits cookies; the CSRF middleware therefore bypasses requests with authorization headers. If cookie authentication is introduced, implement a complete CSRF/origin/session design rather than relying on the current placeholder guard.
 
-CORS accepts localhost, configured origins, and currently every `*.azurecontainerapps.io` origin. Tightening this allowlist is recommended because the broad platform-domain exception is not tenant-specific.
+CORS accepts only explicitly configured `FRONTEND_URL`, `FRONTEND_URLS`, or `ALLOWED_ORIGINS` values in production; production startup fails when none are valid. Development additionally permits the documented localhost ports. Bearer access tokens are sent in authorization headers and CORS credentials are disabled, so cookie-CSRF defenses are not the API boundary; strict origin policy, token validation, and XSS prevention remain required.
 
 ## Sensitive data
 
@@ -59,9 +59,9 @@ Therapist/client suspension synchronizes local state to Auth0 when `auth0_sub` e
 
 ## Known security-sensitive gaps
 
-- Global Socket.IO call signaling broadcasts negotiation data to all authenticated sockets.
-- `/api/calls/join` uses mock session data; `/api/calls/create` is unauthenticated. They are placeholders, not secure calling endpoints.
-- The production workflow/configuration contains stale Cloudinary references and does not demonstrate all currently required provider secrets/permissions.
+- Legacy Socket.IO call signaling is disabled. Authenticated sockets may join only their server-derived user room.
+- `/api/calls/join` and `/api/calls/create` require authentication and return `VIDEO_PROVIDER_UNCONFIGURED`; they are not calling endpoints.
+- Production CORS origins, strict database TLS verification, current Azure Blob/Razorpay/Resend mappings, quality gates, and protected environment promotion are declared in the deployment workflow. Live secret values and environment protections still require operator verification.
 - Many legacy endpoints use inconsistent errors and some return raw `err.message`.
 - Auth0/local updates and account deletion span separate systems without a durable reconciliation queue.
 

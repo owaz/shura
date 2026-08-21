@@ -27,7 +27,7 @@ router.get('/forms', async (req, res) => {
       FROM intake_forms if
       JOIN users u ON if.user_id = u.id
       WHERE u.id IN (
-        SELECT client_id FROM therapist_clients WHERE therapist_id = $1
+        SELECT client_id FROM therapist_clients WHERE therapist_id = $1 AND status = 'active'
       )
       ORDER BY if.submitted_at DESC`,
       [therapistId]
@@ -35,7 +35,7 @@ router.get('/forms', async (req, res) => {
 
     res.json({ forms: result.rows });
   } catch (error) {
-    console.error('Error fetching intake forms:', error);
+    console.error('Error fetching intake forms', { code: error?.code || 'INTAKE_LIST_FAILED' });
     res.status(500).json({ error: 'Failed to fetch intake forms' });
   }
 });
@@ -51,7 +51,7 @@ router.get('/forms/:id', async (req, res) => {
       FROM intake_forms if
       JOIN users u ON if.user_id = u.id
       WHERE if.id = $1 AND u.id IN (
-        SELECT client_id FROM therapist_clients WHERE therapist_id = $2
+        SELECT client_id FROM therapist_clients WHERE therapist_id = $2 AND status = 'active'
       )`,
       [id, therapistId]
     );
@@ -62,7 +62,7 @@ router.get('/forms/:id', async (req, res) => {
 
     res.json({ form: result.rows[0] });
   } catch (error) {
-    console.error('Error fetching intake form:', error);
+    console.error('Error fetching intake form', { code: error?.code || 'INTAKE_LOAD_FAILED' });
     res.status(500).json({ error: 'Failed to fetch intake form' });
   }
 });

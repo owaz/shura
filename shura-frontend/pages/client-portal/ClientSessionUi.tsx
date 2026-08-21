@@ -1,7 +1,8 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { clientPortalApi } from './clientPortalApi';
 import type { ClientSession, SessionAvailability } from './clientPortalTypes';
 import { inputClass } from './PortalUi';
+import PortalDialog from './PortalDialog';
 
 export const primaryButton = 'rounded-full bg-[#8C4F3A] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#74402F] focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45';
 export const secondaryButton = 'rounded-full border border-[#BCA998] bg-white px-4 py-2.5 text-sm font-semibold text-brown-dark transition hover:bg-[#F8F1EA] focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45';
@@ -44,37 +45,7 @@ export const timezoneName = (value: string, timezone: string) => new Intl.DateTi
 
 export const sessionTypeLabel = (type: string) => type === 'audio' ? 'Audio Only' : type === 'text' ? 'Text Session' : 'Video Session';
 
-export const Dialog: React.FC<React.PropsWithChildren<{ title: string; description?: string; onClose: () => void; size?: string }>> = ({ title, description, onClose, size = 'max-w-2xl', children }) => {
-  const panel = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  const descriptionId = useId();
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    panel.current?.querySelector<HTMLElement>('button, [href], input, textarea, select')?.focus();
-    return () => previous?.focus();
-  }, []);
-  const handleKeys = (event: React.KeyboardEvent) => {
-    if (event.key === 'Escape') onClose();
-    if (event.key !== 'Tab' || !panel.current) return;
-    const focusable = [...panel.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled])')];
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  };
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-brown-dark/45 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onKeyDown={handleKeys} className={`max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-[#E4D6C9] bg-[#FAF7F2] p-5 shadow-2xl md:p-7 ${size}`}>
-        <div className="flex items-start gap-4">
-          <div><h2 id={titleId} className="font-serif text-2xl font-semibold text-brown-dark">{title}</h2>{description && <p id={descriptionId} className="mt-2 text-sm leading-6 text-brown-soft">{description}</p>}</div>
-          <button type="button" onClick={onClose} className="ml-auto rounded-lg p-2 text-xl leading-none text-brown-soft hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A]" aria-label="Close dialog">×</button>
-        </div>
-        <div className="mt-6">{children}</div>
-      </div>
-    </div>
-  );
-};
+export const Dialog = PortalDialog;
 
 export const TherapistIdentity: React.FC<{ session: ClientSession }> = ({ session }) => {
   const initials = session.therapist.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();

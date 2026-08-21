@@ -4,6 +4,7 @@ import type { ClientOptions, ClientProfile } from './clientPortalTypes';
 import { ErrorState, Field, PageSkeleton, PortalCard, Toast, inputClass } from './PortalUi';
 import { countryOptions, defaultPhoneCodes, timezoneOptions } from './portalOptions';
 import { useAuth } from '../../contexts/AuthContext';
+import PortalDialog from './PortalDialog';
 
 type SectionName = 'personal' | 'contact' | 'about' | 'emergency';
 
@@ -75,15 +76,11 @@ const ProfilePhotoEditor: React.FC<{ currentUrl: string; onUploaded: (url: strin
       </div>
       <div><label className="inline-flex cursor-pointer rounded-full border border-[#BDAA99] bg-white px-4 py-2.5 text-sm font-semibold text-brown-dark hover:bg-sand focus-within:ring-2 focus-within:ring-[#8C4F3A]"><input type="file" accept="image/jpeg,image/png" onChange={chooseFile} className="sr-only" />Choose photo</label><p className="mt-2 text-xs text-brown-soft">JPG or PNG, up to 5 MB</p></div>
 
-      {source && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-brown-dark/45 p-4" role="dialog" aria-modal="true" aria-labelledby="crop-title">
-        <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-          <h3 id="crop-title" className="font-serif text-2xl">Crop your photo</h3>
-          <p className="mt-2 text-sm text-brown-soft">Position your face in the circular preview and adjust the zoom.</p>
+      {source && <PortalDialog title="Crop your photo" description="Position your face in the circular preview and adjust the zoom." onClose={() => { URL.revokeObjectURL(source); setSource(''); setFile(null); }} size="max-w-md" closeDisabled={uploading} initialFocusSelector="#photoZoom">
           <div className="mx-auto mt-6 h-64 w-64 overflow-hidden rounded-full border-4 border-sand bg-[#EEE6DD]"><img src={source} alt="Profile photo crop preview" className="h-full w-full object-cover" style={{ transform: `scale(${zoom})` }} /></div>
           <label htmlFor="photoZoom" className="mt-6 block text-sm font-semibold">Zoom</label><input id="photoZoom" type="range" min="1" max="2.5" step="0.05" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} className="mt-2 w-full accent-[#8C4F3A]" />
           <div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => { URL.revokeObjectURL(source); setSource(''); setFile(null); }} className="rounded-full px-4 py-2.5 font-semibold text-brown-soft hover:bg-sand">Cancel</button><button type="button" disabled={uploading} onClick={() => void cropAndUpload()} className="rounded-full bg-[#8C4F3A] px-5 py-2.5 font-semibold text-white disabled:opacity-60">{uploading ? 'Uploading…' : 'Use this photo'}</button></div>
-        </div>
-      </div>}
+      </PortalDialog>}
     </div>
   );
 };
@@ -180,7 +177,7 @@ const ClientProfilePage: React.FC = () => {
 
       <PortalCard><h2 className="font-serif text-2xl">Account</h2><div className="mt-5 flex items-center justify-between gap-4 border-b border-sand pb-5"><div><p className="font-semibold">Password</p><p className="mt-1 text-sm text-brown-soft">Managed securely through Auth0.</p></div><button type="button" onClick={() => void resetPassword()} className="rounded-full border border-[#CDB9A8] px-4 py-2 text-sm font-semibold hover:bg-sand">Change Password</button></div><div className="mt-5 rounded-xl border border-[#E5B9B0] bg-[#FFF6F3] p-5"><h3 className="font-semibold text-[#8E392F]">Delete Account</h3><p className="mt-2 text-sm leading-6 text-[#7A4B45]">Permanently deletes your Shura profile, preferences, session records, messages, and Auth0 identity. This cannot be undone.</p><button type="button" onClick={() => setDeleteOpen(true)} className="mt-4 text-sm font-semibold text-[#A54236] underline underline-offset-4">Delete my account</button></div></PortalCard>
 
-      {deleteOpen && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-brown-dark/45 p-4" role="dialog" aria-modal="true" aria-labelledby="delete-title"><div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"><h2 id="delete-title" className="font-serif text-2xl text-[#8E392F]">Permanently delete account?</h2><p className="mt-3 text-sm leading-6 text-brown-soft">All client data associated with this account will be permanently removed. Type <strong>DELETE</strong> to confirm.</p><label htmlFor="deleteConfirmation" className="mt-5 block text-sm font-semibold">Confirmation</label><input id="deleteConfirmation" value={deleteText} onChange={(event) => setDeleteText(event.target.value)} className={inputClass} autoComplete="off" /><div className="mt-6 flex justify-end gap-3"><button type="button" onClick={() => { setDeleteOpen(false); setDeleteText(''); }} className="rounded-full px-4 py-2.5 font-semibold text-brown-soft hover:bg-sand">Keep my account</button><button type="button" disabled={deleteText !== 'DELETE' || saving} onClick={() => void deleteAccount()} className="rounded-full bg-[#A54236] px-4 py-2.5 font-semibold text-white disabled:opacity-40">{saving ? 'Deleting…' : 'Delete permanently'}</button></div></div></div>}
+      {deleteOpen && <PortalDialog title="Permanently delete account?" description="All client data associated with this account will be permanently removed. Type DELETE to confirm." onClose={() => { setDeleteOpen(false); setDeleteText(''); }} size="max-w-md" closeDisabled={saving} initialFocusSelector="#deleteConfirmation"><label htmlFor="deleteConfirmation" className="block text-sm font-semibold">Confirmation</label><input id="deleteConfirmation" value={deleteText} onChange={(event) => setDeleteText(event.target.value)} className={inputClass} autoComplete="off" /><div className="mt-6 flex justify-end gap-3"><button type="button" disabled={saving} onClick={() => { setDeleteOpen(false); setDeleteText(''); }} className="rounded-full px-4 py-2.5 font-semibold text-brown-soft hover:bg-sand disabled:opacity-40">Keep my account</button><button type="button" disabled={deleteText !== 'DELETE' || saving} onClick={() => void deleteAccount()} className="rounded-full bg-[#A54236] px-4 py-2.5 font-semibold text-white disabled:opacity-40">{saving ? 'Deleting…' : 'Delete permanently'}</button></div></PortalDialog>}
       {toast && <Toast kind={toast.kind} message={toast.message} onClose={() => setToast(null)} />}
     </div>
   );

@@ -1,27 +1,9 @@
 // db/index.js
 require('dotenv').config();
 const { Pool } = require('pg');
+const { buildConnectionConfig } = require('./connectionConfig');
 
-const sslEnabled = (process.env.DB_SSL || '').trim().toLowerCase() === 'true';
-
-// Support both DATABASE_URL (Railway/Render) and individual parameters (local)
-const connectionConfig = process.env.DATABASE_URL
-  ? {
-      connectionString: process.env.DATABASE_URL,
-      ssl: sslEnabled || process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false,
-    }
-  : {
-      user: process.env.DB_USER || 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_NAME || 'shura',
-      password: process.env.DB_PASSWORD || '',
-      port: parseInt(process.env.DB_PORT || '5432', 10),
-      ssl: sslEnabled || process.env.NODE_ENV === 'production'
-        ? { rejectUnauthorized: false }
-        : false,
-    };
+const connectionConfig = buildConnectionConfig(process.env);
 
 const pool = new Pool(connectionConfig);
 
@@ -30,7 +12,7 @@ pool.on('connect', () => {  console.log('✅ Database pool connected');
 });
 
 pool.on('error', (err) => {
-  console.error('❌ Database pool error:', err.message);
+  console.error('Database pool error', { code: err?.code || 'DATABASE_POOL_ERROR' });
 });
 
 module.exports = pool;

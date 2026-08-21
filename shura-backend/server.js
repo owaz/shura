@@ -10,6 +10,7 @@ const pool = require('./db'); // Import pool from db/index.js
 const { authenticateToken } = require('./middleware/auth');
 const { verifyAccessToken } = require('./middleware/auth');
 const { assertEmailConfiguration } = require('./utils/emailConfig');
+const { assertProductionOrigins, isAllowedOrigin } = require('./utils/originPolicy');
 
 if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
   useAzureMonitor();
@@ -26,44 +27,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 const server = http.createServer(app);
 
-const configuredOrigins = () => {
-  const envOrigins = [
-    process.env.FRONTEND_URLS,
-    process.env.FRONTEND_URL,
-    process.env.ALLOWED_ORIGINS,
-  ]
-    .filter(Boolean)
-    .flatMap((value) => value.split(',').map((origin) => origin.trim()).filter(Boolean));
-
-  return [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://localhost:3003',
-    'http://localhost:3005',
-    'http://localhost:3006',
-    ...envOrigins,
-  ];
-};
-
-const normalizeOrigin = (origin) => origin.replace(/\/+$/, '');
-const isAzureContainerAppsOrigin = (origin) =>
-  /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.azurecontainerapps\.io$/i.test(origin);
-
-const isAllowedOrigin = (origin) => {
-  if (!origin) return true;
-  const normalizedOrigin = normalizeOrigin(origin);
-
-  if (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalizedOrigin)) {
-    return true;
-  }
-
-  if (isAzureContainerAppsOrigin(normalizedOrigin)) {
-    return true;
-  }
-
-  const allowedOrigins = configuredOrigins().map(normalizeOrigin);
-  return allowedOrigins.includes(normalizedOrigin);
-};
+assertProductionOrigins();
 
 // Socket.io setup
 const io = new Server(server, {
@@ -72,7 +36,7 @@ const io = new Server(server, {
       if (isAllowedOrigin(origin)) return callback(null, true);
       return callback(new Error('CORS not allowed by server'), false);
     },
-    credentials: true,
+    credentials: false,
   }
 });
 app.set('io', io);
@@ -99,6 +63,10 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src https://api.razorpay.com https://checkout.razorpay.com https://*.auth0.com; form-action 'self' https://*.auth0.com");
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
   next();
 });
 app.use(express.json({
@@ -118,10 +86,10 @@ app.use(cors({
 
     return callback(new Error('CORS not allowed by server'), false);
   },
-  credentials: true,
+  credentials: false,
 }));
 
-console.log('✅ CORS enabled for localhost, configured env origins, and Azure Container Apps domains');
+console.log('✅ CORS enabled for explicitly configured origins and local development origins');
 
 // Rate limiting
 const limiterDefaults = { standardHeaders: true, legacyHeaders: false };
@@ -151,20 +119,22 @@ app.use('/api/newsletter', newsletterLimiter, newsletterRoutes);
 const intakeRoutes = require('./routes/intake');
 const therapistIntakeRoutes = require('./routes/therapist-intake');
 app.use('/api/intake', intakeLimiter, intakeRoutes);
-app.use('/api/therapist/intake', authenticateToken, therapistIntakeRoutes);
+app.use('/api/therapist/intake', generalLimiter, authenticateToken, therapistIntakeRoutes);
 
 const adminRoutes = require('./routes/admin');
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', generalLimiter, adminRoutes);
 
 const adminAuthRoutes = require('./routes/adminAuth');
 app.use('/api/admin/auth', authLimiter, adminAuthRoutes);
 
-// Dev routes (local-only helpers)
-try {
-  const devRoutes = require('./routes/dev');
-  app.use('/api/dev', devRoutes);
-} catch (e) {
-  console.warn('Dev routes not loaded:', e.message || e);
+// Dev routes are never composed into the production application.
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    const devRoutes = require('./routes/dev');
+    app.use('/api/dev', devRoutes);
+  } catch (_error) {
+    console.warn('Dev routes not loaded');
+  }
 }
 
 const chatRoutes = require('./routes/chats');
@@ -181,6 +151,7 @@ const bookingRoutes = require('./routes/bookings');
 if (bookingRoutes) app.use('/api/bookings', generalLimiter, bookingRoutes);
 
 const paymentRoutes = require('./routes/payments');
+app.use('/api/payments/webhook', webhookLimiter);
 if (paymentRoutes) app.use('/api/payments', paymentLimiter, paymentRoutes);
 const resendWebhookRoutes = require('./routes/resendWebhook');
 app.use('/api/webhooks/resend', webhookLimiter, resendWebhookRoutes);
@@ -208,7 +179,8 @@ app.get('/db-time', async (req, res) => {
     const r = await pool.query('SELECT NOW() AS now');
     res.json({ ok: true, db_time: r.rows[0].now });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    console.error('Database diagnostic failed', { code: err?.code || 'DB_TIME_FAILED' });
+    res.status(503).json({ ok: false, error: 'Database unavailable' });
   }
 });
 
@@ -227,7 +199,7 @@ if (process.env.NODE_ENV === 'production') {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err.message);
+  console.error('Unhandled request error', { code: err?.code || 'INTERNAL_SERVER_ERROR' });
   if (err.message === 'CORS not allowed by server') {
     return res.status(403).json({ error: { code: 'CORS_DENIED', message: 'CORS policy violation', details: null } });
   }
@@ -243,72 +215,8 @@ app.use((err, req, res, next) => {
 
 // Socket.io signaling handlers for WebRTC
 io.on('connection', (socket) => {
-  console.log(`🔌 Socket connected: ${socket.id}`);
-
   const userRoom = `user:${socket.user.role}:${socket.user.id}`;
   socket.join(userRoom);
-
-  // Therapist/Client call signaling
-  socket.on('call-offer', ({ to, offer, callType }) => {
-    console.log(`📞 Call offer from ${socket.id} to ${to} (${callType})`);
-    io.emit('call-offer', { from: socket.id, offer, callType });
-  });
-
-  socket.on('call-answer', ({ to, answer }) => {
-    console.log(`📞 Call answer from ${socket.id} to ${to}`);
-    io.emit('call-answer', { from: socket.id, answer });
-  });
-
-  socket.on('ice-candidate', ({ to, candidate }) => {
-    console.log(`🧊 ICE candidate from ${socket.id} to ${to}`);
-    io.emit('ice-candidate', { from: socket.id, candidate });
-  });
-
-  socket.on('call-end', ({ to }) => {
-    console.log(`📴 Call ended by ${socket.id} to ${to}`);
-    io.emit('call-end', { from: socket.id });
-  });
-
-  socket.on('join_call', ({ roomId }) => {
-    socket.join(roomId);
-    socket.to(roomId).emit('peer_joined', { socketId: socket.id });
-    console.log(`User ${socket.id} joined call ${roomId}`);
-  });
-
-  socket.on('leave_call', ({ roomId }) => {
-    socket.leave(roomId);
-    socket.to(roomId).emit('peer_left', { socketId: socket.id });
-    console.log(`User ${socket.id} left call ${roomId}`);
-  });
-
-  // Offer/Answer exchange (legacy)
-  socket.on('webrtc_offer', ({ roomId, sdp, to }) => {
-    if (to) {
-      socket.to(to).emit('webrtc_offer', { from: socket.id, sdp });
-    } else {
-      socket.to(roomId).emit('webrtc_offer', { from: socket.id, sdp });
-    }
-  });
-
-  socket.on('webrtc_answer', ({ roomId, sdp, to }) => {
-    if (to) {
-      socket.to(to).emit('webrtc_answer', { from: socket.id, sdp });
-    } else {
-      socket.to(roomId).emit('webrtc_answer', { from: socket.id, sdp });
-    }
-  });
-
-  socket.on('webrtc_ice_candidate', ({ roomId, candidate, to }) => {
-    if (to) {
-      socket.to(to).emit('webrtc_ice_candidate', { from: socket.id, candidate });
-    } else {
-      socket.to(roomId).emit('webrtc_ice_candidate', { from: socket.id, candidate });
-    }
-  });
-
-  socket.on('disconnect', (reason) => {
-    console.log(`🔌 Socket disconnected: ${socket.id} (${reason})`);
-  });
 });
 
 // Start server (http + socket.io)
@@ -434,7 +342,7 @@ async function runStartupMigrations() {
     // Add other lightweight migration steps here if needed in future
     console.log('✅ Startup migrations applied');
   } catch (err) {
-    console.error('Startup migration error:', err);
+    console.error('Startup compatibility check error', { code: err?.code || 'STARTUP_SCHEMA_FAILED' });
     if (process.env.NODE_ENV === 'production') {
       throw err;
     }

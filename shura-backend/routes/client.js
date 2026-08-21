@@ -13,9 +13,8 @@ const {
 } = require('../utils/clientPortalValidation');
 const {
   createPasswordChangeTicket,
-  deleteUser: deleteAuth0User,
-  setBlocked,
 } = require('../services/auth0Management');
+const { deleteClientAccount } = require('../services/clientAccountDeletion');
 const { deleteImage, getImageReadUrl, uploadImage } = require('../services/azureBlobStorage');
 const { sanitizeImageMetadata } = require('../utils/imageSanitization');
 const { toAssignedTherapist } = require('../utils/clientTherapist');
@@ -244,7 +243,7 @@ router.get('/therapist', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('GET /api/client/therapist error', err);
+    console.error('GET assigned therapist error', { code: err?.code || 'THERAPIST_LOAD_FAILED' });
     return errorResponse(res, 500, 'THERAPIST_LOAD_FAILED', 'We could not load your therapist right now.');
   }
 });
@@ -302,7 +301,7 @@ router.post('/therapist/release', sensitiveLimiter, async (req, res) => {
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('POST /api/client/therapist/release error', err);
+    console.error('Release therapist error', { code: err?.code || 'THERAPIST_RELEASE_FAILED' });
     return errorResponse(res, 500, 'THERAPIST_RELEASE_FAILED', 'We could not update your therapist assignment.');
   } finally {
     client.release();
@@ -346,7 +345,7 @@ router.get('/bootstrap', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('GET /api/client/bootstrap error', err);
+    console.error('GET client bootstrap error', { code: err?.code || 'CLIENT_BOOTSTRAP_FAILED' });
     return errorResponse(res, 500, 'CLIENT_BOOTSTRAP_FAILED', 'We could not load your portal right now.');
   }
 });
@@ -362,7 +361,7 @@ router.get('/profile', async (req, res) => {
     }
     return res.json({ data: { profile: await toProfile(profileResult.rows[0]), preferences: toPreferences(preferences) } });
   } catch (err) {
-    console.error('GET /api/client/profile error', err);
+    console.error('GET client profile error', { code: err?.code || 'CLIENT_PROFILE_FAILED' });
     return errorResponse(res, 500, 'PROFILE_LOAD_FAILED', 'We could not load your profile.');
   }
 });
@@ -377,7 +376,7 @@ router.patch('/profile', mutationLimiter, async (req, res) => {
     const profile = await updateProfile(pool, req.clientId, values);
     return res.json({ data: { profile: await toProfile(profile) } });
   } catch (err) {
-    console.error('PATCH /api/client/profile error', err);
+    console.error('PATCH client profile error', { code: err?.code || 'CLIENT_PROFILE_UPDATE_FAILED' });
     return errorResponse(res, 500, 'PROFILE_UPDATE_FAILED', 'Your changes could not be saved.');
   }
 });
@@ -400,7 +399,7 @@ router.patch('/preferences', mutationLimiter, async (req, res) => {
     const preferences = await updatePreferences(pool, req.clientId, values);
     return res.json({ data: { preferences: toPreferences(preferences) } });
   } catch (err) {
-    console.error('PATCH /api/client/preferences error', err);
+    console.error('PATCH client preferences error', { code: err?.code || 'CLIENT_PREFERENCES_FAILED' });
     return errorResponse(res, 500, 'PREFERENCES_UPDATE_FAILED', 'Your preference could not be saved.');
   }
 });
@@ -435,7 +434,7 @@ router.get('/onboarding', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('GET /api/client/onboarding error', err);
+    console.error('GET client onboarding error', { code: err?.code || 'CLIENT_ONBOARDING_FAILED' });
     return errorResponse(res, 500, 'ONBOARDING_LOAD_FAILED', 'We could not load your onboarding progress.');
   }
 });
@@ -502,7 +501,7 @@ router.patch('/onboarding', mutationLimiter, async (req, res) => {
     return res.json({ data: { currentStep: rows[0].onboarding_current_step } });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('PATCH /api/client/onboarding error', err);
+    console.error('PATCH client onboarding error', { code: err?.code || 'CLIENT_ONBOARDING_UPDATE_FAILED' });
     return errorResponse(res, 500, 'ONBOARDING_SAVE_FAILED', 'Your progress could not be saved.');
   } finally {
     client.release();
@@ -551,7 +550,7 @@ router.post('/onboarding/complete', mutationLimiter, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('POST /api/client/onboarding/complete error', err);
+    console.error('Complete client onboarding error', { code: err?.code || 'CLIENT_ONBOARDING_COMPLETE_FAILED' });
     return errorResponse(res, 500, 'ONBOARDING_COMPLETE_FAILED', 'We could not finish your setup.');
   }
 });
@@ -586,7 +585,7 @@ router.post('/profile/photo', sensitiveLimiter, uploadOnePhoto, async (req, res)
     const oldBlobName = existing.rows[0]?.profile_picture_blob_name;
     if (existing.rows[0]?.profile_picture_storage_provider === 'azure_blob' && oldBlobName && oldBlobName !== uploaded.blobName) {
       deleteImage(oldBlobName).catch((err) => {
-        console.error('Could not remove replaced Azure profile photo', err?.message || err);
+        console.error('Could not remove replaced Azure profile photo', { code: err?.code || 'IMAGE_DELETE_FAILED' });
       });
     }
     return res.json({ data: { profilePicture: uploaded.readUrl } });
@@ -594,7 +593,7 @@ router.post('/profile/photo', sensitiveLimiter, uploadOnePhoto, async (req, res)
     if (uploaded?.blobName) {
       await deleteImage(uploaded.blobName).catch(() => {});
     }
-    console.error('POST /api/client/profile/photo error', err);
+    console.error('Client profile photo error', { code: err?.code || 'PROFILE_PHOTO_FAILED' });
     return errorResponse(res, 500, 'PROFILE_PHOTO_UPLOAD_FAILED', 'Your photo could not be uploaded.');
   }
 });
@@ -605,7 +604,7 @@ router.post('/password-reset-ticket', sensitiveLimiter, async (req, res) => {
     const ticket = await createPasswordChangeTicket(req.user.sub, `${frontendUrl || 'http://localhost:3006'}/portal/profile`);
     return res.json({ data: { url: ticket.ticket } });
   } catch (err) {
-    console.error('POST /api/client/password-reset-ticket error', err);
+    console.error('Client password reset ticket error', { code: err?.code || 'PASSWORD_RESET_FAILED' });
     return errorResponse(res, 503, 'PASSWORD_RESET_UNAVAILABLE', 'Password reset is temporarily unavailable.');
   }
 });
@@ -614,30 +613,11 @@ router.delete('/account', sensitiveLimiter, async (req, res) => {
   if (req.body?.confirmation !== 'DELETE') {
     return validationError(res, { confirmation: 'Type DELETE to confirm permanent account deletion.' });
   }
-  const auth0Sub = req.user.sub;
-  let identityBlocked = false;
   try {
-    const userResult = await pool.query(
-      `SELECT profile_picture_blob_name, profile_picture_storage_provider
-       FROM users WHERE id = $1`,
-      [req.clientId]
-    );
-    await setBlocked(auth0Sub, true);
-    identityBlocked = true;
-    await pool.query('DELETE FROM users WHERE id = $1', [req.clientId]);
-    await deleteAuth0User(auth0Sub);
-    const blobName = userResult.rows[0]?.profile_picture_blob_name;
-    if (userResult.rows[0]?.profile_picture_storage_provider === 'azure_blob' && blobName) {
-      deleteImage(blobName).catch((err) => {
-        console.error('Could not remove deleted Azure profile photo', err?.message || err);
-      });
-    }
+    await deleteClientAccount({ clientId: req.clientId, auth0Sub: req.user.sub });
     return res.status(204).send();
   } catch (err) {
-    console.error('DELETE /api/client/account error', err);
-    if (!identityBlocked) {
-      return errorResponse(res, 503, 'ACCOUNT_DELETION_UNAVAILABLE', 'Account deletion is temporarily unavailable.');
-    }
+    console.error('DELETE /api/client/account error', { code: err?.code || 'ACCOUNT_DELETION_INCOMPLETE' });
     return errorResponse(
       res,
       503,

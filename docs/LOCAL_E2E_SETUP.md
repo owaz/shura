@@ -174,10 +174,24 @@ npm test
 
 ```powershell
 Set-Location shura-frontend
-npm install
+npm ci
 npm run typecheck
 npm run build
 ```
+
+### Authenticated browser and accessibility suites
+
+Playwright never stores a password in source. Sign in interactively with a synthetic Auth0 client, save browser storage only under the ignored `playwright/.auth/` directory, then pass its path explicitly:
+
+```powershell
+Set-Location shura-frontend
+npx playwright codegen --save-storage=playwright/.auth/client.json http://localhost:3006
+$env:E2E_STORAGE_STATE = "playwright/.auth/client.json"
+npm run test:e2e
+npm run test:a11y
+```
+
+The suite covers Chromium desktop, tablet, and mobile profiles, axe WCAG 2.1 A/AA checks, keyboard menus/dialogs, role routing, primary client destinations, and protected legacy-call behavior. If `E2E_STORAGE_STATE` is absent, authenticated tests are skipped; skips are useful locally but do not satisfy release acceptance. Use only seeded synthetic users. Cancellation, refund, payment, and deletion cases remain operator-confirmed destructive scenarios and must target the disposable database/test providers described above.
 
 Start the backend and frontend in separate terminals:
 

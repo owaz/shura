@@ -56,9 +56,9 @@ const RouteLoadingFallback: React.FC<{ contained?: boolean }> = ({ contained = f
   <div className={`flex items-center justify-center bg-[#FAF7F2] px-6 ${contained ? 'min-h-[50vh]' : 'min-h-screen'}`} role="status" aria-live="polite">
     <div className="w-full max-w-md rounded-2xl border border-sand bg-white p-7 shadow-[0_8px_30px_rgba(92,80,67,0.06)]">
       <span className="sr-only">Loading this page</span>
-      <div className="h-5 w-32 animate-pulse rounded-full bg-sand" aria-hidden="true" />
-      <div className="mt-5 h-3 w-full animate-pulse rounded-full bg-[#F3E9DC]" aria-hidden="true" />
-      <div className="mt-3 h-3 w-3/4 animate-pulse rounded-full bg-[#F3E9DC]" aria-hidden="true" />
+      <div className="h-5 w-32 animate-pulse rounded-full bg-sand motion-reduce:animate-none" aria-hidden="true" />
+      <div className="mt-5 h-3 w-full animate-pulse rounded-full bg-[#F3E9DC] motion-reduce:animate-none" aria-hidden="true" />
+      <div className="mt-3 h-3 w-3/4 animate-pulse rounded-full bg-[#F3E9DC] motion-reduce:animate-none" aria-hidden="true" />
     </div>
   </div>
 );

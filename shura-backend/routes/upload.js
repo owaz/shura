@@ -56,7 +56,7 @@ router.post('/photo', authenticateToken, handleSingleImageUpload, async (req, re
       storageProvider: 'azure_blob',
     });
   } catch (err) {
-    console.error('Azure Blob upload error:', err);
+    console.error('Azure Blob upload error', { code: err?.code || 'IMAGE_UPLOAD_FAILED' });
     return errorResponse(res, 500, 'IMAGE_UPLOAD_FAILED', 'The image could not be uploaded.');
   }
 });

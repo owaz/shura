@@ -9,6 +9,11 @@ const {
 } = require('../utils/emailService');
 const { syncBookingToConnectedCalendars } = require('../utils/calendarIntegrations');
 
+const requireAuthenticatedClient = (req, res, next) => {
+  if (req.user?.role !== 'client') return res.status(403).json({ error: 'Client access required' });
+  return next();
+};
+
 const toMinutes = (time) => {
   const [hours, minutes] = String(time).slice(0, 5).split(':').map(Number);
   return hours * 60 + minutes;
@@ -78,7 +83,7 @@ router.get('/therapist/availability', authenticateToken, async (req, res) => {
 
     res.json({ rules: rules.rows, blockedTimes: blockedTimes.rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load availability.' });
   }
 });
 
@@ -116,7 +121,7 @@ router.put('/therapist/availability', authenticateToken, async (req, res) => {
     res.json({ rules: rows });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to update availability.' });
   } finally {
     client.release();
   }
@@ -148,7 +153,7 @@ router.post('/therapist/blocked-times', authenticateToken, async (req, res) => {
 
     res.status(201).json({ blockedTime: rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to create blocked time.' });
   }
 });
 
@@ -171,7 +176,7 @@ router.delete('/therapist/blocked-times/:id', authenticateToken, async (req, res
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to delete blocked time.' });
   }
 });
 
@@ -228,7 +233,7 @@ router.get('/therapist/:therapistId/slots', async (req, res) => {
 
     res.json({ slots: [...new Set(slots)].sort(), requiresAvailability: false });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load available slots.' });
   }
 });
 
@@ -306,7 +311,7 @@ router.post('/', authenticateToken, async (req, res) => {
     await client.query('COMMIT');
 
     syncBookingToConnectedCalendars(booking.id).catch(err => {
-      console.error('Calendar sync error:', err);
+      console.error('Calendar sync error', { code: err?.code || 'CALENDAR_SYNC_FAILED' });
     });
     
     res.json({ booking });
@@ -315,7 +320,7 @@ router.post('/', authenticateToken, async (req, res) => {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'This time slot was just booked. Please choose another time.' });
     }
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to create booking.' });
   } finally {
     client.release();
   }
@@ -359,7 +364,7 @@ router.get('/therapist/dashboard', authenticateToken, async (req, res) => {
       upcomingAppointments: upcoming.rows,
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load the therapist dashboard.' });
   }
 });
 
@@ -396,12 +401,12 @@ router.get('/therapist/my-bookings', authenticateToken, async (req, res) => {
 
     res.json({ bookings: result.rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load therapist bookings.' });
   }
 });
 
 // Get user's bookings
-router.get('/my-bookings', authenticateToken, async (req, res) => {
+router.get('/my-bookings', authenticateToken, requireAuthenticatedClient, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT b.*, t.full_name as therapist_name, t.specialization 
@@ -414,12 +419,12 @@ router.get('/my-bookings', authenticateToken, async (req, res) => {
     
     res.json({ bookings: result.rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load bookings.' });
   }
 });
 
 // Get specific booking details
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', authenticateToken, requireAuthenticatedClient, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT b.*, t.full_name as therapist_name, t.specialization 
@@ -435,12 +440,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
     
     res.json({ booking: result.rows[0] });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to load this booking.' });
   }
 });
 
 // Cancel booking
-router.put('/:id/cancel', authenticateToken, async (req, res) => {
+router.put('/:id/cancel', authenticateToken, requireAuthenticatedClient, async (req, res) => {
   try {
     if (req.user.role !== 'client') {
       return res.status(403).json({ error: 'Client access required' });
@@ -492,7 +497,7 @@ router.put('/:id/cancel', authenticateToken, async (req, res) => {
       client.release();
     }
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Unable to cancel this booking.' });
   }
 });
 

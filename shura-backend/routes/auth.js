@@ -9,6 +9,7 @@ const {
 } = require('../utils/emailService');
 const { autoAssignTherapist } = require('../utils/matchingService');
 const { authenticateToken } = require('../middleware/auth');
+const { requireClient } = require('../middleware/requireClient');
 const { deleteImage, getCanonicalImageUrl, getImageReadUrl } = require('../services/azureBlobStorage');
 const { CSRF_COOKIE, REFRESH_COOKIE, clearAuthCookies, createSession, parseCookies, revokeSession, rotateSession } = require('../utils/sessionAuth');
 const { isPlaceholderFullName, normalizeSignupFullName } = require('../utils/signupProfile');
@@ -178,7 +179,7 @@ router.get('/session', authenticateToken, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('GET /session error', err);
+    console.error('GET session error', { code: err?.code || 'SESSION_FAILED' });
     return res.status(500).json({
       error: {
         code: 'SESSION_LOOKUP_FAILED',
@@ -245,7 +246,7 @@ router.post('/signup-profile', authenticateToken, async (req, res) => {
     const latest = await pool.query('SELECT full_name FROM users WHERE id = $1', [req.user.id]);
     return res.json({ data: { applied: false, fullName: latest.rows[0]?.full_name || '' } });
   } catch (err) {
-    console.error('POST /signup-profile error', err);
+    console.error('POST signup profile error', { code: err?.code || 'SIGNUP_PROFILE_FAILED' });
     return res.status(500).json({
       error: {
         code: 'SIGNUP_PROFILE_UPDATE_FAILED',
@@ -268,7 +269,7 @@ router.post('/logout', async (req, res) => {
 
 // --- Profile routes for clients ---
 // Get current user's profile
-router.get('/profile', authenticateToken, async (req, res) => {
+router.get('/profile', requireClient, async (req, res) => {
   try {
     const userId = req.user.id;
     const { rows } = await pool.query('SELECT id, email, full_name, phone, dob, profile_picture, profile_picture_blob_name, profile_picture_storage_provider, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications, created_at FROM users WHERE id = $1', [userId]);
@@ -279,8 +280,8 @@ router.get('/profile', authenticateToken, async (req, res) => {
     }
     return res.json({ user });
   } catch (err) {
-    console.error('GET /profile error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('GET profile error', { code: err?.code || 'PROFILE_FAILED' });
+    return res.status(500).json({ error: 'Unable to load the profile.' });
   }
 });
 
@@ -298,8 +299,8 @@ router.get('/therapists', async (req, res) => {
 
     return res.json({ therapists: await Promise.all(rows.map(therapistToPublic)) });
   } catch (err) {
-    console.error('GET /therapists error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('GET therapists error', { code: err?.code || 'THERAPISTS_FAILED' });
+    return res.status(500).json({ error: 'Unable to load therapists.' });
   }
 });
 
@@ -321,8 +322,8 @@ router.get('/therapists/:id', async (req, res) => {
 
     return res.json({ therapist: await therapistToPublic(rows[0]) });
   } catch (err) {
-    console.error('GET /therapists/:id error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('GET therapist error', { code: err?.code || 'THERAPIST_FAILED' });
+    return res.status(500).json({ error: 'Unable to load this therapist.' });
   }
 });
 
@@ -351,8 +352,8 @@ router.get('/therapist/profile', authenticateToken, async (req, res) => {
       therapist: await therapistToPublic(rows[0]),
     });
   } catch (err) {
-    console.error('GET /therapist/profile error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('GET therapist profile error', { code: err?.code || 'THERAPIST_PROFILE_FAILED' });
+    return res.status(500).json({ error: 'Unable to load the therapist profile.' });
   }
 });
 
@@ -440,7 +441,7 @@ router.put('/therapist/profile', authenticateToken, async (req, res) => {
 
     const previousBlobName = existingImage.rows[0]?.profile_image_blob_name;
     if (existingImage.rows[0]?.profile_image_storage_provider === 'azure_blob' && previousBlobName && previousBlobName !== nextBlobName) {
-      deleteImage(previousBlobName).catch((err) => console.error('Could not remove replaced therapist image', err?.message || err));
+      deleteImage(previousBlobName).catch((err) => console.error('Could not remove replaced therapist image', { code: err?.code || 'IMAGE_DELETE_FAILED' }));
     }
 
     if (!rows.length) {
@@ -453,13 +454,13 @@ router.put('/therapist/profile', authenticateToken, async (req, res) => {
       therapist: await therapistToPublic(rows[0]),
     });
   } catch (err) {
-    console.error('PUT /therapist/profile error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('PUT therapist profile error', { code: err?.code || 'THERAPIST_PROFILE_UPDATE_FAILED' });
+    return res.status(500).json({ error: 'Unable to update the therapist profile.' });
   }
 });
 
 // Update current user's profile
-router.put('/profile', authenticateToken, async (req, res) => {
+router.put('/profile', requireClient, async (req, res) => {
   try {
     const userId = req.user.id;
     const { full_name, phone, dob, display_name, bio, spiritual_integration, preferred_language, timezone, focus_areas, email_notifications, sms_notifications } = req.body;
@@ -474,8 +475,8 @@ router.put('/profile', authenticateToken, async (req, res) => {
     }
     return res.json({ user });
   } catch (err) {
-    console.error('PUT /profile error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('PUT profile error', { code: err?.code || 'PROFILE_UPDATE_FAILED' });
+    return res.status(500).json({ error: 'Unable to update the profile.' });
   }
 });
 
@@ -507,13 +508,13 @@ router.post('/dev/create-test-user', async (req, res) => {
 
     return res.json({ user, token, password: devPassword });
   } catch (err) {
-    console.error('DEV create-test-user error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('DEV create-test-user error', { code: err?.code || 'DEV_USER_FAILED' });
+    return res.status(500).json({ error: 'Unable to create the development user.' });
   }
 });
 
 // Save questionnaire responses
-router.post('/questionnaire', authenticateToken, async (req, res) => {
+router.post('/questionnaire', requireClient, async (req, res) => {
   try {
     if (req.user.role !== 'client') {
       return res.status(403).json({ error: 'Client access required' });
@@ -565,8 +566,8 @@ router.post('/questionnaire', authenticateToken, async (req, res) => {
         : null,
     });
   } catch (err) {
-    console.error('Questionnaire error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('Questionnaire error', { code: err?.code || 'QUESTIONNAIRE_SUBMISSION_FAILED' });
+    return res.status(500).json({ error: 'Unable to submit the questionnaire.' });
   }
 });
 
@@ -616,8 +617,8 @@ router.post('/login', async (req, res) => {
       }
     ));
   } catch (err) {
-    console.error('AUTH login error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('AUTH login error', { code: err?.code || 'LOGIN_FAILED' });
+    return res.status(500).json({ error: 'Unable to sign in.' });
   }
 });
 
@@ -646,7 +647,7 @@ router.post('/request-password-reset', async (req, res) => {
       ...(process.env.NODE_ENV === 'production' ? {} : { token })
     });
   } catch (err) {
-    console.error('request-password-reset error', err);
+    console.error('Password reset request error', { code: err?.code || 'PASSWORD_RESET_REQUEST_FAILED' });
     return res.status(500).json({ error: 'Unable to request password reset' });
   }
 });
@@ -689,7 +690,7 @@ router.post('/reset-password', async (req, res) => {
     return res.json({ message: 'Password updated successfully' });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('reset-password error', err);
+    console.error('Password reset error', { code: err?.code || 'PASSWORD_RESET_FAILED' });
     return res.status(500).json({ error: 'Unable to reset password' });
   } finally {
     client.release();
@@ -811,8 +812,8 @@ router.post('/therapist/application', authenticateToken, async (req, res) => {
       therapist: rows[0],
     });
   } catch (err) {
-    console.error('POST /therapist/application error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('Therapist application error', { code: err?.code || 'THERAPIST_APPLICATION_FAILED' });
+    return res.status(500).json({ error: 'Unable to submit the therapist application.' });
   }
 });
 
@@ -865,14 +866,14 @@ router.post('/therapist/login', async (req, res) => {
       }
     ));
   } catch (err) {
-    console.error('THERAPIST login error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('THERAPIST login error', { code: err?.code || 'THERAPIST_LOGIN_FAILED' });
+    return res.status(500).json({ error: 'Unable to sign in.' });
   }
 });
 
 // --- Reflection routes ---
 // Save reflection
-router.post('/reflection', authenticateToken, async (req, res) => {
+router.post('/reflection', requireClient, async (req, res) => {
   try {
     const userId = req.user.id;
     const { reflection_text } = req.body;
@@ -888,13 +889,13 @@ router.post('/reflection', authenticateToken, async (req, res) => {
     
     return res.json({ reflection: rows[0], message: 'Reflection saved successfully' });
   } catch (err) {
-    console.error('POST /reflection error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('POST reflection error', { code: err?.code || 'REFLECTION_CREATE_FAILED' });
+    return res.status(500).json({ error: 'Unable to save the reflection.' });
   }
 });
 
 // Get reflections for current user
-router.get('/reflections', authenticateToken, async (req, res) => {
+router.get('/reflections', requireClient, async (req, res) => {
   try {
     const userId = req.user.id;
     const { rows } = await pool.query(
@@ -904,13 +905,13 @@ router.get('/reflections', authenticateToken, async (req, res) => {
     
     return res.json({ reflections: rows });
   } catch (err) {
-    console.error('GET /reflections error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('GET reflections error', { code: err?.code || 'REFLECTIONS_FAILED' });
+    return res.status(500).json({ error: 'Unable to load reflections.' });
   }
 });
 
 // Delete reflection
-router.delete('/reflection/:id', authenticateToken, async (req, res) => {
+router.delete('/reflection/:id', requireClient, async (req, res) => {
   try {
     const userId = req.user.id;
     const reflectionId = req.params.id;
@@ -926,8 +927,8 @@ router.delete('/reflection/:id', authenticateToken, async (req, res) => {
     
     return res.json({ message: 'Reflection deleted successfully' });
   } catch (err) {
-    console.error('DELETE /reflection error', err);
-    return res.status(500).json({ error: err.message });
+    console.error('DELETE reflection error', { code: err?.code || 'REFLECTION_DELETE_FAILED' });
+    return res.status(500).json({ error: 'Unable to delete the reflection.' });
   }
 });
 

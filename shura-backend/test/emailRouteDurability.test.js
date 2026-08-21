@@ -58,7 +58,7 @@ test('questionnaire submission fails when durable email intent cannot be queued'
   }, res);
 
   assert.equal(res.statusCode, 500);
-  assert.equal(res.body.error, 'outbox unavailable');
+  assert.equal(res.body.error, 'Unable to submit the questionnaire.');
 });
 
 test('legacy booking cancellation queues both emails in the cancellation transaction', async () => {

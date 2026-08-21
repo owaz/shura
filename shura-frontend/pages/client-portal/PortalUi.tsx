@@ -12,16 +12,26 @@ export const Field: React.FC<React.PropsWithChildren<{
   hint?: string;
   error?: string;
   required?: boolean;
-}>> = ({ label, htmlFor, hint, error, required, children }) => (
-  <div>
+}>> = ({ label, htmlFor, hint, error, required, children }) => {
+  const descriptionIds = [hint && `${htmlFor}-hint`, error && `${htmlFor}-error`].filter(Boolean).join(' ') || undefined;
+  const describedChildren = React.Children.map(children, (child) => {
+    if (!React.isValidElement<Record<string, unknown>>(child) || typeof child.type !== 'string' || !['input', 'select', 'textarea'].includes(child.type)) return child;
+    const existingDescription = String(child.props['aria-describedby'] || '').trim();
+    return React.cloneElement(child, {
+      'aria-describedby': [existingDescription, descriptionIds].filter(Boolean).join(' ') || undefined,
+      'aria-invalid': error ? true : undefined,
+      'aria-required': required || undefined,
+    });
+  });
+  return <div>
     <label htmlFor={htmlFor} className="block text-sm font-semibold text-brown-dark">
       {label}{required && <span className="ml-1 text-[#A75035]" aria-hidden="true">*</span>}
     </label>
     {hint && <p id={`${htmlFor}-hint`} className="mt-1 text-sm leading-5 text-brown-soft">{hint}</p>}
-    {children}
+    {describedChildren}
     {error && <p id={`${htmlFor}-error`} className="mt-1.5 text-sm text-[#A54236]" role="alert">{error}</p>}
-  </div>
-);
+  </div>;
+};
 
 export const ErrorState: React.FC<{ message?: string; onRetry: () => void }> = ({ message = 'Something went wrong — please try again.', onRetry }) => (
   <PortalCard className="mx-auto max-w-xl text-center">
@@ -34,7 +44,7 @@ export const ErrorState: React.FC<{ message?: string; onRetry: () => void }> = (
 export const PageSkeleton: React.FC = () => (
   <div className="space-y-5" aria-label="Loading" role="status">
     <span className="sr-only">Loading your information</span>
-    {[1, 2].map((item) => <div key={item} className="h-48 animate-pulse rounded-2xl border border-sand bg-white/80"><div className="m-7 h-4 w-1/3 rounded bg-sand" /><div className="m-7 h-3 w-2/3 rounded bg-sand" /></div>)}
+    {[1, 2].map((item) => <div key={item} className="h-48 animate-pulse rounded-2xl border border-sand bg-white/80 motion-reduce:animate-none"><div className="m-7 h-4 w-1/3 rounded bg-sand" /><div className="m-7 h-3 w-2/3 rounded bg-sand" /></div>)}
   </div>
 );
 

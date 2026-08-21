@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clientPortalApi, PortalApiError } from './clientPortalApi';
 import type { ClientSession, ClientSessionReceipt, Pagination, SessionAvailability } from './clientPortalTypes';
 import { ErrorState, PageSkeleton, PortalCard, Toast, inputClass } from './PortalUi';
+import PortalDialog from './PortalDialog';
 
 type SessionTab = 'upcoming' | 'past' | 'cancelled';
 type ToastState = { kind: 'success' | 'error' | 'info'; message: string } | null;
@@ -59,37 +60,7 @@ const statusDetails: Record<string, { label: string; classes: string }> = {
 
 const sessionTypeLabel = (type: string) => type === 'audio' ? 'Audio Only' : type === 'text' ? 'Text Session' : 'Video Session';
 
-const Dialog: React.FC<React.PropsWithChildren<{ title: string; description?: string; onClose: () => void; size?: string }>> = ({ title, description, onClose, size = 'max-w-2xl', children }) => {
-  const panel = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  const descriptionId = useId();
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    panel.current?.querySelector<HTMLElement>('button, [href], input, textarea, select')?.focus();
-    return () => previous?.focus();
-  }, []);
-  const handleKeys = (event: React.KeyboardEvent) => {
-    if (event.key === 'Escape') onClose();
-    if (event.key !== 'Tab' || !panel.current) return;
-    const focusable = [...panel.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled])')];
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  };
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-brown-dark/45 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={description ? descriptionId : undefined} onKeyDown={handleKeys} className={`max-h-[92vh] w-full overflow-y-auto rounded-2xl border border-[#E4D6C9] bg-[#FAF7F2] p-5 shadow-2xl md:p-7 ${size}`}>
-        <div className="flex items-start gap-4">
-          <div><h2 id={titleId} className="font-serif text-2xl font-semibold text-brown-dark">{title}</h2>{description && <p id={descriptionId} className="mt-2 text-sm leading-6 text-brown-soft">{description}</p>}</div>
-          <button type="button" onClick={onClose} className="ml-auto rounded-lg p-2 text-xl leading-none text-brown-soft hover:bg-sand" aria-label="Close dialog">×</button>
-        </div>
-        <div className="mt-6">{children}</div>
-      </div>
-    </div>
-  );
-};
+const Dialog = PortalDialog;
 
 const TherapistIdentity: React.FC<{ session: ClientSession }> = ({ session }) => {
   const initials = session.therapist.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
@@ -149,7 +120,7 @@ const RescheduleDialog: React.FC<{ session: ClientSession; onClose: () => void; 
 
   return (
     <Dialog title="Reschedule your session" description={`Times are shown in ${timezoneName(session.scheduledAt, session.clientTimezone)}.`} onClose={onClose}>
-      {loading && <div className="space-y-3" role="status"><span className="sr-only">Loading available times</span><div className="h-12 animate-pulse rounded-xl bg-sand" /><div className="h-32 animate-pulse rounded-xl bg-sand" /></div>}
+      {loading && <div className="space-y-3" role="status"><span className="sr-only">Loading available times</span><div className="h-12 animate-pulse rounded-xl bg-sand motion-reduce:animate-none" /><div className="h-32 animate-pulse rounded-xl bg-sand motion-reduce:animate-none" /></div>}
       {!loading && error && <div className="rounded-xl border border-[#D5A59C] bg-[#FFF0ED] p-4 text-sm text-[#8D352D]" role="alert">{error}</div>}
       {!loading && !error && !days.length && <div className="rounded-xl border border-sand bg-white p-6 text-center"><p className="font-semibold text-brown-dark">No available times in the next two weeks</p><p className="mt-2 text-sm text-brown-soft">Please keep your current session or try again later.</p></div>}
       {!loading && !error && days.length > 0 && !confirming && <>

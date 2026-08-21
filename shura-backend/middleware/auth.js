@@ -4,6 +4,11 @@ const { getAuth0Config, getClaim } = require('../config/auth0');
 const { errorResponse } = require('../utils/apiResponse');
 
 const roleValues = new Set(['client', 'therapist', 'admin']);
+const allowedStatuses = {
+  client: new Set(['active']),
+  therapist: new Set(['approved']),
+  admin: new Set(['active']),
+};
 let jwks;
 let auth0Config;
 
@@ -24,9 +29,15 @@ const getJwks = () => {
 
 const resolveRoleAndStatus = (payload) => {
   const config = auth0Config || getAuth0Config();
-  // Default to 'client' when no role claim is present (e.g. Post-Login Action not yet deployed)
-  const role = String(getClaim(payload, config, 'role') || 'client').toLowerCase();
-  const status = String(getClaim(payload, config, 'status') || 'active').toLowerCase();
+  const roleClaim = getClaim(payload, config, 'role');
+  const statusClaim = getClaim(payload, config, 'status');
+  if (!roleClaim || !statusClaim) {
+    throw new Error('Token missing required role or status claim');
+  }
+  const role = String(roleClaim).trim().toLowerCase();
+  const status = String(statusClaim).trim().toLowerCase();
+  if (!roleValues.has(role)) throw new Error('Token contains an unsupported role claim');
+  if (!allowedStatuses[role]?.has(status)) throw new Error('Token role is not active');
   return { role, status };
 };
 
@@ -44,7 +55,7 @@ const ensureLocalIdentity = async ({ sub, email, role, status, payload }) => {
   // email is required to create a new user record; existing users can be found by sub alone
   if (role === 'client') {
     const { rows } = await pool.query(
-      `SELECT id, email, full_name, status, auth0_sub
+      `SELECT id, email, full_name, status, auth0_sub, account_deletion_requested_at
        FROM users
        WHERE auth0_sub = $1 OR (LOWER(email) = $2 AND $2 <> '')
        ORDER BY id ASC
@@ -53,16 +64,17 @@ const ensureLocalIdentity = async ({ sub, email, role, status, payload }) => {
     );
     if (rows.length) {
       const existing = rows[0];
+      if (existing.account_deletion_requested_at) throw new Error('Account deletion is pending');
+      if (existing.status && existing.status !== 'active') throw new Error('Local client account is not active');
       await pool.query(
         `UPDATE users
          SET auth0_sub = COALESCE(auth0_sub, $1),
-             status = COALESCE($2, status),
-             full_name = COALESCE(NULLIF(full_name, ''), $3),
+             full_name = COALESCE(NULLIF(full_name, ''), $2),
              updated_at = NOW()
-         WHERE id = $4`,
-        [sub, status || 'active', defaultDisplayName(payload), existing.id]
+         WHERE id = $3`,
+        [sub, defaultDisplayName(payload), existing.id]
       );
-      return { id: existing.id, email: existing.email, role: 'client', status: status || existing.status || 'active', sub };
+      return { id: existing.id, email: existing.email, role: 'client', status: existing.status || 'active', sub };
     }
 
     if (!normalizedEmail) throw new Error('Cannot create user: email missing from token');
@@ -86,16 +98,16 @@ const ensureLocalIdentity = async ({ sub, email, role, status, payload }) => {
     );
     if (rows.length) {
       const existing = rows[0];
+      if (existing.status && existing.status !== 'approved') throw new Error('Local therapist account is not approved');
       await pool.query(
         `UPDATE therapists
          SET auth0_sub = COALESCE(auth0_sub, $1),
-             status = COALESCE($2, status),
-             full_name = COALESCE(NULLIF(full_name, ''), $3),
+             full_name = COALESCE(NULLIF(full_name, ''), $2),
              updated_at = NOW()
-         WHERE id = $4`,
-        [sub, status || 'pending', defaultDisplayName(payload), existing.id]
+         WHERE id = $3`,
+        [sub, defaultDisplayName(payload), existing.id]
       );
-      return { id: existing.id, email: existing.email, role: 'therapist', status: status || existing.status || 'pending', sub };
+      return { id: existing.id, email: existing.email, role: 'therapist', status: existing.status || 'approved', sub };
     }
 
     if (!normalizedEmail) throw new Error('Cannot create therapist: email missing from token');
@@ -147,7 +159,6 @@ const verifyAccessToken = async (token) => {
     audience: config.audience,
   });
   const { role, status } = resolveRoleAndStatus(payload);
-  const validRole = roleValues.has(role) ? role : 'client';
   const sub = String(payload.sub || '').trim();
   if (!sub) {
     throw new Error('Token missing subject claim');
@@ -157,7 +168,7 @@ const verifyAccessToken = async (token) => {
   const email = String(
     getClaim(payload, config2, 'email') || payload.email || ''
   ).trim();
-  const localIdentity = await ensureLocalIdentity({ sub, email, role: validRole, status, payload });
+  const localIdentity = await ensureLocalIdentity({ sub, email, role, status, payload });
   return {
     ...payload,
     ...localIdentity,
@@ -174,7 +185,7 @@ const authenticateToken = async (req, res, next) => {
     req.authSource = 'bearer';
     return next();
   } catch (err) {
-    console.error('[auth] token verification failed:', err?.message || err);
+    console.error('[auth] token verification failed', { code: err?.code || 'TOKEN_VERIFICATION_FAILED' });
     return errorResponse(res, 401, 'INVALID_ACCESS_TOKEN', 'Your access token is invalid or has expired.');
   }
 };
@@ -195,4 +206,4 @@ const requireAdmin = async (req, res, next) => {
   }
 };
 
-module.exports = { authenticateToken, requireAdmin, verifyAccessToken };
+module.exports = { authenticateToken, requireAdmin, resolveRoleAndStatus, verifyAccessToken };

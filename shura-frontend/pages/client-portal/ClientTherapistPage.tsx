@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { clientPortalApi } from './clientPortalApi';
 import type { AssignedTherapist } from './clientPortalTypes';
 import { ErrorState, PageSkeleton, PortalCard, Toast } from './PortalUi';
+import PortalDialog from './PortalDialog';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -57,32 +58,16 @@ const ReleaseDialog: React.FC<{
   submitting: boolean;
   onCancel: () => void;
   onConfirm: () => void;
-}> = ({ therapistName, submitting, onCancel, onConfirm }) => {
-  const cancelButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    cancelButton.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !submitting) onCancel();
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onCancel, submitting]);
-
-  return (
-    <div className="fixed inset-0 z-[90] grid place-items-center bg-[#332B25]/45 px-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !submitting) onCancel(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="release-title" aria-describedby="release-description" className="w-full max-w-lg rounded-2xl border border-[#E2D5C9] bg-[#FFFCF8] p-6 shadow-2xl md:p-8">
+}> = ({ therapistName, submitting, onCancel, onConfirm }) => (
+    <PortalDialog title="Request a different therapist?" description={`Your assignment with ${therapistName} will end, and they will be notified. You’ll then be able to browse or be matched with another therapist.`} onClose={onCancel} size="max-w-lg" closeDisabled={submitting} initialFocusSelector="[data-release-cancel]">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#9B5B43]">Before you continue</p>
-        <h2 id="release-title" className="mt-2 font-serif text-3xl font-semibold text-brown-dark">Request a different therapist?</h2>
-        <p id="release-description" className="mt-4 leading-7 text-brown-soft">Your assignment with {therapistName} will end, and they will be notified. You’ll then be able to browse or be matched with another therapist.</p>
         <p className="mt-4 rounded-xl border border-[#E5D7C9] bg-[#F8F1E9] px-4 py-3 text-sm leading-6 text-brown-soft">Existing session records are kept according to Shura’s care and cancellation policies.</p>
         <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button ref={cancelButton} type="button" disabled={submitting} onClick={onCancel} className="rounded-full border border-[#BDAA98] px-5 py-2.5 font-semibold text-brown-dark hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2 disabled:opacity-50">Keep My Therapist</button>
+          <button data-release-cancel type="button" disabled={submitting} onClick={onCancel} className="rounded-full border border-[#BDAA98] px-5 py-2.5 font-semibold text-brown-dark hover:bg-white focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2 disabled:opacity-50">Keep My Therapist</button>
           <button type="button" disabled={submitting} onClick={onConfirm} className="rounded-full bg-[#8C4F3A] px-5 py-2.5 font-semibold text-white hover:bg-[#74402F] focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60">{submitting ? 'Updating…' : 'Request Different Therapist'}</button>
         </div>
-      </section>
-    </div>
-  );
-};
+    </PortalDialog>
+);
 
 const ClientTherapistPage: React.FC = () => {
   const navigate = useNavigate();

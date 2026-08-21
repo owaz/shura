@@ -42,13 +42,13 @@ const startEmailWorker = ({
         try {
           await processOutbox();
         } catch (error) {
-          console.error('Email outbox worker failed:', error.message);
+          console.error('Email outbox worker failed', { code: error?.code || 'EMAIL_WORKER_FAILED' });
         }
       }
       try {
         await purgeData();
       } catch (error) {
-        console.error('Email retention cleanup failed:', error.message);
+        console.error('Email retention cleanup failed', { code: error?.code || 'EMAIL_RETENTION_FAILED' });
       }
     })()
       .finally(() => {
