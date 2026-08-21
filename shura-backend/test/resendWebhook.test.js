@@ -84,6 +84,32 @@ test('accepts a signed delivery event in one transaction', async () => {
   assert.equal(queries.at(-1).sql, 'COMMIT');
 });
 
+test('records a signed provider failure as dead in the webhook transaction', async () => {
+  const queries = [];
+  pool.connect = async () => ({
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (/INSERT INTO email_webhook_events/.test(sql)) return { rowCount: 1 };
+      if (/SELECT id, status/.test(sql)) {
+        return { rows: [{ id: 9, status: 'accepted', provider_event_at: null }] };
+      }
+      return { rowCount: 1, rows: [] };
+    },
+    release() {},
+  });
+  const res = response();
+
+  await handler(signedRequest({
+    type: 'email.failed',
+    data: { email_id: 're_msg_failed' },
+  }), res);
+
+  assert.equal(res.statusCode, 200);
+  const stateUpdate = queries.find(({ sql }) => /SET status = \$1/.test(sql));
+  assert.equal(stateUpdate.params[0], 'dead');
+  assert.equal(queries.at(-1).sql, 'COMMIT');
+});
+
 test('acknowledges a duplicate event without applying it twice', async () => {
   const queries = [];
   pool.connect = async () => ({

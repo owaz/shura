@@ -98,7 +98,37 @@ test('rejects a provider event older than the current state', async () => {
   assert.equal(queries.length, 1);
 });
 
-test('reconciles a webhook received before provider acceptance is recorded', async () => {
+test('maps a provider failure event to dead', async () => {
+  const queries = [];
+  const queryable = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (/SELECT id, status/.test(sql)) {
+        return {
+          rows: [{
+            id: 4,
+            status: 'accepted',
+            provider_event_at: null,
+          }],
+        };
+      }
+      return { rowCount: 1, rows: [] };
+    },
+  };
+
+  const result = await applyDeliveryEvent(
+    queryable,
+    're_123',
+    'email.failed',
+    '2026-08-21T12:00:00.000Z'
+  );
+
+  assert.deepEqual(result, { applied: true, status: 'dead' });
+  assert.equal(queries[1].params[0], 'dead');
+  assert.match(queries[1].sql, /terminal delivery failure/);
+});
+
+test('reconciles an early provider failure after acceptance is recorded', async () => {
   const queries = [];
   const client = {
     async query(sql, params) {
@@ -106,7 +136,7 @@ test('reconciles a webhook received before provider acceptance is recorded', asy
       if (/SELECT event_type/.test(sql)) {
         return {
           rows: [{
-            event_type: 'email.delivered',
+            event_type: 'email.failed',
             provider_event_at: new Date('2026-08-21T12:00:00.000Z'),
           }],
         };
@@ -130,7 +160,7 @@ test('reconciles a webhook received before provider acceptance is recorded', asy
 
   assert.match(queries[1].sql, /status = 'accepted'/);
   assert.match(queries[4].sql, /SET status = \$1/);
-  assert.equal(queries[4].params[0], 'delivered');
+  assert.equal(queries[4].params[0], 'dead');
   assert.equal(queries.at(-1).sql, 'COMMIT');
 });
 

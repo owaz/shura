@@ -5,8 +5,7 @@ const { authenticateToken } = require('../middleware/auth');
 const { 
   sendBookingConfirmation, 
   sendBookingNotificationToTherapist,
-  sendCancellationConfirmation,
-  sendCancellationNotificationToTherapist 
+  sendSessionCancellationNotifications,
 } = require('../utils/emailService');
 const { syncBookingToConnectedCalendars } = require('../utils/calendarIntegrations');
 
@@ -443,45 +442,55 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Cancel booking
 router.put('/:id/cancel', authenticateToken, async (req, res) => {
   try {
-    // Get booking details before cancelling
-    const bookingResult = await pool.query(
-      `SELECT b.*, u.full_name as client_name, u.email as client_email, 
-              t.full_name as therapist_name, t.email as therapist_email
-       FROM bookings b
-       JOIN users u ON b.user_id = u.id
-       JOIN therapists t ON b.therapist_id = t.id
-       WHERE b.id = $1 AND b.user_id = $2`,
-      [req.params.id, req.user.id]
-    );
-    
-    if (bookingResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Booking not found' });
+    if (req.user.role !== 'client') {
+      return res.status(403).json({ error: 'Client access required' });
     }
-    
-    const booking = bookingResult.rows[0];
-    
-    // Update booking status
-    const result = await pool.query(
-      'UPDATE bookings SET status = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
-      ['cancelled', req.params.id, req.user.id]
-    );
-    
-    // Send cancellation emails
-    const emailData = {
-      bookingId: booking.id,
-      clientId: booking.user_id,
-      clientName: booking.client_name,
-      clientEmail: booking.client_email,
-      therapistName: booking.therapist_name,
-      therapistEmail: booking.therapist_email,
-      date: booking.date,
-      time: booking.time,
-    };
-    
-    sendCancellationConfirmation(emailData).catch(err => console.error('Email error:', err));
-    sendCancellationNotificationToTherapist(emailData).catch(err => console.error('Email error:', err));
-    
-    res.json({ booking: result.rows[0] });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const bookingResult = await client.query(
+        `SELECT b.*, u.full_name as client_name, u.email as client_email,
+                t.full_name as therapist_name, t.email as therapist_email
+         FROM bookings b
+         JOIN users u ON b.user_id = u.id
+         JOIN therapists t ON b.therapist_id = t.id
+         WHERE b.id = $1 AND b.user_id = $2
+         FOR UPDATE OF b`,
+        [req.params.id, req.user.id]
+      );
+
+      if (bookingResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Booking not found' });
+      }
+
+      const booking = bookingResult.rows[0];
+      const result = await client.query(
+        'UPDATE bookings SET status = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+        ['cancelled', req.params.id, req.user.id]
+      );
+      const bookingDate = booking.date instanceof Date
+        ? booking.date.toISOString().slice(0, 10)
+        : String(booking.date).slice(0, 10);
+      const emailResult = await sendSessionCancellationNotifications({
+        ...booking,
+        bookingId: booking.id,
+        scheduledAt: `${bookingDate}T${String(booking.time).slice(0, 8)}+05:30`,
+        clientTimezone: 'Asia/Kolkata',
+        refundEligible: false,
+      }, client);
+      if (!emailResult.success) {
+        throw new Error(emailResult.error || 'Cancellation emails could not be queued');
+      }
+
+      await client.query('COMMIT');
+      return res.json({ booking: result.rows[0] });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

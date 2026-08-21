@@ -12,16 +12,23 @@ test.afterEach(() => {
   }
 });
 
-test('does not claim messages when the worker is paused', () => {
+test('continues retention cleanup without claiming messages when paused', async () => {
   process.env.EMAIL_OUTBOX_WORKER_ENABLED = 'false';
-  let called = false;
+  let processed = false;
+  let purged = false;
 
   const controller = startEmailWorker({
-    processOutbox: async () => { called = true; },
+    processOutbox: async () => { processed = true; },
+    purgeData: async () => { purged = true; },
+    setIntervalFn: () => ({ unref() {} }),
+    clearIntervalFn: () => {},
   });
 
-  assert.equal(controller, null);
-  assert.equal(called, false);
+  await new Promise(setImmediate);
+  assert.ok(controller);
+  assert.equal(processed, false);
+  assert.equal(purged, true);
+  await controller.stop();
 });
 
 test('processes immediately and drains the in-flight batch on stop', async () => {
@@ -36,6 +43,7 @@ test('processes immediately and drains the in-flight batch on stop', async () =>
       batchStarted = true;
       await new Promise((resolve) => { resolveBatch = resolve; });
     },
+    purgeData: async () => {},
     setIntervalFn: () => {
       const timer = { unref() {} };
       timers.push(timer);

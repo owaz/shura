@@ -34,10 +34,12 @@ test('rejects invalid sender and worker values', () => {
   const errors = emailConfigurationErrors({
     ...valid,
     RESEND_FROM_EMAIL: 'invalid',
+    ADMIN_EMAIL: 'invalid',
     EMAIL_OUTBOX_WORKER_ENABLED: 'yes',
   });
 
   assert.ok(errors.includes('RESEND_FROM_EMAIL must be a valid email address'));
+  assert.ok(errors.includes('ADMIN_EMAIL must be a valid email address'));
   assert.ok(errors.includes('EMAIL_OUTBOX_WORKER_ENABLED must be true or false'));
 });
 

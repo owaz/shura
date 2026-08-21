@@ -22,25 +22,35 @@ const processEmailOutbox = async () => {
     if (result.success) await markAccepted(message.id, result.messageId);
     else await markFailed(message.id, result, message.attempts);
   }
-  await purgeExpiredEmailData();
   return messages.length;
 };
 
 const startEmailWorker = ({
   processOutbox = processEmailOutbox,
+  purgeData = purgeExpiredEmailData,
   setIntervalFn = setInterval,
   clearIntervalFn = clearInterval,
 } = {}) => {
-  if (process.env.EMAIL_OUTBOX_WORKER_ENABLED !== 'true') return null;
+  const deliveryEnabled = process.env.EMAIL_OUTBOX_WORKER_ENABLED === 'true';
   let stopping = false;
   let currentRun = null;
 
   const run = () => {
     if (stopping || currentRun) return currentRun;
-    currentRun = processOutbox()
-      .catch((error) => {
-        console.error('Email outbox worker failed:', error.message);
-      })
+    currentRun = (async () => {
+      if (deliveryEnabled) {
+        try {
+          await processOutbox();
+        } catch (error) {
+          console.error('Email outbox worker failed:', error.message);
+        }
+      }
+      try {
+        await purgeData();
+      } catch (error) {
+        console.error('Email retention cleanup failed:', error.message);
+      }
+    })()
       .finally(() => {
         currentRun = null;
       });

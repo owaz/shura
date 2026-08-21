@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const pool = require('../db');
 const {
   sendBookingConfirmation,
+  sendIntakeFormSubmission,
   sendQuestionnaireAdminNotification,
 } = require('../utils/emailService');
 
@@ -108,4 +109,20 @@ test('queues a minimal questionnaire alert with an opaque event key', async () =
   assert.doesNotMatch(params[0], /@|https?:\/\//);
   assert.doesNotMatch(params[5], /client@example\.com|synthetic concern|synthetic sensitive note/);
   assert.doesNotMatch(params[6], /client@example\.com|synthetic concern|synthetic sensitive note/);
+  assert.doesNotMatch(params[5], /\/admin\/clients/);
+});
+
+test('does not link intake alerts to an unregistered admin route', async () => {
+  let params;
+  pool.query = async (_sql, values) => {
+    params = values;
+    return { rows: [{ id: 1 }] };
+  };
+
+  const result = await sendIntakeFormSubmission(99);
+
+  assert.equal(result.success, true);
+  assert.equal(params[0], 'intake-submission:99');
+  assert.doesNotMatch(params[5], /\/admin\/clients/);
+  assert.doesNotMatch(params[6], /\/admin\/clients/);
 });

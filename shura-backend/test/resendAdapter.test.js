@@ -15,7 +15,7 @@ const email = {
   idempotencyKey: 'event:1',
 };
 
-const mockResponse = ({ statusCode, body, headers = {} }) => {
+const mockResponse = ({ statusCode, body, rawBody, headers = {} }) => {
   let requestOptions;
   let requestBody;
   https.request = (_url, options, callback) => {
@@ -31,7 +31,8 @@ const mockResponse = ({ statusCode, body, headers = {} }) => {
       res.destroy = (error) => res.emit('error', error);
       callback(res);
       process.nextTick(() => {
-        if (body) res.emit('data', Buffer.from(JSON.stringify(body)));
+        if (rawBody !== undefined) res.emit('data', Buffer.from(rawBody));
+        else if (body) res.emit('data', Buffer.from(JSON.stringify(body)));
         res.emit('end');
       });
     };
@@ -75,6 +76,7 @@ test('sends a Resend request with the stable idempotency key', async () => {
 
   assert.deepEqual(result, { success: true, messageId: 're_123', statusCode: 200 });
   assert.equal(request.requestOptions.headers['Idempotency-Key'], 'event:1');
+  assert.deepEqual(JSON.parse(request.requestBody).to, ['recipient@example.test']);
   assert.equal(
     JSON.parse(request.requestBody).text,
     'Body'
@@ -93,6 +95,20 @@ test('marks rate limits retryable and honors Retry-After', async () => {
   assert.equal(result.success, false);
   assert.equal(result.retryable, true);
   assert.equal(result.retryAfterMs, 120000);
+  assert.equal(result.statusCode, 429);
+});
+
+test('retries a rate limit even when the response body is malformed', async () => {
+  mockResponse({
+    statusCode: 429,
+    rawBody: 'not-json',
+    headers: { 'retry-after': '30' },
+  });
+
+  const result = await sendEmail(email);
+
+  assert.equal(result.retryable, true);
+  assert.equal(result.retryAfterMs, 30000);
   assert.equal(result.statusCode, 429);
 });
 

@@ -71,7 +71,6 @@ const sendQuestionnaireAdminNotification = async (clientData, queryable = pool) 
   if (!clientData.userId) {
     return { success: false, error: 'userId is required for questionnaire email' };
   }
-  const reviewUrl = frontendUrl('/admin/clients');
   try {
     const result = await queueEmail({
       to: process.env.ADMIN_EMAIL,
@@ -79,9 +78,8 @@ const sendQuestionnaireAdminNotification = async (clientData, queryable = pool) 
       idempotencyKey: `questionnaire-submission:${clientData.userId}`,
       html: emailShell('Client questionnaire submitted', `
         <p style="color:#555;line-height:1.6">A client questionnaire is ready for authorized review in Shura.</p>
-        <p><a href="${escapeHtml(reviewUrl)}">Open the admin portal</a></p>
       `),
-      text: `A client questionnaire is ready for authorized review in Shura.\n\n${reviewUrl}`,
+      text: 'A client questionnaire is ready for authorized review in Shura.',
     }, 'questionnaire_submission', queryable);
     if (result.success) console.log('Email queued: questionnaire_submission');
     return result;
@@ -127,7 +125,6 @@ const sendIntakeFormSubmission = async (intakeFormId, queryable = pool) => {
   if (!intakeFormId) {
     return { success: false, error: 'intakeFormId is required for intake submission email' };
   }
-  const reviewUrl = frontendUrl('/admin/clients');
   try {
     const result = await queueEmail({
       to: process.env.ADMIN_EMAIL,
@@ -135,9 +132,8 @@ const sendIntakeFormSubmission = async (intakeFormId, queryable = pool) => {
       idempotencyKey: `intake-submission:${intakeFormId}`,
       html: emailShell('Intake form submitted', `
         <p style="color:#555;line-height:1.6">A client completed an intake form. Sign in to Shura to review it securely.</p>
-        <p><a href="${escapeHtml(reviewUrl)}">Open the admin portal</a></p>
       `),
-      text: `A client completed an intake form. Sign in to Shura to review it securely.\n\n${reviewUrl}`,
+      text: 'A client completed an intake form. Sign in to Shura to review it securely.',
     }, 'intake_submission', queryable);
     if (result.success) console.log('Email queued: intake_submission');
     return result;

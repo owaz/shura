@@ -52,7 +52,7 @@ This is a relationship map, not a complete column diagram. Read the current SQL 
 - Notifications can carry a per-client `dedupe_key`; migration 014 enforces uniqueness only when a key is present so provider retries can avoid duplicate client events without constraining ordinary notifications.
 - Daily faith-content rows have a stable reference key, content kind, source/translation attribution, and explicit human editorial state. Client delivery requires both `editorial_status = 'approved'` and `is_active = TRUE`; insertion alone never publishes a quote.
 - Client billing history combines durable `payments` rows with `payment_booking_intents` that do not have a matching payment by ID or Razorpay order. Completed intents are not shown twice; captured conflict intents remain visible through their refund lifecycle even when no booking/payment row was created.
-- Email outbox event keys are unique and must contain only opaque durable identifiers. Migration 017 preserves the legacy `sent` status while adding distinct accepted, delivered, and terminal dead states, provider-event timestamps, early-webhook reconciliation fields, and nullable payload columns. Terminal payload/error fields and old webhook dedupe rows are purged after 30 days while delivery metadata remains.
+- Email outbox event keys are unique and must contain only opaque durable identifiers. Migration 017 preserves the legacy `sent` status while adding distinct accepted, delivered, and terminal dead states, provider-event timestamps, early-webhook reconciliation fields, and nullable payload columns. Accepted/terminal payload and error fields plus old webhook dedupe rows are purged after 30 days while delivery metadata remains; migration 018 indexes the complete purge predicate.
 
 ## Schema sources
 
@@ -77,7 +77,7 @@ Treat this as legacy compatibility debt. Do not add new schema changes there. Ne
 2. Prefer additive, backward-compatible changes; write explicit constraints/indexes and data backfills.
 3. Ensure destructive or type-changing operations account for real legacy data and can run transactionally.
 4. Update queries, API mapping, fixtures, and focused tests together.
-5. Verify a base-schema-plus-all-migrations install and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior. Migration 017 is the required schema for the Resend-only email runtime.
+5. Verify a base-schema-plus-all-migrations install and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior. Migrations 017 and 018 are required for the Resend-only email runtime and indexed retention cleanup.
 6. Update this document and any product/API documentation if the durable model or rule changed.
 
 Do not run E2E bootstrap/seed unless `E2E_DATABASE_SAFE_TO_MUTATE=true` points to an isolated, disposable non-production database.

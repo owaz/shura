@@ -36,7 +36,13 @@ async function sendEmail(options) {
     };
   }
 
-  const payload = JSON.stringify({ from, to, subject, html, ...(text && { text }) });
+  const payload = JSON.stringify({
+    from,
+    to: Array.isArray(to) ? to : [to],
+    subject,
+    html,
+    ...(text && { text }),
+  });
   return new Promise((resolve) => {
     const req = https.request(RESEND_API_URL, {
       method: 'POST',
@@ -69,11 +75,13 @@ async function sendEmail(options) {
         try {
           response = data ? JSON.parse(data) : {};
         } catch {
+          const statusCode = Number(res.statusCode) || 0;
           resolve({
             success: false,
             error: 'Resend returned an invalid response',
-            retryable: Number(res.statusCode) >= 500,
-            statusCode: res.statusCode,
+            retryable: statusCode === 429 || statusCode >= 500,
+            retryAfterMs: parseRetryAfter(res.headers['retry-after']),
+            statusCode,
           });
           return;
         }

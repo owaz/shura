@@ -12,7 +12,7 @@ Shura sends service emails from workflows that also mutate sensitive scheduling,
 
 - Send application email through the Resend HTTPS API behind the application-owned email service boundary.
 - Persist every email intent in PostgreSQL before provider delivery. Insert intent in the originating domain transaction where practical.
-- Treat the worker switch as a claim pause only; disabling it never causes a synchronous fallback.
+- Treat the worker switch as a provider-claim pause only; disabling it never causes a synchronous fallback or pauses retention cleanup.
 - Distinguish provider `accepted` from webhook-confirmed `delivered`, with `bounced`, `complained`, retryable `failed`, and exhausted/permanent `dead` states.
 - Verify signed Resend webhooks and commit event deduplication with the state transition in one transaction.
 - Use opaque stable event keys, minimal administrative templates, and explicit plain-text alternatives.
@@ -31,7 +31,7 @@ The HTTPS API exposes structured provider IDs and retry signals without an addit
 
 ## Consequences
 
-- Migration 017 must exist before the Resend-only runtime is deployed.
+- Migrations 017 and 018 must exist before the Resend-only runtime is deployed.
 - Production requires Resend API, sender, webhook, administrative recipient, and worker-switch configuration.
 - Pausing delivery can grow pending rows and therefore requires backlog monitoring.
 - Provider calls and webhook handling must remain idempotent and order tolerant.

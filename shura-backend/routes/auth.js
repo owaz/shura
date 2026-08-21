@@ -533,6 +533,11 @@ router.post('/questionnaire', authenticateToken, async (req, res) => {
 
     const user = userResult.rows[0];
 
+    const emailResult = await sendQuestionnaireAdminNotification({ userId: user.id });
+    if (!emailResult.success) {
+      throw new Error(emailResult.error || 'Questionnaire notification could not be queued');
+    }
+
     let assignment = null;
     try {
       assignment = await autoAssignTherapist(user.id, {
@@ -545,13 +550,6 @@ router.post('/questionnaire', authenticateToken, async (req, res) => {
       });
     } catch (assignError) {
       console.error('Questionnaire auto-assignment failed:', assignError);
-    }
-
-    // Send email notification with all client info + questionnaire
-    try {
-      await sendQuestionnaireAdminNotification({ userId: user.id });
-    } catch (emailError) {
-      console.error('Failed to send questionnaire notification:', emailError);
     }
 
     return res.json({

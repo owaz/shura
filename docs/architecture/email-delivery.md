@@ -8,9 +8,9 @@ Application code calls typed helpers in `shura-backend/utils/emailService.js`. E
 
 ## Delivery lifecycle
 
-`utils/emailWorker.js` runs one batch immediately at startup and then polls for work. PostgreSQL row locks with `SKIP LOCKED` make claims safe across replicas. The worker can be paused with `EMAIL_OUTBOX_WORKER_ENABLED=false`; queueing continues while paused.
+`utils/emailWorker.js` runs one cycle immediately at startup and then polls for work. PostgreSQL row locks with `SKIP LOCKED` make claims safe across replicas. The worker can be paused with `EMAIL_OUTBOX_WORKER_ENABLED=false`; queueing and retention cleanup continue while provider claims are paused.
 
-Resend API acceptance records `accepted`, the provider message ID, and `accepted_at`. Signed webhook events advance the row to `delivered`, `bounced`, or `complained`. Retryable network, timeout, rate-limit, and provider-server failures use bounded backoff. Permanent provider errors or five exhausted attempts become `dead`. The legacy `sent` status remains readable for rolling-migration compatibility but is not written by the Resend-only runtime.
+Resend API acceptance records `accepted`, the provider message ID, and `accepted_at`. Signed webhook events advance the row to `delivered`, `bounced`, `complained`, or terminal `dead` for `email.failed`. Retryable network, timeout, rate-limit, and provider-server failures use bounded backoff. Permanent API errors or five exhausted attempts also become `dead`. The legacy `sent` status remains readable for rolling-migration compatibility but is not written by the Resend-only runtime.
 
 Webhook deduplication and delivery-state updates share one database transaction. Events that arrive before provider acceptance are retained and reconciled when the message ID is stored. Provider occurrence time and state precedence prevent stale or out-of-order events from downgrading a later bounce or complaint.
 
@@ -18,7 +18,7 @@ Webhook deduplication and delivery-state updates share one database transaction.
 
 Event keys use opaque durable IDs or a one-way token digest. They must not contain recipient addresses, names, bearer tokens, or URLs. Administrative questionnaire and intake emails contain only a minimal portal-directed alert, not health responses or free-text notes.
 
-After 30 days, accepted and terminal outbox rows retain minimal type/status/provider/timestamp metadata while recipient, subject, body, and last-error fields are nulled. Including accepted rows prevents a missing delivery webhook from extending payload retention indefinitely. Old webhook deduplication rows are deleted on the same retention schedule.
+After 30 days, accepted and terminal outbox rows retain minimal type/status/provider/timestamp metadata while recipient, subject, body, and last-error fields are nulled. Including accepted rows prevents a missing delivery webhook from extending payload retention indefinitely. Migration 018 adds the matching partial retention index. Old webhook deduplication rows are deleted on the same retention schedule.
 
 ## Configuration and operations
 

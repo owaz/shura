@@ -8,6 +8,7 @@ const DELIVERY_EVENTS = Object.freeze({
   'email.delivered': { status: 'delivered', timestampColumn: 'delivered_at', priority: 1 },
   'email.bounced': { status: 'bounced', timestampColumn: 'bounced_at', priority: 2 },
   'email.complained': { status: 'complained', timestampColumn: 'complained_at', priority: 3 },
+  'email.failed': { status: 'dead', timestampColumn: null, priority: 4 },
 });
 
 const enqueueEmail = async (email, queryable = pool) => {
@@ -108,12 +109,15 @@ const applyDeliveryEvent = async (queryable, providerMessageId, eventType, provi
     return { applied: false, missing: !current };
   }
 
+  const timestampUpdate = event.timestampColumn
+    ? `, ${event.timestampColumn} = $2`
+    : ", last_error = 'Resend reported a terminal delivery failure'";
   await queryable.query(
     `UPDATE email_outbox
      SET status = $1,
          provider_event_at = $2,
-         ${event.timestampColumn} = $2,
          updated_at = NOW()
+         ${timestampUpdate}
      WHERE id = $3`,
     [event.status, occurredAt, current.id]
   );

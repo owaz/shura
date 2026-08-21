@@ -13,6 +13,9 @@ const emailConfigurationErrors = (env = process.env) => {
   if (env.RESEND_FROM_EMAIL && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.RESEND_FROM_EMAIL)) {
     errors.push('RESEND_FROM_EMAIL must be a valid email address');
   }
+  if (env.ADMIN_EMAIL && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.ADMIN_EMAIL)) {
+    errors.push('ADMIN_EMAIL must be a valid email address');
+  }
   if (
     env.EMAIL_OUTBOX_WORKER_ENABLED
     && !['true', 'false'].includes(env.EMAIL_OUTBOX_WORKER_ENABLED)
