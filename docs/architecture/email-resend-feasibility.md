@@ -292,9 +292,9 @@ For intake submission, use wording such as “A client completed an intake form;
 ### Phase 3: outbox and delivery tracking
 
 - add ordered migrations for outbox and webhook-event state
-- enqueue messages transactionally with domain changes where practical
-- implement locked retry processing and graceful shutdown
-- add signed webhook handling, deduplication, and delivery transitions
+- enqueue messages transactionally with domain changes where practical; the initial provider boundary supports opt-in queueing with `EMAIL_OUTBOX_ENABLED`
+- implement locked retry processing and graceful shutdown; migration `016_email_outbox.sql` and the worker provide the initial locked retry path
+- add signed webhook handling, deduplication, and delivery transitions through `/api/webhooks/resend`
 - add redacted logs, metrics, alerts, and operational recovery procedures
 
 ### Phase 4: staged rollout

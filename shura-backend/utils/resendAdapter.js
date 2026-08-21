@@ -8,20 +8,11 @@ async function sendEmail(options) {
   if (!resendApiKey) {
     return { success: false, error: 'RESEND_API_KEY environment variable not configured' };
   }
-
   const { from, to, subject, html, text, idempotencyKey } = options;
   if (!from || !to || !subject || !html) {
     return { success: false, error: 'Missing required email fields: from, to, subject, html' };
   }
-
-  const payload = JSON.stringify({
-    from,
-    to,
-    subject,
-    html,
-    ...(text && { text }),
-  });
-
+  const payload = JSON.stringify({ from, to, subject, html, ...(text && { text }) });
   return new Promise((resolve) => {
     const req = https.request(RESEND_API_URL, {
       method: 'POST',
@@ -47,7 +38,6 @@ async function sendEmail(options) {
         }
       });
     });
-
     req.on('error', (error) => {
       resolve({ success: false, error: `Network error: ${error.message}` });
     });

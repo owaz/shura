@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const pool = require('../db');
 const { sendEmail: sendViaResend } = require('./resendAdapter');
+const { enqueueEmail } = require('./emailOutbox');
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -27,8 +28,22 @@ const multilineOrFallback = (value, fallback = 'Not provided') => {
 const frontendBaseUrl = () => (process.env.FRONTEND_URL || 'http://localhost:3006').replace(/\/$/, '');
 const frontendUrl = (path = '/') => `${frontendBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
 
-const sendEmailViaProvider = async (mailOptions) => {
+const sendEmailViaProvider = async (mailOptions, emailType = 'notification') => {
   if (process.env.RESEND_API_KEY) {
+    if (process.env.EMAIL_OUTBOX_ENABLED === 'true') {
+      if (!mailOptions.idempotencyKey) {
+        return { success: false, error: 'Email outbox requires an idempotency key' };
+      }
+      return enqueueEmail({
+        eventKey: mailOptions.idempotencyKey,
+        emailType,
+        recipient: mailOptions.to,
+        sender: process.env.RESEND_FROM_EMAIL || mailOptions.from,
+        subject: mailOptions.subject,
+        html: mailOptions.html,
+        text: mailOptions.text,
+      });
+    }
     return sendViaResend({
       ...mailOptions,
       from: process.env.RESEND_FROM_EMAIL || mailOptions.from,

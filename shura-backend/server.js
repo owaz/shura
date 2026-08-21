@@ -103,7 +103,7 @@ app.use((req, res, next) => {
 app.use(express.json({
   limit: '1mb',
   verify: (req, res, buf) => {
-    if (req.originalUrl === '/api/payments/webhook') {
+    if (req.originalUrl === '/api/payments/webhook' || req.originalUrl === '/api/webhooks/resend') {
       req.rawBody = buf;
     }
   }
@@ -180,6 +180,8 @@ if (bookingRoutes) app.use('/api/bookings', generalLimiter, bookingRoutes);
 
 const paymentRoutes = require('./routes/payments');
 if (paymentRoutes) app.use('/api/payments', paymentLimiter, paymentRoutes);
+const resendWebhookRoutes = require('./routes/resendWebhook');
+app.use('/api/webhooks/resend', resendWebhookRoutes);
 
 const calendarRoutes = require('./routes/calendar');
 if (calendarRoutes) app.use('/api/calendar', generalLimiter, calendarRoutes);
@@ -440,6 +442,7 @@ async function runStartupMigrations() {
 
 (async () => {
   await runStartupMigrations();
+  require('./utils/emailWorker').startEmailWorker();
   server.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🌐 http://localhost:${PORT}/api/health`);
