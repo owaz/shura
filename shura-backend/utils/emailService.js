@@ -1,6 +1,7 @@
 const nodemailer = require('nodemailer');
 const pool = require('../db');
 const { sendEmail: sendViaResend } = require('./resendAdapter');
+const { enqueueEmail } = require('./emailOutbox');
 
 const escapeHtml = (value) => String(value ?? '')
   .replace(/&/g, '&amp;')
@@ -27,20 +28,33 @@ const multilineOrFallback = (value, fallback = 'Not provided') => {
 const frontendBaseUrl = () => (process.env.FRONTEND_URL || 'http://localhost:3006').replace(/\/$/, '');
 const frontendUrl = (path = '/') => `${frontendBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
 
-// Send email via Resend (if configured) or fall back to Gmail
-const sendEmailViaProvider = async (mailOptions) => {
+const sendEmailViaProvider = async (mailOptions, emailType = 'notification') => {
   if (process.env.RESEND_API_KEY) {
-    // Use Resend API
-    return await sendViaResend(mailOptions);
-  } else {
-    // Fall back to Gmail/SMTP (backward compatibility)
-    const transporter = createTransporter();
-    try {
-      await transporter.sendMail(mailOptions);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
+    if (process.env.EMAIL_OUTBOX_ENABLED === 'true') {
+      if (!mailOptions.idempotencyKey) {
+        return { success: false, error: 'Email outbox requires an idempotency key' };
+      }
+      return enqueueEmail({
+        eventKey: mailOptions.idempotencyKey,
+        emailType,
+        recipient: mailOptions.to,
+        sender: process.env.RESEND_FROM_EMAIL || mailOptions.from,
+        subject: mailOptions.subject,
+        html: mailOptions.html,
+        text: mailOptions.text,
+      });
     }
+    return sendViaResend({
+      ...mailOptions,
+      from: process.env.RESEND_FROM_EMAIL || mailOptions.from,
+    });
+  }
+  const transporter = createTransporter();
+  try {
+    await transporter.sendMail(mailOptions);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
   }
 };
 
@@ -80,6 +94,7 @@ const sendTherapistApplicationNotification = async (therapistData) => {
       from: process.env.EMAIL_USER,
       to: process.env.ADMIN_EMAIL,
       subject: '🩺 New Therapist Application - Shura Platform',
+      idempotencyKey: `therapist-application:${therapistData.email}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
           <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -167,12 +182,11 @@ const sendTherapistApplicationNotification = async (therapistData) => {
 // Send approval email to therapist
 const sendTherapistApprovalEmail = async (therapistEmail, therapistName) => {
   try {
-    const transporter = createTransporter();
-    
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: therapistEmail,
       subject: '🎉 Your Therapist Application has been Approved - Shura',
+      idempotencyKey: `therapist-approval:${therapistEmail}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
           <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -220,7 +234,8 @@ const sendTherapistApprovalEmail = async (therapistEmail, therapistName) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions);
+    if (!result.success) throw new Error(result.error);
     console.log(`✅ Approval email sent to: ${therapistEmail}`);
     return { success: true };
   } catch (error) {
@@ -232,14 +247,13 @@ const sendTherapistApprovalEmail = async (therapistEmail, therapistName) => {
 // Send client signup notification to admin
 const sendClientSignupNotification = async (clientData) => {
   try {
-    const transporter = createTransporter();
-    
     const hasQuestionnaire = clientData.concerns && clientData.concerns.length > 0;
     
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.ADMIN_EMAIL,
       subject: '👤 New Client Signup - Shura Platform',
+      idempotencyKey: `client-signup:${clientData.userId || clientData.email}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
           <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -312,7 +326,8 @@ const sendClientSignupNotification = async (clientData) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions);
+    if (!result.success) throw new Error(result.error);
     console.log(`✅ Client signup notification sent to admin for: ${textOrFallback(clientData.email)}`);
     return { success: true };
   } catch (error) {
@@ -324,12 +339,11 @@ const sendClientSignupNotification = async (clientData) => {
 // Send intake form link to client
 const sendIntakeFormLink = async (clientEmail, clientName, intakeLink) => {
   try {
-    const transporter = createTransporter();
-    
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: clientEmail,
       subject: '📋 Complete Your Intake Form - Shura',
+      idempotencyKey: `intake-link:${clientEmail}:${intakeLink}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
           <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -377,7 +391,8 @@ const sendIntakeFormLink = async (clientEmail, clientName, intakeLink) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions);
+    if (!result.success) throw new Error(result.error);
     console.log(`✅ Intake form link sent to: ${clientEmail}`);
     return { success: true };
   } catch (error) {
@@ -389,12 +404,11 @@ const sendIntakeFormLink = async (clientEmail, clientName, intakeLink) => {
 // Send intake form submission notification to admin
 const sendIntakeFormSubmission = async (clientEmail, clientName, formData) => {
   try {
-    const transporter = createTransporter();
-    
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.ADMIN_EMAIL,
       subject: `📋 Intake Form Completed - ${String(clientName || 'Client')}`,
+      idempotencyKey: `intake-submission:${clientEmail}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
           <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -427,7 +441,8 @@ const sendIntakeFormSubmission = async (clientEmail, clientName, formData) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions);
+    if (!result.success) throw new Error(result.error);
     console.log(`✅ Intake form submission notification sent for: ${clientEmail}`);
     return { success: true };
   } catch (error) {
@@ -446,23 +461,26 @@ const formatBookingDate = (value) => {
 
 const sendBookingConfirmation = async (bookingData) => {
   try {
-    // Check if client has opted in to booking confirmation emails
-    if (bookingData.clientId) {
-      const { rows } = await pool.query(
-        'SELECT notification_booking_confirmation FROM users WHERE id = $1',
-        [bookingData.clientId]
-      );
-      if (rows.length > 0 && rows[0].notification_booking_confirmation === false) {
-        console.log(`⏭️  Booking confirmation skipped (preference disabled) for: ${bookingData.clientEmail}`);
-        return { success: true, skipped: true };
-      }
+    if (!bookingData.clientId) {
+      return { success: false, error: 'clientId is required for booking confirmation emails' };
+    }
+    const { rows } = await pool.query(
+      'SELECT notification_booking_confirmation FROM users WHERE id = $1',
+      [bookingData.clientId]
+    );
+    if (rows.length === 0) {
+      return { success: false, error: 'Booking confirmation client was not found' };
+    }
+    if (rows[0].notification_booking_confirmation === false) {
+      console.log(`⏭️  Booking confirmation skipped (preference disabled) for: ${bookingData.clientEmail}`);
+      return { success: true, skipped: true };
     }
 
-    const transporter = createTransporter();
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: bookingData.clientEmail,
       subject: 'Your Shura session is booked',
+      idempotencyKey: `booking-confirmation:${bookingData.bookingId}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
           <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -499,11 +517,11 @@ const sendBookingConfirmation = async (bookingData) => {
 
 const sendBookingNotificationToTherapist = async (bookingData) => {
   try {
-    const transporter = createTransporter();
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: bookingData.therapistEmail,
       subject: 'New Shura session booking',
+      idempotencyKey: `booking-therapist-notification:${bookingData.bookingId}`,
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
           <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
@@ -524,7 +542,8 @@ const sendBookingNotificationToTherapist = async (bookingData) => {
       `,
     };
 
-    await transporter.sendMail(mailOptions);
+    const result = await sendEmailViaProvider(mailOptions);
+    if (!result.success) throw new Error(result.error);
     console.log(`✅ Booking notification sent to therapist: ${bookingData.therapistEmail}`);
     return { success: true };
   } catch (error) {
@@ -535,8 +554,7 @@ const sendBookingNotificationToTherapist = async (bookingData) => {
 
 const sendTherapistReleaseNotification = async ({ therapistEmail, therapistName, clientName }) => {
   try {
-    const transporter = createTransporter();
-    await transporter.sendMail({
+    const result = await sendEmailViaProvider({
       from: process.env.EMAIL_USER,
       to: therapistEmail,
       subject: 'Shura client assignment update',
@@ -552,7 +570,9 @@ const sendTherapistReleaseNotification = async ({ therapistEmail, therapistName,
           </div>
         </div>
       `,
+      idempotencyKey: `therapist-release:${therapistEmail}:${clientName}`,
     });
+    if (!result.success) throw new Error(result.error);
     return { success: true };
   } catch (error) {
     console.error('Error sending therapist release notification:', error);
@@ -575,23 +595,24 @@ const formatSessionDateTime = (value, timezone = 'UTC') => {
 
 const sendSessionRescheduledNotifications = async (session) => {
   try {
-    const transporter = createTransporter();
     const oldTime = formatSessionDateTime(session.previousScheduledAt, session.client_timezone || session.clientTimezone);
     const newTime = formatSessionDateTime(session.nextScheduledAt, session.client_timezone || session.clientTimezone);
     const panel = `<div style="margin:20px 0;padding:16px;background:#f8f5f0;border-radius:8px;color:#555;line-height:1.6"><div><strong>Previous time:</strong> ${oldTime}</div><div><strong>New time:</strong> ${newTime}</div></div>`;
     const shell = (greeting, message) => `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f8f5f0"><div style="background:#fff;padding:28px;border-radius:12px;border-top:4px solid #8B7355"><h1 style="font-size:22px;color:#5C5043;margin-top:0">Session rescheduled</h1><p style="color:#555">Assalamu Alaikum ${textOrFallback(greeting)},</p><p style="color:#555;line-height:1.6">${message}</p>${panel}</div></div>`;
     const results = await Promise.allSettled([
-      transporter.sendMail({
+      sendEmailViaProvider({
         from: process.env.EMAIL_USER,
         to: session.client_email || session.clientEmail,
         subject: 'Your Shura session has been rescheduled',
         html: shell(session.client_name || session.clientName, `Your session with ${textOrFallback(session.therapist_name || session.therapistName)} has been moved.`),
+        idempotencyKey: `session-rescheduled:client:${session.booking_id || session.bookingId}`,
       }),
-      transporter.sendMail({
+      sendEmailViaProvider({
         from: process.env.EMAIL_USER,
         to: session.therapist_email || session.therapistEmail,
         subject: 'A Shura session has been rescheduled',
         html: shell(session.therapist_name || session.therapistName, `${textOrFallback(session.client_name || session.clientName)} has moved their session.`),
+        idempotencyKey: `session-rescheduled:therapist:${session.booking_id || session.bookingId}`,
       }),
     ]);
     return { success: results.every((result) => result.status === 'fulfilled') };
@@ -603,24 +624,25 @@ const sendSessionRescheduledNotifications = async (session) => {
 
 const sendSessionCancellationNotifications = async (session) => {
   try {
-    const transporter = createTransporter();
     const sessionTime = formatSessionDateTime(session.scheduled_at || session.scheduledAt, session.client_timezone || session.clientTimezone);
     const refundNote = session.refundEligible
       ? (session.refundStatus === 'failed' ? 'The refund requires follow-up from the Shura team.' : 'A full refund has been initiated and will be returned through the original payment method.')
       : 'This cancellation is outside the refundable window.';
     const shell = (greeting, message, includeRefund) => `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f8f5f0"><div style="background:#fff;padding:28px;border-radius:12px;border-top:4px solid #8B7355"><h1 style="font-size:22px;color:#5C5043;margin-top:0">Session cancelled</h1><p style="color:#555">Assalamu Alaikum ${textOrFallback(greeting)},</p><p style="color:#555;line-height:1.6">${message}</p><p style="padding:14px;background:#f8f5f0;border-radius:8px;color:#555"><strong>Original time:</strong> ${sessionTime}</p>${includeRefund ? `<p style="color:#555;line-height:1.6">${refundNote}</p>` : ''}</div></div>`;
     const results = await Promise.allSettled([
-      transporter.sendMail({
+      sendEmailViaProvider({
         from: process.env.EMAIL_USER,
         to: session.client_email || session.clientEmail,
         subject: 'Your Shura session has been cancelled',
         html: shell(session.client_name || session.clientName, `Your session with ${textOrFallback(session.therapist_name || session.therapistName)} has been cancelled.`, true),
+        idempotencyKey: `session-cancelled:client:${session.booking_id || session.bookingId}`,
       }),
-      transporter.sendMail({
+      sendEmailViaProvider({
         from: process.env.EMAIL_USER,
         to: session.therapist_email || session.therapistEmail,
         subject: 'A Shura session has been cancelled',
         html: shell(session.therapist_name || session.therapistName, `${textOrFallback(session.client_name || session.clientName)} has cancelled their session.`, false),
+        idempotencyKey: `session-cancelled:therapist:${session.booking_id || session.bookingId}`,
       }),
     ]);
     return { success: results.every((result) => result.status === 'fulfilled') };

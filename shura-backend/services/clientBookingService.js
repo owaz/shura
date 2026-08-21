@@ -268,9 +268,10 @@ const insertConfirmedBooking = async (queryable, { clientId, context, selection,
   return booking;
 };
 
-const postBookingSideEffects = (booking, context) => {
+const postBookingSideEffects = (booking, clientId, context) => {
   const emailData = {
     bookingId: booking.id,
+    clientId,
     clientName: context.client_name,
     clientEmail: context.client_email,
     therapistName: context.full_name,
@@ -319,7 +320,7 @@ const createFreeOrCoveredBooking = async ({ clientId, therapistId, payload }) =>
   } finally {
     client.release();
   }
-  postBookingSideEffects(booking, context);
+  postBookingSideEffects(booking, clientId, context);
   return bookingDtoFromRow({ ...booking, therapist_name: context.full_name, client_timezone: context.clientTimezone });
 };
 
@@ -559,7 +560,7 @@ const finalizePaidBookingIntent = async ({ orderId, paymentId, expectedClientId 
   } finally {
     client.release();
   }
-  postBookingSideEffects(booking, context);
+  postBookingSideEffects(booking, intent.client_id, context);
   return {
     status: 'completed',
     booking: bookingDtoFromRow({ ...booking, therapist_name: context.full_name, client_timezone: context.clientTimezone }),
