@@ -2,7 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const nodemailer = require('nodemailer');
 const pool = require('../db');
-const { sendBookingConfirmation } = require('../utils/emailService');
+const {
+  sendBookingConfirmation,
+  sendClientSignupNotification,
+} = require('../utils/emailService');
 
 const booking = {
   bookingId: 42,
@@ -22,9 +25,13 @@ test.beforeEach(() => {
   delete process.env.RESEND_API_KEY;
   process.env.EMAIL_USER = 'sender@example.com';
   process.env.EMAIL_PASSWORD = 'password';
+  process.env.ADMIN_EMAIL = 'admin@example.com';
 });
 
 test.afterEach(() => {
+  delete process.env.RESEND_API_KEY;
+  delete process.env.EMAIL_OUTBOX_ENABLED;
+  delete process.env.ADMIN_EMAIL;
   pool.query = originalQuery;
   nodemailer.createTransport = originalCreateTransport;
 });
@@ -88,4 +95,28 @@ test('requires client identity for booking confirmation preference enforcement',
     success: false,
     error: 'clientId is required for booking confirmation emails',
   });
+});
+
+test('queues onboarding alerts without questionnaire content', async () => {
+  let queryParams;
+  process.env.RESEND_API_KEY = 'test-key';
+  process.env.EMAIL_OUTBOX_ENABLED = 'true';
+  pool.query = async (_query, params) => {
+    queryParams = params;
+    return { rows: [{ id: 1 }] };
+  };
+
+  const result = await sendClientSignupNotification({
+    fullName: 'Client',
+    email: 'client@example.com',
+    userId: 7,
+    concerns: ['synthetic concern'],
+    genderPreference: 'synthetic preference',
+    additionalNotes: 'synthetic sensitive note',
+  });
+
+  assert.deepEqual(result, { success: true });
+  assert.equal(queryParams[1], 'client_signup');
+  assert.match(queryParams[5], /review the client's onboarding details securely/);
+  assert.doesNotMatch(queryParams[5], /synthetic concern|synthetic preference|synthetic sensitive note/);
 });
