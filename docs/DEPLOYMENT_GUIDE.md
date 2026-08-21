@@ -77,11 +77,13 @@ Database changes are not applied by the GitHub workflow.
 
 1. Resolve the exact target database and confirm whether it is a truly empty database or an existing installation.
 2. For a new empty database only, deliberately apply `shura-backend/production_schema.sql` once to create the legacy-compatible base.
-3. From `shura-backend`, run `npm run migrate`. Current migrations are `001` through `015`; the migrator records filenames in `schema_migrations` and skips applied files.
+3. From `shura-backend`, run `npm run migrate`. Current migrations are `001` through `017`; the migrator records filenames in `schema_migrations` and skips applied files.
 4. Run the migrator a second time and confirm every migration is skipped.
 5. Never run the disposable E2E bootstrap/seed against staging or production, and never edit an already-applied migration.
 
 For a release containing a new migration, verify both a base-schema-plus-all-migrations install and an upgrade from the preceding state before applying it to staging. Plan backward compatibility between the old and new app revisions and the migrated schema.
+
+Migration 017 is a backward-compatible prerequisite for the Resend-only email runtime. Apply and verify it in staging and production before deploying code that writes the new delivery states. It retains the legacy `sent` status so the previous revision remains valid during an Azure Container Apps rolling update.
 
 ## Staging and production rollout
 

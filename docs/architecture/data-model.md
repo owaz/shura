@@ -30,6 +30,10 @@ therapists
 bookings
   ├─ client_session_reviews
   └─ client_session_events
+
+application email events
+  └─ email_outbox
+       └─ email_webhook_events (correlated by provider message ID)
 ```
 
 This is a relationship map, not a complete column diagram. Read the current SQL migration and the consuming route before altering a table.
@@ -48,6 +52,7 @@ This is a relationship map, not a complete column diagram. Read the current SQL 
 - Notifications can carry a per-client `dedupe_key`; migration 014 enforces uniqueness only when a key is present so provider retries can avoid duplicate client events without constraining ordinary notifications.
 - Daily faith-content rows have a stable reference key, content kind, source/translation attribution, and explicit human editorial state. Client delivery requires both `editorial_status = 'approved'` and `is_active = TRUE`; insertion alone never publishes a quote.
 - Client billing history combines durable `payments` rows with `payment_booking_intents` that do not have a matching payment by ID or Razorpay order. Completed intents are not shown twice; captured conflict intents remain visible through their refund lifecycle even when no booking/payment row was created.
+- Email outbox event keys are unique. Migration 017 preserves the legacy `sent` status while adding distinct accepted, delivered, and terminal dead states, provider-event timestamps, early-webhook reconciliation fields, and nullable payload columns for retention cleanup.
 
 ## Schema sources
 
@@ -72,7 +77,7 @@ Treat this as legacy compatibility debt. Do not add new schema changes there. Ne
 2. Prefer additive, backward-compatible changes; write explicit constraints/indexes and data backfills.
 3. Ensure destructive or type-changing operations account for real legacy data and can run transactionally.
 4. Update queries, API mapping, fixtures, and focused tests together.
-5. Verify a base-schema-plus-all-migrations install and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior. Migration 015 adds client/date composite indexes used by paginated billing history without changing payment data.
+5. Verify a base-schema-plus-all-migrations install and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior. Migration 017 prepares backward-compatible email delivery lifecycle and retention fields; the runtime cutover must occur only after it is applied to every target database.
 6. Update this document and any product/API documentation if the durable model or rule changed.
 
 Do not run E2E bootstrap/seed unless `E2E_DATABASE_SAFE_TO_MUTATE=true` points to an isolated, disposable non-production database.
