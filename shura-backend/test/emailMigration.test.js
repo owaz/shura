@@ -41,6 +41,27 @@ async function withDisposableSchema(prefix, callback) {
   }
 }
 
+async function withDisposableDatabase(prefix, callback) {
+  const admin = new Client({ connectionString: databaseUrl });
+  const databaseName = `${prefix}_${crypto.randomUUID().replaceAll('-', '')}`;
+  const isolatedUrl = new URL(databaseUrl);
+  isolatedUrl.pathname = `/${databaseName}`;
+  await admin.connect();
+  try {
+    await admin.query(`CREATE DATABASE "${databaseName}"`);
+    const client = new Client({ connectionString: isolatedUrl.toString() });
+    await client.connect();
+    try {
+      await callback(client, 'public');
+    } finally {
+      await client.end();
+    }
+  } finally {
+    await admin.query(`DROP DATABASE IF EXISTS "${databaseName}" WITH (FORCE)`);
+    await admin.end();
+  }
+}
+
 async function applyAllMigrations(client) {
   await applySql(client, await readSql(path.join(backendRoot, 'production_schema.sql')));
   const files = (await fs.readdir(migrationsDir))
@@ -161,7 +182,7 @@ test('migration 017 upgrades migration 016 state in PostgreSQL', { skip }, async
 });
 
 test('fresh bootstrap through all migrations produces the hardened schema', { skip }, async () => {
-  await withDisposableSchema('email_fresh', async (client, schema) => {
+  await withDisposableDatabase('email_fresh', async (client, schema) => {
     await applyAllMigrations(client);
     await assertHardenedSchema(client, schema);
     await assertAcceptedRetentionIndex(client, schema);

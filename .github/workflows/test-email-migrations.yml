@@ -41,4 +41,6 @@ jobs:
           cache: npm
           cache-dependency-path: shura-backend/package-lock.json
       - run: npm ci
+      # Fresh-bootstrap coverage creates and drops an isolated database so
+      # legacy migrations cannot see similarly named tables in another schema.
       - run: npm run test:email-migrations
