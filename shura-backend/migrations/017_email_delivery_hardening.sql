@@ -38,7 +38,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_email_outbox_provider_message_id
 
 CREATE INDEX IF NOT EXISTS idx_email_outbox_terminal_retention
   ON email_outbox(updated_at, id)
-  WHERE status IN ('delivered', 'dead', 'bounced', 'complained')
+  WHERE status IN ('sent', 'delivered', 'dead', 'bounced', 'complained')
     AND payload_purged_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_email_webhook_events_provider_message
