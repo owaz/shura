@@ -24,7 +24,7 @@ The implementation-maturity section in [System overview](architecture/system-ove
 - [Data model](architecture/data-model.md): schema ownership, migration lifecycle, and principal relationships.
 - [Scheduling and payments](architecture/scheduling-and-payments.md): availability, concurrency, Razorpay, refunds, and session policies.
 - [Integrations and deployment](architecture/integrations-and-deployment.md): email, calendars, storage, monitoring, Docker, and Azure Container Apps.
-- [Resend email replacement feasibility](architecture/email-resend-feasibility.md): current application-email inventory, Resend capability and privacy assessment, migration options, decision gates, and recommended target architecture.
+- [Email delivery](architecture/email-delivery.md): Resend provider boundary, durable outbox, delivery lifecycle, privacy retention, and operations.
 
 ## Product and domain
 

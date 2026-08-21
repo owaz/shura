@@ -21,6 +21,7 @@
 | `/api/upload` | authenticated image validation, sanitization, and Azure Blob upload |
 | `/api/calls` | legacy/placeholder call endpoints, not the secure video-provider contract |
 | `/api/newsletter`, `/api/platform` | newsletter mutation and client-facing platform configuration |
+| `/api/webhooks/resend` | signed Resend lifecycle events correlated to durable email outbox rows |
 | `/api/dev` | development-only login helpers; routes self-reject in production |
 
 `/api/health`, `/ping`, and `/db-time` are server-level health/diagnostic endpoints. `/db-time` reveals database error text on failure and should not be considered a minimal public health endpoint.
@@ -71,7 +72,8 @@ The billing API never returns Razorpay signatures, webhook payloads, card data, 
 - Client notification insertion: `services/clientNotifications.js`
 - Video provider contract: `services/video/videoProvider.js`
 - Calendar OAuth/event sync: `utils/calendarIntegrations.js`
-- Email templates/delivery: `utils/emailService.js`
+- Email templates/enqueueing: `utils/emailService.js`, `utils/emailOutbox.js`
+- Resend provider/worker/configuration: `utils/resendAdapter.js`, `utils/emailWorker.js`, `utils/emailConfig.js`
 - Assignment scoring: `utils/matchingService.js`
 - Client portal validation/mapping and session policy: `utils/clientPortalValidation.js`, `utils/clientTherapist.js`, `utils/clientSessionPolicy.js`
 
@@ -85,6 +87,6 @@ Call signaling has both room-based legacy events and older global `io.emit` even
 
 ## Error and side-effect model
 
-Database transactions protect many booking, payment, onboarding, cancellation, and reschedule changes. Email and calendar synchronization are often dispatched after commit and failures are logged or stored, so they are eventually consistent rather than atomic. Any retry or job mechanism added later must be idempotent.
+Database transactions protect many booking, payment, onboarding, cancellation, and reschedule changes. Active email intent is inserted in those domain transactions where practical, then delivered asynchronously and idempotently through the outbox. Calendar synchronization and refunds remain external post-commit work and must preserve explicit failure state.
 
 Several older route catch blocks send `err.message`; avoid extending that pattern because database/provider details can leak. Use stable public error codes and log redacted internal context.

@@ -56,11 +56,11 @@ Backend runtime configuration belongs in Container App secrets/environment varia
 - Auth0: domain, audience, claim namespace, Management API client credentials, and therapist role ID.
 - Azure Blob Storage: account/container/SAS TTL and optional user-assigned identity client ID. Production uses Managed Identity; do not store an account key when identity access is available.
 - Razorpay: key ID, key secret, and a distinct webhook secret.
-- Email: Gmail SMTP username/app password and administrative recipient.
+- Email: Resend API key, verified sender, webhook signing secret, administrative recipient, and explicit outbox worker switch.
 - Calendars: token-encryption secret, backend URL, and optional Google/Outlook OAuth credentials and exact callback URLs.
 - Observability and web boundaries: Application Insights connection string, frontend/origin allowlists, and cookie same-site mode.
 
-The checked-in workflow still maps legacy Cloudinary variables and omits several current provider variables. That is a known delivery gap, not evidence that Azure Blob, Razorpay, email, calendars, or DB TLS are configured out of band. Reconcile the workflow/app configuration before relying on those features.
+The checked-in workflow still maps legacy Cloudinary variables and omits several current provider variables. It does configure the Resend email group, subject to the corresponding Container App secrets existing. Reconcile the workflow/app configuration before relying on Azure Blob, Razorpay, calendars, or DB TLS.
 
 ## Identity and least privilege
 

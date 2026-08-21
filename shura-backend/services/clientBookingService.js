@@ -265,10 +265,6 @@ const insertConfirmedBooking = async (queryable, { clientId, context, selection,
              'Your session has been booked successfully.', $2::jsonb)`,
     [clientId, JSON.stringify({ bookingId: booking.id, scheduledAt: booking.scheduled_at })]
   );
-  return booking;
-};
-
-const postBookingSideEffects = (booking, clientId, context) => {
   const emailData = {
     bookingId: booking.id,
     clientId,
@@ -280,9 +276,19 @@ const postBookingSideEffects = (booking, clientId, context) => {
     time: booking.time,
     sessionType: booking.session_type,
   };
+  const emailResults = await Promise.all([
+    sendBookingConfirmation(emailData, queryable),
+    sendBookingNotificationToTherapist(emailData, queryable),
+  ]);
+  const failedEmail = emailResults.find((result) => !result.success);
+  if (failedEmail) {
+    throw bookingError('EMAIL_QUEUE_FAILED', failedEmail.error || 'Booking email could not be queued.');
+  }
+  return booking;
+};
+
+const postBookingSideEffects = (booking) => {
   void Promise.allSettled([
-    sendBookingConfirmation(emailData),
-    sendBookingNotificationToTherapist(emailData),
     syncBookingToConnectedCalendars(booking.id),
   ]).then((results) => results.filter((result) => result.status === 'rejected')
     .forEach((result) => console.error('Post-booking side effect failed', {
@@ -320,7 +326,7 @@ const createFreeOrCoveredBooking = async ({ clientId, therapistId, payload }) =>
   } finally {
     client.release();
   }
-  postBookingSideEffects(booking, clientId, context);
+  postBookingSideEffects(booking);
   return bookingDtoFromRow({ ...booking, therapist_name: context.full_name, client_timezone: context.clientTimezone });
 };
 
@@ -560,7 +566,7 @@ const finalizePaidBookingIntent = async ({ orderId, paymentId, expectedClientId 
   } finally {
     client.release();
   }
-  postBookingSideEffects(booking, intent.client_id, context);
+  postBookingSideEffects(booking);
   return {
     status: 'completed',
     booking: bookingDtoFromRow({ ...booking, therapist_name: context.full_name, client_timezone: context.clientTimezone }),

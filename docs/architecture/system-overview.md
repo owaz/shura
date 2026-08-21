@@ -14,7 +14,7 @@ Express 5 + Socket.IO (one Node.js process)
   ├─ PostgreSQL
   ├─ Azure Blob Storage
   ├─ Razorpay
-  ├─ Gmail SMTP through Nodemailer
+  ├─ Resend HTTPS API through a PostgreSQL outbox
   ├─ Google Calendar / Microsoft Graph
   └─ Azure Monitor OpenTelemetry (optional)
 ```

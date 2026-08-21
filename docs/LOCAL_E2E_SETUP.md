@@ -191,7 +191,7 @@ Keep every provider secret in `shura-backend/.env`:
 - Auth0 Management API: `AUTH0_M2M_CLIENT_ID`, `AUTH0_M2M_CLIENT_SECRET`, and the therapist role ID.
 - Razorpay: test-mode key ID, key secret, and a separate test webhook secret. Use a temporary HTTPS tunnel for local webhook delivery.
 - Azure Storage: a development account/container and local development connection string.
-- Email: a dedicated development Gmail account and app password; never a personal or production mailbox.
+- Email: a development Resend API key, verified development sender, webhook signing secret, administrative recipient, and `EMAIL_OUTBOX_WORKER_ENABLED=true`. Use a temporary HTTPS tunnel for local webhook delivery and never reuse production credentials.
 - Google/Outlook calendars: development OAuth applications. Their local callbacks are `/api/calendar/google/callback` and `/api/calendar/outlook/callback` on port `5001`; use HTTPS tunnel callback URLs when the provider requires public HTTPS.
 
 Test successful provider round trips and failure behavior independently. Video integration remains excluded until its provider is chosen.

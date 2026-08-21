@@ -1,10 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const nodemailer = require('nodemailer');
 const pool = require('../db');
 const {
   sendBookingConfirmation,
-  sendClientSignupNotification,
+  sendQuestionnaireAdminNotification,
 } = require('../utils/emailService');
 
 const booking = {
@@ -19,74 +18,66 @@ const booking = {
 };
 
 const originalQuery = pool.query;
-const originalCreateTransport = nodemailer.createTransport;
 
 test.beforeEach(() => {
-  delete process.env.RESEND_API_KEY;
-  process.env.EMAIL_USER = 'sender@example.com';
-  process.env.EMAIL_PASSWORD = 'password';
+  process.env.RESEND_FROM_EMAIL = 'sender@notify.example.com';
   process.env.ADMIN_EMAIL = 'admin@example.com';
 });
 
 test.afterEach(() => {
-  delete process.env.RESEND_API_KEY;
-  delete process.env.EMAIL_OUTBOX_ENABLED;
-  delete process.env.ADMIN_EMAIL;
   pool.query = originalQuery;
-  nodemailer.createTransport = originalCreateTransport;
+  delete process.env.RESEND_FROM_EMAIL;
+  delete process.env.ADMIN_EMAIL;
 });
 
 test('skips booking confirmation when the client has opted out', async () => {
-  let sendCount = 0;
-  pool.query = async () => ({ rows: [{ notification_booking_confirmation: false }] });
-  nodemailer.createTransport = () => ({
-    sendMail: async () => { sendCount += 1; },
-  });
+  let queryCount = 0;
+  pool.query = async () => {
+    queryCount += 1;
+    return { rows: [{ notification_booking_confirmation: false }] };
+  };
 
   const result = await sendBookingConfirmation(booking);
 
   assert.deepEqual(result, { success: true, skipped: true });
-  assert.equal(sendCount, 0);
+  assert.equal(queryCount, 1);
 });
 
-test('sends booking confirmation when the client is opted in', async () => {
-  let sentMail;
-  pool.query = async () => ({ rows: [{ notification_booking_confirmation: true }] });
-  nodemailer.createTransport = () => ({
-    sendMail: async (mail) => { sentMail = mail; },
-  });
+test('queues booking confirmation when the client is opted in', async () => {
+  const queries = [];
+  pool.query = async (sql, params) => {
+    queries.push({ sql, params });
+    if (queries.length === 1) {
+      return { rows: [{ notification_booking_confirmation: true }] };
+    }
+    return { rows: [{ id: 1 }] };
+  };
 
   const result = await sendBookingConfirmation(booking);
 
   assert.equal(result.success, true);
-  assert.equal(sentMail.to, booking.clientEmail);
-  assert.equal(sentMail.idempotencyKey, 'booking-confirmation:42');
+  assert.equal(result.queued, true);
+  assert.equal(queries[1].params[0], 'booking-confirmation:42');
+  assert.equal(queries[1].params[1], 'booking_confirmation');
+  assert.equal(queries[1].params[2], booking.clientEmail);
+  assert.equal(queries[1].params[3], process.env.RESEND_FROM_EMAIL);
+  assert.match(queries[1].params[6], /Your session with Therapist is booked/);
 });
 
 test('fails closed when the booking client cannot be found', async () => {
-  let sendCount = 0;
   pool.query = async () => ({ rows: [] });
-  nodemailer.createTransport = () => ({
-    sendMail: async () => { sendCount += 1; },
-  });
 
   const result = await sendBookingConfirmation(booking);
 
   assert.deepEqual(result, { success: false, error: 'Booking confirmation client was not found' });
-  assert.equal(sendCount, 0);
 });
 
-test('returns the database error and does not send when preference lookup fails', async () => {
-  let sendCount = 0;
+test('returns the database error and does not enqueue when preference lookup fails', async () => {
   pool.query = async () => { throw new Error('database unavailable'); };
-  nodemailer.createTransport = () => ({
-    sendMail: async () => { sendCount += 1; },
-  });
 
   const result = await sendBookingConfirmation(booking);
 
   assert.deepEqual(result, { success: false, error: 'database unavailable' });
-  assert.equal(sendCount, 0);
 });
 
 test('requires client identity for booking confirmation preference enforcement', async () => {
@@ -97,26 +88,24 @@ test('requires client identity for booking confirmation preference enforcement',
   });
 });
 
-test('queues onboarding alerts without questionnaire content', async () => {
-  let queryParams;
-  process.env.RESEND_API_KEY = 'test-key';
-  process.env.EMAIL_OUTBOX_ENABLED = 'true';
-  pool.query = async (_query, params) => {
-    queryParams = params;
+test('queues a minimal questionnaire alert with an opaque event key', async () => {
+  let params;
+  pool.query = async (_sql, values) => {
+    params = values;
     return { rows: [{ id: 1 }] };
   };
 
-  const result = await sendClientSignupNotification({
-    fullName: 'Client',
-    email: 'client@example.com',
+  const result = await sendQuestionnaireAdminNotification({
     userId: 7,
+    email: 'client@example.com',
     concerns: ['synthetic concern'],
-    genderPreference: 'synthetic preference',
     additionalNotes: 'synthetic sensitive note',
   });
 
-  assert.deepEqual(result, { success: true });
-  assert.equal(queryParams[1], 'client_signup');
-  assert.match(queryParams[5], /review the client's onboarding details securely/);
-  assert.doesNotMatch(queryParams[5], /synthetic concern|synthetic preference|synthetic sensitive note/);
+  assert.equal(result.success, true);
+  assert.equal(params[0], 'questionnaire-submission:7');
+  assert.equal(params[1], 'questionnaire_submission');
+  assert.doesNotMatch(params[0], /@|https?:\/\//);
+  assert.doesNotMatch(params[5], /client@example\.com|synthetic concern|synthetic sensitive note/);
+  assert.doesNotMatch(params[6], /client@example\.com|synthetic concern|synthetic sensitive note/);
 });

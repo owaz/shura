@@ -10,17 +10,6 @@ const {
 } = require('../utils/emailService');
 const { syncBookingToConnectedCalendars } = require('../utils/calendarIntegrations');
 
-const dispatchBookingNotifications = (emailData) => {
-  void Promise.allSettled([
-    Promise.resolve().then(() => sendBookingConfirmation(emailData)),
-    Promise.resolve().then(() => sendBookingNotificationToTherapist(emailData)),
-  ]).then((results) => {
-    results
-      .filter((result) => result.status === 'rejected')
-      .forEach((result) => console.error('Booking email dispatch error:', result.reason));
-  });
-};
-
 const toMinutes = (time) => {
   const [hours, minutes] = String(time).slice(0, 5).split(':').map(Number);
   return hours * 60 + minutes;
@@ -289,32 +278,33 @@ router.post('/', authenticateToken, async (req, res) => {
        VALUES ($1, $2, $3, $4, (($3::date + $4::time) AT TIME ZONE 'Asia/Kolkata'), $5, $6) RETURNING *`,
       [user_id, therapist_id, date, requestedTime, session_type || 'video', 'pending']
     );
-    await client.query('COMMIT');
-    
     const booking = result.rows[0];
-    
-    // Fetch client and therapist details for email
-    const clientResult = await pool.query('SELECT full_name, email FROM users WHERE id = $1', [user_id]);
-    const therapistResult = await pool.query('SELECT full_name, email FROM therapists WHERE id = $1', [therapist_id]);
+    const clientResult = await client.query('SELECT full_name, email FROM users WHERE id = $1', [user_id]);
+    const therapistResult = await client.query('SELECT full_name, email FROM therapists WHERE id = $1', [therapist_id]);
     
     if (clientResult.rows.length > 0 && therapistResult.rows.length > 0) {
-      const client = clientResult.rows[0];
+      const clientUser = clientResult.rows[0];
       const therapist = therapistResult.rows[0];
       
       const emailData = {
         bookingId: booking.id,
         clientId: user_id,
-        clientName: client.full_name,
-        clientEmail: client.email,
+        clientName: clientUser.full_name,
+        clientEmail: clientUser.email,
         therapistName: therapist.full_name,
         therapistEmail: therapist.email,
         date: booking.date,
         time: booking.time,
         sessionType: booking.session_type,
       };
-      
-      dispatchBookingNotifications(emailData);
+      const emailResults = await Promise.all([
+        sendBookingConfirmation(emailData, client),
+        sendBookingNotificationToTherapist(emailData, client),
+      ]);
+      const failedEmail = emailResults.find((emailResult) => !emailResult.success);
+      if (failedEmail) throw new Error(failedEmail.error || 'Booking email could not be queued');
     }
+    await client.query('COMMIT');
 
     syncBookingToConnectedCalendars(booking.id).catch(err => {
       console.error('Calendar sync error:', err);

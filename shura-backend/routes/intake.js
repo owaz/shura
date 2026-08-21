@@ -24,6 +24,7 @@ const canIssueIntakeLink = async (requester, userId) => {
 
 // Generate intake form link and send to client
 router.post('/generate-link', authenticateToken, async (req, res) => {
+  const client = await pool.connect();
   try {
     const { userId } = req.body;
 
@@ -53,7 +54,8 @@ router.post('/generate-link', authenticateToken, async (req, res) => {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
     // Store token in database
-    await pool.query(
+    await client.query('BEGIN');
+    await client.query(
       `INSERT INTO intake_tokens (user_id, token, expires_at, created_at) 
        VALUES ($1, $2, $3, NOW())
        ON CONFLICT (user_id) 
@@ -61,18 +63,29 @@ router.post('/generate-link', authenticateToken, async (req, res) => {
       [userId, token, expiresAt]
     );
 
-    // Send email with link
     const intakeLink = `${frontendBaseUrl()}/intake/${token}`;
-    await sendIntakeFormLink(user.email, user.full_name, intakeLink);
+    const intakeEventId = crypto.createHash('sha256').update(token).digest('hex');
+    const notification = await sendIntakeFormLink(
+      user.email,
+      user.full_name,
+      intakeLink,
+      intakeEventId,
+      client
+    );
+    if (!notification.success) throw new Error(notification.error);
+    await client.query('COMMIT');
 
     res.json({ 
-      message: 'Intake form link sent successfully',
+      message: 'Intake form link queued successfully',
       link: intakeLink 
     });
 
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Generate intake link error:', error);
     res.status(500).json({ message: 'Failed to generate intake form link' });
+  } finally {
+    client.release();
   }
 });
 
@@ -110,26 +123,28 @@ router.get('/verify/:token', async (req, res) => {
 
 // Submit intake form
 router.post('/submit', async (req, res) => {
+  const clientConnection = await pool.connect();
   try {
     const { token, ...formData } = req.body;
 
-    // Verify token
-    const tokenResult = await pool.query(
+    await clientConnection.query('BEGIN');
+    const tokenResult = await clientConnection.query(
       `SELECT it.*, u.email, u.full_name 
        FROM intake_tokens it
        JOIN users u ON it.user_id = u.id
-       WHERE it.token = $1 AND it.expires_at > NOW() AND it.completed_at IS NULL`,
+       WHERE it.token = $1 AND it.expires_at > NOW() AND it.completed_at IS NULL
+       FOR UPDATE OF it`,
       [token]
     );
 
     if (tokenResult.rows.length === 0) {
+      await clientConnection.query('ROLLBACK');
       return res.status(400).json({ message: 'Invalid or expired link' });
     }
 
     const client = tokenResult.rows[0];
 
-    // Store intake form data
-    await pool.query(
+    const intakeResult = await clientConnection.query(
       `INSERT INTO intake_forms (
         user_id, 
         marital_status, has_children, children_details, living_situation,
@@ -145,7 +160,8 @@ router.post('/submit', async (req, res) => {
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19,
         $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, NOW()
-      )`,
+      )
+      RETURNING id`,
       [
         client.user_id,
         formData.maritalStatus, formData.hasChildren, formData.childrenDetails, formData.livingSituation,
@@ -162,13 +178,18 @@ router.post('/submit', async (req, res) => {
       ]
     );
 
-    // Mark token as completed
-    await pool.query(
+    await clientConnection.query(
       'UPDATE intake_tokens SET completed_at = NOW() WHERE token = $1',
       [token]
     );
 
-    // Auto-assign to best-matched therapist
+    const notification = await sendIntakeFormSubmission(
+      intakeResult.rows[0].id,
+      clientConnection
+    );
+    if (!notification.success) throw new Error(notification.error);
+    await clientConnection.query('COMMIT');
+
     let assignment = null;
     try {
       assignment = await autoAssignTherapist(client.user_id, formData);
@@ -180,9 +201,6 @@ router.post('/submit', async (req, res) => {
       // Continue even if auto-assignment fails
     }
 
-    // Send email notification to admin with intake form data
-    await sendIntakeFormSubmission(client.email, client.full_name, formData);
-
     res.json({ 
       message: 'Intake form submitted successfully',
       autoAssigned: assignment ? true : false,
@@ -193,8 +211,11 @@ router.post('/submit', async (req, res) => {
     });
 
   } catch (error) {
+    await clientConnection.query('ROLLBACK').catch(() => {});
     console.error('Submit intake form error:', error);
     res.status(500).json({ message: 'Failed to submit intake form' });
+  } finally {
+    clientConnection.release();
   }
 });
 

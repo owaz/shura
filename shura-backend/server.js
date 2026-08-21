@@ -9,6 +9,7 @@ const rateLimit = require('express-rate-limit');
 const pool = require('./db'); // Import pool from db/index.js
 const { authenticateToken } = require('./middleware/auth');
 const { verifyAccessToken } = require('./middleware/auth');
+const { assertEmailConfiguration } = require('./utils/emailConfig');
 
 if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
   useAzureMonitor();
@@ -442,11 +443,24 @@ async function runStartupMigrations() {
 }
 
 (async () => {
+  assertEmailConfiguration();
   await runStartupMigrations();
-  require('./utils/emailWorker').startEmailWorker();
+  const emailWorker = require('./utils/emailWorker').startEmailWorker();
   server.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🌐 http://localhost:${PORT}/api/health`);
     console.log('🔌 WebSocket server running');
   });
+
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} received; draining email worker`);
+    if (emailWorker) await emailWorker.stop();
+    await new Promise((resolve) => server.close(resolve));
+    await pool.end();
+  };
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
+  process.once('SIGINT', () => void shutdown('SIGINT'));
 })();

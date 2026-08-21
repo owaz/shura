@@ -29,9 +29,11 @@ AZURE_STORAGE_IMAGE_CONTAINER=shura-images
 AZURE_STORAGE_SAS_TTL_MINUTES=15
 
 # Email
-EMAIL_USER=your-email@gmail.com
-EMAIL_PASSWORD=your-app-password
+RESEND_API_KEY=your-resend-api-key
+RESEND_FROM_EMAIL=no-reply@your-verified-domain.example
+RESEND_WEBHOOK_SECRET=your-resend-webhook-signing-secret
 ADMIN_EMAIL=admin@shuraa.life
+EMAIL_OUTBOX_WORKER_ENABLED=true
 
 # Frontend URL
 FRONTEND_URL=https://your-frontend-domain.com

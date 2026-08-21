@@ -16,7 +16,9 @@ Razorpay order/payment/refund and signed webhook flows are server-side. Required
 
 ### Email
 
-`utils/emailService.js` uses Nodemailer with Gmail SMTP credentials from `EMAIL_USER`/`EMAIL_PASSWORD`; `ADMIN_EMAIL` selects administrative recipients. Most email failures are logged and do not roll back domain state. No queue or durable retry worker exists.
+Application helpers enqueue typed email intent in PostgreSQL and never call the provider synchronously. `utils/emailWorker.js` claims ready rows with `SKIP LOCKED`; `utils/resendAdapter.js` sends through the Resend HTTPS API with stable idempotency keys. `POST /api/webhooks/resend` verifies signed raw payloads and advances accepted messages to delivered, bounced, or complained without allowing stale events to downgrade later state.
+
+Production requires `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_WEBHOOK_SECRET`, `ADMIN_EMAIL`, and an explicit `EMAIL_OUTBOX_WORKER_ENABLED` value. Setting the worker switch to `false` pauses claims while preserving new pending messages. Terminal message payloads and old webhook dedupe rows are purged after 30 days; minimal delivery metadata remains. See [email delivery](email-delivery.md) and [ADR-0006](../decisions/0006-resend-durable-email-delivery.md).
 
 ### Google and Outlook calendars
 
@@ -24,7 +26,7 @@ Therapists connect calendars through OAuth callbacks under `/api/calendar/<provi
 
 ### Monitoring
 
-When `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, startup enables Azure Monitor OpenTelemetry. The repository has no structured logging framework, durable job runner, or documented alert definitions.
+When `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, startup enables Azure Monitor OpenTelemetry. The email outbox has its own durable worker; the repository has no general-purpose job runner, structured logging framework, or documented alert definitions.
 
 ### Video
 
@@ -53,7 +55,7 @@ Express serves static assets and an SPA fallback only when `NODE_ENV=production`
 
 `.github/workflows/deploy-aca.yml` runs on pushes to `main`, builds and pushes SHA/latest tags to Azure Container Registry, deploys staging, then deploys production using GitHub environments. Both apps share one Container Apps environment and external ingress on port 5001.
 
-The workflow currently does not run backend tests, frontend typecheck/build as separate quality gates, database migrations, smoke tests, or automatic rollback. It also contains stale Cloudinary secret mappings and omits several current Azure Blob, Razorpay, email, calendar, and DB TLS variables. Actual environment secrets might be configured outside the YAML, which cannot be established from the repository.
+The workflow currently does not run backend tests, frontend typecheck/build as separate quality gates, database migrations, smoke tests, or automatic rollback. It also contains stale Cloudinary secret mappings and omits several current Azure Blob, Razorpay, calendar, and DB TLS variables. Resend variables and the enabled outbox worker are configured, but required Container App secret values must exist before deployment. Actual environment secrets might also be configured outside the YAML, which cannot be established from the repository.
 
 Before relying on the pipeline for production, reconcile the workflow with `.env.production.example`, add safe migration orchestration, and define verification/rollback behavior. Do not place secrets directly in workflow text.
 
@@ -61,4 +63,4 @@ Before relying on the pipeline for production, reconcile the workflow with `.env
 
 The HTTP API is mostly stateless apart from in-memory Socket.IO connection state. The current Socket.IO setup has no Redis or other cross-replica adapter, so rooms and broadcasts do not span multiple replicas. Scaling the Container App above one active replica can break realtime delivery unless a shared adapter/sticky-session strategy is added and documented.
 
-PostgreSQL and external providers remain shared services. Concurrency-sensitive database operations use locks/constraints, but email/calendar side effects have no shared queue.
+PostgreSQL and external providers remain shared services. Concurrency-sensitive database operations use locks/constraints. Email uses its PostgreSQL outbox across replicas; calendar side effects have no shared queue.

@@ -309,7 +309,6 @@ router.patch('/:id/reschedule', sessionMutationLimiter, async (req, res) => {
   }
   const client = await pool.connect();
   let updatedId;
-  let emailData;
   try {
     await client.query('BEGIN');
     const policies = await loadPolicies(client);
@@ -352,10 +351,11 @@ router.patch('/:id/reschedule', sessionMutationLimiter, async (req, res) => {
        WHERE id = $3`,
       [nextDate.toISOString(), therapistTimezone, booking.id]
     );
-    await client.query(
+    const eventResult = await client.query(
       `INSERT INTO client_session_events
         (booking_id, client_id, event_type, previous_scheduled_at, next_scheduled_at)
-       VALUES ($1, $2, 'rescheduled', $3, $4)`,
+       VALUES ($1, $2, 'rescheduled', $3, $4)
+       RETURNING id`,
       [booking.id, req.clientId, previousScheduledAt, nextDate.toISOString()]
     );
     await client.query(
@@ -364,9 +364,14 @@ router.patch('/:id/reschedule', sessionMutationLimiter, async (req, res) => {
                'Your session has been moved to a new time.', $2::jsonb)`,
       [req.clientId, JSON.stringify({ bookingId: booking.id, previousScheduledAt, nextScheduledAt: nextDate.toISOString() })]
     );
+    const emailResult = await sendSessionRescheduledNotifications(
+      { ...booking, previousScheduledAt, nextScheduledAt: nextDate.toISOString() },
+      eventResult.rows[0].id,
+      client
+    );
+    if (!emailResult.success) throw new Error(emailResult.error || 'Reschedule email could not be queued');
     await client.query('COMMIT');
     updatedId = booking.id;
-    emailData = { ...booking, previousScheduledAt, nextScheduledAt: nextDate.toISOString() };
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('PATCH /api/client/sessions/:id/reschedule error', err);
@@ -378,7 +383,6 @@ router.patch('/:id/reschedule', sessionMutationLimiter, async (req, res) => {
 
   void Promise.allSettled([
     syncBookingUpdateToConnectedCalendars(updatedId),
-    sendSessionRescheduledNotifications(emailData),
   ]).then((results) => results.filter((result) => result.status === 'rejected')
     .forEach((result) => console.error('Post-reschedule notification error', result.reason)));
   const [row, policies] = await Promise.all([fetchSession(req.clientId, updatedId), loadPolicies()]);
@@ -452,6 +456,12 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
           JSON.stringify({ bookingId: booking.id, refundEligible }),
         ]
       );
+      const emailResult = await sendSessionCancellationNotifications({
+        ...booking,
+        refundEligible,
+        refundStatus: refundEligible ? 'pending' : null,
+      }, client);
+      if (!emailResult.success) throw new Error(emailResult.error || 'Cancellation email could not be queued');
     } else {
       const retryableRefundStatus = new Set(['pending', 'failed']);
       refundEligible = Boolean(payment?.razorpay_payment_id)
@@ -525,7 +535,6 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
   if (!alreadyCancelled) {
     void Promise.allSettled([
       cancelBookingOnConnectedCalendars(booking.id),
-      sendSessionCancellationNotifications({ ...booking, refundEligible, refundStatus }),
     ]).then((results) => results.filter((result) => result.status === 'rejected')
       .forEach((result) => console.error('Post-cancellation notification error', result.reason)));
   }

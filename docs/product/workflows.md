@@ -9,7 +9,7 @@
 5. Incomplete clients are routed through resumable portal onboarding.
 6. Completion persists profile, matching preferences, goals/notes, and a completion timestamp.
 
-The separate short questionnaire can attempt therapist auto-assignment and send an administrative email. It is distinct from the longer tokenized intake form.
+The separate short questionnaire can attempt therapist auto-assignment and queue a minimal administrative email that directs staff to the portal. It is distinct from the longer tokenized intake form.
 
 ## Client home and notifications
 
@@ -33,16 +33,16 @@ Because pending therapist logins are denied by the Auth0 post-login Action, the 
 
 Assignments can originate from admin action, questionnaire/intake auto-match, or client chat selection. The durable invariant is one active therapist per client, even though some legacy routes were written before that invariant and may surface conflict errors rather than perform a clean reassignment.
 
-Client release marks the current assignment `released`, creates a notification, and attempts therapist email. Selecting another therapist should be an explicit product action; merely opening a chat must not silently violate the assignment invariant.
+Client release marks the current assignment `released`, creates a notification, and queues therapist email in the same transaction. Selecting another therapist should be an explicit product action; merely opening a chat must not silently violate the assignment invariant.
 
 ## Intake form
 
 1. Assigned therapist/admin issues a seven-day link for a client.
 2. Anyone holding the link can view limited client identity and submit until expiry/completion; the token is the authorization secret.
-3. Submission stores the form, completes the token, emails an administrative summary, and attempts auto-assignment.
+3. Submission stores the form, completes the token, queues a minimal portal-directed administrative alert, and attempts auto-assignment.
 4. Assigned therapist views intake data through an authenticated relationship-scoped endpoint.
 
-Token values must not be logged or exposed beyond the recipient. Intake submission and token completion are currently separate queries rather than one explicit transaction, so partial failure behavior should be considered when changing the flow.
+Token values must not be logged or used in email event keys. Intake form insertion, token completion, and its administrative email intent share one database transaction.
 
 ## Discovery, booking, and payment
 
@@ -51,7 +51,7 @@ Token values must not be logged or exposed beyond the recipient. Intake submissi
 3. Covered/free sessions recheck and create a confirmed booking inside one locked transaction without Razorpay.
 4. Paid sessions create a Razorpay order and durable portal intent without reserving the slot.
 5. Successful signed browser verification or signed capture webhook locks the intent, rechecks assignment/offering/availability/overlap, and atomically creates confirmed booking/payment rows.
-6. Booking notification, confirmation emails, and connected-calendar creation run tolerantly after database finalization. The client can separately download an owned `.ics` file.
+6. Booking confirmation email intent is inserted in the booking transaction. Resend delivery and connected-calendar creation occur asynchronously after database finalization. The client can separately download an owned `.ics` file.
 
 Unauthenticated/legacy booking and payment routes remain for compatibility. New portal consumers use the structured `/api/client` contracts.
 
@@ -67,7 +67,9 @@ Payment does not reserve a slot until finalization. A competing booking or eligi
 
 ## Session management
 
-Clients list sessions as upcoming, past, or cancelled. Within policy they can reschedule or cancel. Changes are transactional, audited in `client_session_events`, and followed by notifications, email, and calendar sync. Eligible Razorpay refunds are asynchronous relative to cancellation and can be pending or failed.
+Clients list sessions as upcoming, past, or cancelled. Within policy they can reschedule or cancel. Changes, audit events, and email intent are transactional; Resend delivery and calendar sync happen afterward. Eligible Razorpay refunds are asynchronous relative to cancellation and can be pending or failed.
+
+Booking-confirmation preferences are enforced before queueing. Reminder scheduling, SMS reminders, newsletters/campaigns, and platform-update email delivery are not implemented merely because related preference or content columns exist.
 
 At join time, text sessions navigate to chat. Video/audio secure join is unavailable until a provider is implemented. Completed sessions can be reviewed once.
 

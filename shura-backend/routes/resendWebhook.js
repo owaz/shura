@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const pool = require('../db');
+const { DELIVERY_EVENTS, applyDeliveryEvent } = require('../utils/emailOutbox');
 
 const router = express.Router();
 
@@ -25,37 +26,44 @@ const verifySignature = (req) => {
   });
 };
 
+const providerEventTime = (req) => {
+  const value = req.body?.created_at || req.body?.data?.created_at;
+  const parsed = value ? new Date(value) : new Date(Number(req.headers['svix-timestamp']) * 1000);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 router.post('/', async (req, res) => {
   if (!verifySignature(req)) return res.status(401).json({ error: 'Invalid webhook signature' });
   const eventId = req.headers['svix-id'];
   const eventType = req.body?.type;
+  if (!DELIVERY_EVENTS[eventType]) return res.status(200).json({ ok: true, ignored: true });
   const emailId = req.body?.data?.email_id;
-  if (!eventType || !emailId) return res.status(400).json({ error: 'Invalid webhook payload' });
+  const occurredAt = providerEventTime(req);
+  if (!emailId || !occurredAt) return res.status(400).json({ error: 'Invalid webhook payload' });
 
+  const client = await pool.connect();
   try {
-    const inserted = await pool.query(
-      `INSERT INTO email_webhook_events (event_id, event_type)
-       VALUES ($1, $2) ON CONFLICT (event_id) DO NOTHING`,
-      [eventId, eventType]
+    await client.query('BEGIN');
+    const inserted = await client.query(
+      `INSERT INTO email_webhook_events
+        (event_id, event_type, provider_message_id, provider_event_at)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (event_id) DO NOTHING`,
+      [eventId, eventType, emailId, occurredAt]
     );
-    if (inserted.rowCount === 0) return res.status(200).json({ ok: true, duplicate: true });
-
-    const status = {
-      'email.delivered': 'sent',
-      'email.bounced': 'bounced',
-      'email.complained': 'complained',
-    }[eventType];
-    if (status) {
-      await pool.query(
-        `UPDATE email_outbox SET status = $1, provider_message_id = $2, updated_at = NOW()
-         WHERE provider_message_id = $2`,
-        [status, emailId]
-      );
+    if (inserted.rowCount === 0) {
+      await client.query('COMMIT');
+      return res.status(200).json({ ok: true, duplicate: true });
     }
+    await applyDeliveryEvent(client, emailId, eventType, occurredAt);
+    await client.query('COMMIT');
     return res.status(200).json({ ok: true });
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Resend webhook processing failed:', error.message);
     return res.status(500).json({ error: 'Webhook processing failed' });
+  } finally {
+    client.release();
   }
 });
 
