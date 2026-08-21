@@ -12,17 +12,6 @@ const { syncBookingToConnectedCalendars } = require('../utils/calendarIntegratio
 const { finalizePaidBookingIntent: finalizePortalBookingIntent } = require('../services/clientBookingService');
 const { createClientNotification } = require('../services/clientNotifications');
 
-const dispatchBookingNotifications = (emailData) => {
-  void Promise.allSettled([
-    Promise.resolve().then(() => sendBookingConfirmation(emailData)),
-    Promise.resolve().then(() => sendBookingNotificationToTherapist(emailData)),
-  ]).then((results) => {
-    results
-      .filter((result) => result.status === 'rejected')
-      .forEach((result) => console.error('Booking email dispatch error:', result.reason));
-  });
-};
-
 const toMinutes = (time) => {
   const [hours, minutes] = String(time).slice(0, 5).split(':').map(Number);
   return hours * 60 + minutes;
@@ -232,8 +221,8 @@ const resolveExpectedPaidAmountCents = async ({ therapistId, sessionType, client
   return expectedAmountCents;
 };
 
-const loadBookingEmailData = async ({ therapistId, userId }) => {
-  const details = await pool.query(
+const loadBookingEmailData = async ({ therapistId, userId }, queryable = pool) => {
+  const details = await queryable.query(
     `SELECT u.full_name as client_name, u.email as client_email, t.full_name as therapist_name, t.email as therapist_email
      FROM users u
      JOIN therapists t ON t.id = $1
@@ -357,14 +346,12 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
       [bookingResult.rows[0].id, paymentResult.rows[0].id, intent.id]
     );
 
-    await dbClient.query('COMMIT');
-
     const emailDataDetails = await loadBookingEmailData({
       therapistId: intent.therapist_id,
       userId: intent.client_id,
-    });
+    }, dbClient);
     if (emailDataDetails) {
-      dispatchBookingNotifications({
+      const emailData = {
         bookingId: bookingResult.rows[0].id,
         clientId: intent.client_id,
         clientName: emailDataDetails.client_name,
@@ -374,8 +361,15 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
         date: bookingResult.rows[0].date,
         time: bookingResult.rows[0].time,
         sessionType: bookingResult.rows[0].session_type,
-      });
+      };
+      const emailResults = await Promise.all([
+        sendBookingConfirmation(emailData, dbClient),
+        sendBookingNotificationToTherapist(emailData, dbClient),
+      ]);
+      const failedEmail = emailResults.find((emailResult) => !emailResult.success);
+      if (failedEmail) throw new Error(failedEmail.error || 'Booking email could not be queued');
     }
+    await dbClient.query('COMMIT');
 
     syncBookingToConnectedCalendars(bookingResult.rows[0].id).catch((err) => {
       console.error('Calendar sync error:', err);

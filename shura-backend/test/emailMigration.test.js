@@ -125,6 +125,18 @@ async function assertHardenedSchema(client, schema) {
   assert.match(retention.indexdef, /'sent'/);
 }
 
+async function assertAcceptedRetentionIndex(client, schema) {
+  const index = await client.query(
+    `SELECT indexdef
+     FROM pg_indexes
+     WHERE schemaname = $1
+       AND indexname = 'idx_email_outbox_payload_retention'`,
+    [schema]
+  );
+  assert.equal(index.rowCount, 1);
+  assert.match(index.rows[0].indexdef, /'accepted'/);
+}
+
 test('migration 017 upgrades migration 016 state in PostgreSQL', { skip }, async () => {
   await withDisposableSchema('email_upgrade', async (client, schema) => {
     await applySql(client, await readSql(path.join(migrationsDir, '016_email_outbox.sql')));
@@ -148,9 +160,19 @@ test('migration 017 upgrades migration 016 state in PostgreSQL', { skip }, async
   });
 });
 
-test('fresh bootstrap through migration 017 produces the hardened schema', { skip }, async () => {
+test('fresh bootstrap through all migrations produces the hardened schema', { skip }, async () => {
   await withDisposableSchema('email_fresh', async (client, schema) => {
     await applyAllMigrations(client);
     await assertHardenedSchema(client, schema);
+    await assertAcceptedRetentionIndex(client, schema);
+  });
+});
+
+test('migration 018 indexes accepted messages for payload retention', { skip }, async () => {
+  await withDisposableSchema('email_retention', async (client, schema) => {
+    await applySql(client, await readSql(path.join(migrationsDir, '016_email_outbox.sql')));
+    await applySql(client, await readSql(path.join(migrationsDir, '017_email_delivery_hardening.sql')));
+    await applySql(client, await readSql(path.join(migrationsDir, '018_include_accepted_email_retention.sql')));
+    await assertAcceptedRetentionIndex(client, schema);
   });
 });

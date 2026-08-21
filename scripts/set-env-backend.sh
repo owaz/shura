@@ -36,9 +36,11 @@ az containerapp update \
     CLOUD_API_SECRET="<cloudinary-api-secret>" \
     CLOUDINARY_UPLOAD_FOLDER="shura/uploads" \
     \
-    EMAIL_USER="shuraa.life@gmail.com" \
-    EMAIL_PASSWORD="<gmail-app-password>" \
-    ADMIN_EMAIL="shuraa.life@gmail.com" \
+    RESEND_API_KEY="<resend-api-key>" \
+    RESEND_FROM_EMAIL="<no-reply@your-verified-domain>" \
+    RESEND_WEBHOOK_SECRET="<resend-webhook-signing-secret>" \
+    ADMIN_EMAIL="<administrative-recipient>" \
+    EMAIL_OUTBOX_WORKER_ENABLED="true" \
     \
     FRONTEND_URL="https://shura.life" \
     FRONTEND_URLS="https://shura.life" \

@@ -3,7 +3,10 @@ const argon2 = require('argon2');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const pool = require('../db'); // Properly import the pool
-const { sendTherapistApplicationNotification, sendClientSignupNotification } = require('../utils/emailService');
+const {
+  sendQuestionnaireAdminNotification,
+  sendTherapistApplicationNotification,
+} = require('../utils/emailService');
 const { autoAssignTherapist } = require('../utils/matchingService');
 const { authenticateToken } = require('../middleware/auth');
 const { deleteImage, getCanonicalImageUrl, getImageReadUrl } = require('../services/azureBlobStorage');
@@ -479,55 +482,9 @@ router.put('/profile', authenticateToken, async (req, res) => {
 
 // Signup route
 router.post('/signup', async (req, res) => {
-  try {
-    return res.status(410).json({
-      error: 'Direct signup has been removed. Use Auth0 Universal Login signup.',
-    });
-
-    const { email, password, full_name } = req.body;
-
-    // Validation
-    if (!email || !password) {
-      return res.status(400).json({ error: 'email & password required' });
-    }
-
-    // Check if user exists
-    const exists = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    if (exists.rows.length) {
-      return res.status(409).json({ error: 'Email already registered' });
-    }
-
-
-      // Hash password with Argon2
-      const hashed = await argon2.hash(password);
-
-    // Create user
-    const q = `INSERT INTO users (email, password_hash, full_name) VALUES ($1, $2, $3) RETURNING id, email, full_name`;
-    const { rows } = await pool.query(q, [email, hashed, full_name || null]);
-    const user = rows[0];
-
-    // Send email notification to admin
-    try {
-      await sendClientSignupNotification({
-        email: user.email,
-        fullName: user.full_name,
-        userId: user.id,
-      });
-    } catch (emailError) {
-      console.error('Failed to send client signup notification:', emailError);
-      // Continue even if email fails
-    }
-
-    const session = await createSession(req, res, user, 'client');
-
-    return res.json(withDevToken(
-      { id: user.id, email: user.email, role: 'client', sid: session.sessionId },
-      { user, csrfToken: session.csrfToken }
-    ));
-  } catch (err) {
-    console.error('AUTH signup error', err);
-    return res.status(500).json({ error: err.message });
-  }
+  return res.status(410).json({
+    error: 'Direct signup has been removed. Use Auth0 Universal Login signup.',
+  });
 });
 
 // Dev-only: create a test user and return a JWT (only allowed in non-production)
@@ -576,6 +533,11 @@ router.post('/questionnaire', authenticateToken, async (req, res) => {
 
     const user = userResult.rows[0];
 
+    const emailResult = await sendQuestionnaireAdminNotification({ userId: user.id });
+    if (!emailResult.success) {
+      throw new Error(emailResult.error || 'Questionnaire notification could not be queued');
+    }
+
     let assignment = null;
     try {
       assignment = await autoAssignTherapist(user.id, {
@@ -588,20 +550,6 @@ router.post('/questionnaire', authenticateToken, async (req, res) => {
       });
     } catch (assignError) {
       console.error('Questionnaire auto-assignment failed:', assignError);
-    }
-
-    // Send email notification with all client info + questionnaire
-    try {
-      await sendClientSignupNotification({
-        email: user.email,
-        fullName: user.full_name,
-        userId: user.id,
-        concerns: concerns || [],
-        genderPreference: gender || 'No Preference',
-        additionalNotes: notes || 'None',
-      });
-    } catch (emailError) {
-      console.error('Failed to send questionnaire notification:', emailError);
     }
 
     return res.json({
@@ -750,94 +698,9 @@ router.post('/reset-password', async (req, res) => {
 
 // Therapist application route
 router.post('/therapist/apply', async (req, res) => {
-  try {
-    const {
-      fullName,
-      email,
-      phone,
-      licenseNumber,
-      experience,
-      specialties,
-      sessionTypes,
-      rate60min,
-      availability,
-      password,
-      languages,
-      gender,
-      location,
-    } = req.body;
-    const normalizedSpecialties = normalizeTextList(specialties);
-    const normalizedSessionTypes = normalizeSessionTypes(sessionTypes);
-    const normalizedAvailability = normalizeTextList(availability);
-    const normalizedLanguages = normalizeTextList(languages);
-
-    // Validation
-    if (!email || !password || !fullName) {
-      return res.status(400).json({ error: 'Email, password, and full name are required' });
-    }
-    if (!normalizedSpecialties.length) {
-      return res.status(400).json({ error: 'Specialties are required' });
-    }
-    if (!normalizedSessionTypes.length) {
-      return res.status(400).json({ error: 'At least one session type is required' });
-    }
-    if (!normalizedAvailability.length) {
-      return res.status(400).json({ error: 'Availability is required' });
-    }
-
-    // Check if therapist already exists
-    const exists = await pool.query('SELECT id FROM therapists WHERE email = $1', [email]);
-    if (exists.rows.length) {
-      return res.status(409).json({ error: 'Email already registered' });
-    }
-
-    // Hash password
-    const hashed = await bcrypt.hash(password, SALT_ROUNDS);
-
-    const columnTypeMap = await getTherapistsColumnTypeMap(['specialties', 'session_types', 'availability', 'languages']);
-    const dbSpecialties = toDbTextList(normalizedSpecialties, columnTypeMap, 'specialties');
-    const dbSessionTypes = isArrayColumn(columnTypeMap, 'session_types') ? normalizedSessionTypes : normalizedSessionTypes.join(', ');
-    const dbAvailability = toDbTextList(normalizedAvailability, columnTypeMap, 'availability');
-    const dbLanguages = toDbTextList(normalizedLanguages, columnTypeMap, 'languages');
-
-    // Create therapist application (status defaults to 'pending' in database)
-    const q = `INSERT INTO therapists (email, password_hash, full_name, phone, license_number, experience_years, specialties, session_types, rate_60min, availability, languages, gender, location) 
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, email, full_name`;
-    const { rows } = await pool.query(q, [
-      email,
-      hashed,
-      fullName,
-      phone,
-      licenseNumber,
-      toNullableInt(experience),
-      dbSpecialties,
-      dbSessionTypes,
-      toNullableInt(rate60min),
-      dbAvailability,
-      dbLanguages,
-      typeof gender === 'string' ? gender.trim() || null : null,
-      typeof location === 'string' ? location.trim() || null : null,
-    ]);
-    const therapist = rows[0];
-
-    // Send email notification to admin (non-blocking)
-    sendTherapistApplicationNotification({
-      fullName,
-      email,
-      phone,
-      licenseNumber,
-      experience,
-      specialties: normalizedSpecialties,
-      sessionTypes: normalizedSessionTypes,
-      rate60min,
-      availability: normalizedAvailability,
-    }).catch(err => console.error('Email notification failed:', err));
-
-    return res.json({ therapist, message: 'Application submitted successfully. You will be notified once approved.' });
-  } catch (err) {
-    console.error('THERAPIST apply error', err);
-    return res.status(500).json({ error: err.message });
-  }
+  return res.status(410).json({
+    error: 'Legacy therapist signup has been removed. Use Auth0 Universal Login signup.',
+  });
 });
 
 // Auth0 flow: therapist identity is created in Auth0 first, then professional profile is completed here.
@@ -888,8 +751,12 @@ router.post('/therapist/application', authenticateToken, async (req, res) => {
     const dbAvailability = toDbTextList(normalizedAvailability, columnTypeMap, 'availability');
     const dbLanguages = toDbTextList(normalizedLanguages, columnTypeMap, 'languages');
 
-    const { rows } = await pool.query(
-      `UPDATE therapists
+    const client = await pool.connect();
+    let rows;
+    try {
+      await client.query('BEGIN');
+      const result = await client.query(
+        `UPDATE therapists
        SET full_name = $1,
            phone = $2,
            license_number = $3,
@@ -905,26 +772,38 @@ router.post('/therapist/application', authenticateToken, async (req, res) => {
            status = COALESCE(NULLIF(status, ''), 'pending'),
            updated_at = NOW()
        WHERE id = $13
-       RETURNING id, auth0_sub, email, full_name, status, specialties, session_types, availability, rate_60min`,
-      [
-        String(fullName).trim(),
-        typeof phone === 'string' ? phone.trim() || null : null,
-        typeof licenseNumber === 'string' ? licenseNumber.trim() || null : null,
-        toNullableInt(experience),
-        dbSpecialties,
-        dbSessionTypes,
-        toNullableInt(rate60min),
-        dbAvailability,
-        dbLanguages,
-        typeof gender === 'string' ? gender.trim() || null : null,
-        typeof location === 'string' ? location.trim() || null : null,
-        typeof bio === 'string' ? bio.trim() || null : null,
-        req.user.id,
-      ]
-    );
-
-    if (!rows.length) {
-      return res.status(404).json({ error: 'Therapist profile not found' });
+         RETURNING id, auth0_sub, email, full_name, status, specialties, session_types, availability, rate_60min`,
+        [
+          String(fullName).trim(),
+          typeof phone === 'string' ? phone.trim() || null : null,
+          typeof licenseNumber === 'string' ? licenseNumber.trim() || null : null,
+          toNullableInt(experience),
+          dbSpecialties,
+          dbSessionTypes,
+          toNullableInt(rate60min),
+          dbAvailability,
+          dbLanguages,
+          typeof gender === 'string' ? gender.trim() || null : null,
+          typeof location === 'string' ? location.trim() || null : null,
+          typeof bio === 'string' ? bio.trim() || null : null,
+          req.user.id,
+        ]
+      );
+      rows = result.rows;
+      if (!rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Therapist profile not found' });
+      }
+      const notification = await sendTherapistApplicationNotification({
+        applicationId: rows[0].id,
+      }, client);
+      if (!notification.success) throw new Error(notification.error);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
     }
 
     return res.json({

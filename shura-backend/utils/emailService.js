@@ -1,6 +1,4 @@
-const nodemailer = require('nodemailer');
 const pool = require('../db');
-const { sendEmail: sendViaResend } = require('./resendAdapter');
 const { enqueueEmail } = require('./emailOutbox');
 
 const escapeHtml = (value) => String(value ?? '')
@@ -10,420 +8,137 @@ const escapeHtml = (value) => String(value ?? '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#39;');
 
-const textOrFallback = (value, fallback = 'N/A') => {
+const textValue = (value, fallback = 'Not provided') => {
   if (value === undefined || value === null || value === '') return fallback;
-  return escapeHtml(value);
+  return String(value);
 };
 
-const listOrFallback = (value, fallback = 'None selected') => {
-  if (!Array.isArray(value) || value.length === 0) return fallback;
-  return value.map((item) => escapeHtml(item)).join(', ');
-};
+const frontendBaseUrl = () =>
+  (process.env.FRONTEND_URL || 'http://localhost:3006').replace(/\/$/, '');
+const frontendUrl = (path = '/') =>
+  `${frontendBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
 
-const multilineOrFallback = (value, fallback = 'Not provided') => {
-  if (value === undefined || value === null || value === '') return fallback;
-  return escapeHtml(value).replace(/\n/g, '<br/>');
-};
+const emailShell = (title, body) => `
+  <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f8f5f0">
+    <div style="background:#fff;padding:28px;border-radius:12px;border-top:4px solid #8B7355">
+      <h1 style="font-size:22px;color:#5C5043;margin-top:0">${escapeHtml(title)}</h1>
+      ${body}
+    </div>
+  </div>
+`;
 
-const frontendBaseUrl = () => (process.env.FRONTEND_URL || 'http://localhost:3006').replace(/\/$/, '');
-const frontendUrl = (path = '/') => `${frontendBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
-
-const sendEmailViaProvider = async (mailOptions, emailType = 'notification') => {
-  if (process.env.RESEND_API_KEY) {
-    if (process.env.EMAIL_OUTBOX_ENABLED === 'true') {
-      if (!mailOptions.idempotencyKey) {
-        return { success: false, error: 'Email outbox requires an idempotency key' };
-      }
-      return enqueueEmail({
-        eventKey: mailOptions.idempotencyKey,
-        emailType,
-        recipient: mailOptions.to,
-        sender: process.env.RESEND_FROM_EMAIL || mailOptions.from,
-        subject: mailOptions.subject,
-        html: mailOptions.html,
-        text: mailOptions.text,
-      });
-    }
-    return sendViaResend({
-      ...mailOptions,
-      from: process.env.RESEND_FROM_EMAIL || mailOptions.from,
-    });
+const queueEmail = (mailOptions, emailType, queryable = pool) => {
+  if (!mailOptions.idempotencyKey) {
+    return Promise.resolve({ success: false, error: 'Email outbox requires an idempotency key' });
   }
-  const transporter = createTransporter();
+  return enqueueEmail({
+    eventKey: mailOptions.idempotencyKey,
+    emailType,
+    recipient: mailOptions.to,
+    sender: process.env.RESEND_FROM_EMAIL,
+    subject: mailOptions.subject,
+    html: mailOptions.html,
+    text: mailOptions.text,
+  }, queryable);
+};
+
+const sendTherapistApplicationNotification = async (therapistData, queryable = pool) => {
+  const applicationId = therapistData.applicationId;
+  if (!applicationId) {
+    return { success: false, error: 'applicationId is required for therapist application email' };
+  }
+  const reviewUrl = frontendUrl('/admin/therapists/pending');
   try {
-    await transporter.sendMail(mailOptions);
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-};
-
-// Create reusable transporter
-const createTransporter = () => {
-  // Check if we're using App Password or regular Gmail
-  if (process.env.EMAIL_PASSWORD && process.env.EMAIL_PASSWORD.length === 16 && !process.env.EMAIL_PASSWORD.includes(' ')) {
-    // Using App Password (no spaces, 16 chars)
-    return nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-    });
-  } else {
-    // Using regular password - requires less secure app access or OAuth2
-    return nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-  }
-};
-
-// Send new therapist application notification to admin
-const sendTherapistApplicationNotification = async (therapistData) => {
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    const result = await queueEmail({
       to: process.env.ADMIN_EMAIL,
-      subject: '🩺 New Therapist Application - Shura Platform',
-      idempotencyKey: `therapist-application:${therapistData.email}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
-          <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0;">Shura - New Therapist Application</h1>
-          </div>
-          
-          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #333;">You have received a new therapist application:</p>
-            
-            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-              <tr style="background-color: #f8f5f0;">
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Full Name:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.fullName)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Email:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.email)}</td>
-              </tr>
-              <tr style="background-color: #f8f5f0;">
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Phone:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.phone)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">License Number:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.licenseNumber)}</td>
-              </tr>
-              <tr style="background-color: #f8f5f0;">
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Experience:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.experience)} years</td>
-              </tr>
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Specialties:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.specialties)}</td>
-              </tr>
-              <tr style="background-color: #f8f5f0;">
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Session Types:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${Array.isArray(therapistData.sessionTypes) && therapistData.sessionTypes.length > 0 ? listOrFallback(therapistData.sessionTypes, 'N/A') : 'N/A'}</td>
-              </tr>
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Rate (60 min):</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">₹${textOrFallback(therapistData.rate60min)}</td>
-              </tr>
-              <tr style="background-color: #f8f5f0;">
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Availability:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(therapistData.availability)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Applied On:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
-              </tr>
-            </table>
-            
-            <div style="margin-top: 30px; padding: 20px; background-color: #f8f5f0; border-radius: 8px; border-left: 4px solid #8B7355;">
-              <h3 style="color: #8B7355; margin-top: 0;">Next Steps:</h3>
-              <p style="color: #555; line-height: 1.6;">
-                1. Log in to your PostgreSQL database<br>
-                2. Review the application details<br>
-                3. To approve: <code style="background: #fff; padding: 2px 6px; border-radius: 3px;">UPDATE therapists SET status = 'approved' WHERE email = '${textOrFallback(therapistData.email)}';</code><br>
-                4. To reject: <code style="background: #fff; padding: 2px 6px; border-radius: 3px;">UPDATE therapists SET status = 'rejected' WHERE email = '${textOrFallback(therapistData.email)}';</code>
-              </p>
-            </div>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #8B7355; font-size: 12px;">
-            <p>This is an automated notification from Shura Platform</p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailViaProvider(mailOptions, 'therapist_application');
-    if (result.success) {
-      console.log('✅ Email sent: therapist_application');
-      return result;
-    } else {
-      console.error('❌ Error sending therapist application email:', result.error);
-      return { success: false, error: result.error };
-    }
+      subject: 'New therapist application requires review',
+      idempotencyKey: `therapist-application:${applicationId}`,
+      html: emailShell('Therapist application received', `
+        <p style="color:#555;line-height:1.6">A therapist application is ready for authorized review in Shura.</p>
+        <p><a href="${escapeHtml(reviewUrl)}">Open pending therapist applications</a></p>
+      `),
+      text: `A therapist application is ready for authorized review in Shura.\n\n${reviewUrl}`,
+    }, 'therapist_application', queryable);
+    if (result.success) console.log('Email queued: therapist_application');
+    return result;
   } catch (error) {
-    console.error('❌ Error sending therapist application email:', error);
+    console.error('Therapist application email queue failed:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-// Send approval email to therapist
-const sendTherapistApprovalEmail = async (therapistEmail, therapistName) => {
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: therapistEmail,
-      subject: '🎉 Your Therapist Application has been Approved - Shura',
-      idempotencyKey: `therapist-approval:${therapistEmail}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
-          <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0;">Welcome to Shura! 🎉</h1>
-          </div>
-          
-          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #333;">Dear ${textOrFallback(therapistName)},</p>
-            
-            <p style="font-size: 16px; color: #333; line-height: 1.6;">
-              Congratulations! Your application to join Shura's therapist network has been <strong style="color: #8B7355;">approved</strong>. 
-              We are excited to have you as part of our faith-centered mental health community.
-            </p>
-            
-            <div style="margin: 30px 0; padding: 20px; background-color: #f8f5f0; border-radius: 8px; border-left: 4px solid #8B7355;">
-              <h3 style="color: #8B7355; margin-top: 0;">Next Steps:</h3>
-              <ol style="color: #555; line-height: 1.8;">
-                <li>Log in to your therapist portal</li>
-                <li>Complete your profile with additional details</li>
-                <li>Set your availability schedule</li>
-                <li>Start connecting with clients seeking guidance</li>
-              </ol>
-            </div>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${frontendUrl('/therapist-login')}" style="display: inline-block; background-color: #8B7355; color: #ffffff; padding: 15px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
-                Login to Your Portal
-              </a>
-            </div>
-            
-            <p style="font-size: 14px; color: #666; line-height: 1.6;">
-              If you have any questions or need assistance, please don't hesitate to reach out to our support team.
-            </p>
-            
-            <p style="font-size: 16px; color: #333; margin-top: 30px;">
-              Warm regards,<br>
-              <strong style="color: #8B7355;">The Shura Team</strong>
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #8B7355; font-size: 12px;">
-            <p>This is an automated message from Shura Platform</p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailViaProvider(mailOptions, 'therapist_approval');
-    if (!result.success) throw new Error(result.error);
-    console.log('✅ Email sent: therapist_approval');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Error sending approval email:', error);
-    return { success: false, error: error.message };
+const sendQuestionnaireAdminNotification = async (clientData, queryable = pool) => {
+  if (!clientData.userId) {
+    return { success: false, error: 'userId is required for questionnaire email' };
   }
-};
-
-// Send client signup notification to admin
-const sendClientSignupNotification = async (clientData) => {
   try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    const result = await queueEmail({
       to: process.env.ADMIN_EMAIL,
-      subject: '👤 New Client Signup - Shura Platform',
-      idempotencyKey: `client-signup:${clientData.userId || clientData.email}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
-          <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0;">Shura - New Client Signup</h1>
-          </div>
-          
-          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #333;">A new client has signed up on the platform:</p>
-            
-            <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-              <tr style="background-color: #f8f5f0;">
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Full Name:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(clientData.fullName, 'Not provided')}</td>
-              </tr>
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Email:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${textOrFallback(clientData.email)}</td>
-              </tr>
-              <tr style="background-color: #f8f5f0;">
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">User ID:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">#${textOrFallback(clientData.userId)}</td>
-              </tr>
-              <tr>
-                <td style="padding: 12px; font-weight: bold; color: #8B7355; border: 1px solid #ddd;">Signed Up On:</td>
-                <td style="padding: 12px; border: 1px solid #ddd;">${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
-              </tr>
-            </table>
-            
-            <div style="margin-top: 30px; padding: 20px; background-color: #fff8e1; border-radius: 8px; border-left: 4px solid #ffc107;">
-              <p style="color: #666; margin: 0;">Please sign in to the admin portal to review the client's onboarding details securely.</p>
-            </div>
-            
-            <div style="margin-top: 30px; padding: 20px; background-color: #f8f5f0; border-radius: 8px; border-left: 4px solid #8B7355;">
-              <h3 style="color: #8B7355; margin-top: 0;">Client Activity:</h3>
-              <p style="color: #555; line-height: 1.6;">
-                The client can now:<br>
-                • Browse therapists<br>
-                • Book appointments<br>
-                • Access mental health resources<br>
-                • Connect with faith-centered support
-              </p>
-            </div>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #8B7355; font-size: 12px;">
-            <p>This is an automated notification from Shura Platform</p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailViaProvider(mailOptions, 'client_signup');
-    if (!result.success) throw new Error(result.error);
-    console.log('✅ Email sent: client_signup');
-    return { success: true };
+      subject: 'Client questionnaire requires review',
+      idempotencyKey: `questionnaire-submission:${clientData.userId}`,
+      html: emailShell('Client questionnaire submitted', `
+        <p style="color:#555;line-height:1.6">A client questionnaire is ready for authorized review in Shura.</p>
+      `),
+      text: 'A client questionnaire is ready for authorized review in Shura.',
+    }, 'questionnaire_submission', queryable);
+    if (result.success) console.log('Email queued: questionnaire_submission');
+    return result;
   } catch (error) {
-    console.error('❌ Error sending client signup email:', error);
+    console.error('Questionnaire email queue failed:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-// Send intake form link to client
-const sendIntakeFormLink = async (clientEmail, clientName, intakeLink) => {
+const sendIntakeFormLink = async (
+  clientEmail,
+  clientName,
+  intakeLink,
+  intakeEventId,
+  queryable = pool
+) => {
+  if (!intakeEventId) {
+    return { success: false, error: 'intakeEventId is required for intake link email' };
+  }
+  const name = textValue(clientName, 'Client');
   try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    const result = await queueEmail({
       to: clientEmail,
-      subject: '📋 Complete Your Intake Form - Shura',
-      idempotencyKey: `intake-link:${clientEmail}:${intakeLink}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
-          <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0;">Shura - Intake Form</h1>
-          </div>
-          
-          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #333;">Dear ${textOrFallback(clientName)},</p>
-            
-            <p style="color: #555; line-height: 1.6;">
-              Thank you for choosing Shura for your mental health journey. To help us provide you with the best possible care, 
-              we ask that you complete a comprehensive intake form before your first session.
-            </p>
-            
-            <p style="color: #555; line-height: 1.6;">
-              This form helps your therapist understand your background, concerns, and goals. It takes approximately 10-15 minutes to complete.
-            </p>
-            
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${escapeHtml(intakeLink)}" 
-                 style="background-color: #8B7355; color: #ffffff; padding: 15px 40px; text-decoration: none; 
-                        border-radius: 8px; font-weight: bold; display: inline-block; font-size: 16px;">
-                Complete Intake Form
-              </a>
-            </div>
-            
-            <p style="color: #888; font-size: 14px; line-height: 1.6;">
-              <strong>Note:</strong> This link will expire in 7 days. Your information is confidential and will only be shared with your assigned therapist.
-            </p>
-            
-            <p style="color: #555; margin-top: 20px;">
-              If you have any questions, please don't hesitate to reach out.
-            </p>
-            
-            <p style="color: #555;">
-              Warm regards,<br/>
-              <strong>The Shura Team</strong>
-            </p>
-          </div>
-          
-          <div style="text-align: center; margin-top: 20px; color: #8B7355; font-size: 12px;">
-            <p>This is an automated email from Shura Platform</p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailViaProvider(mailOptions, 'intake_link');
-    if (!result.success) throw new Error(result.error);
-    console.log('✅ Email sent: intake_link');
-    return { success: true };
+      subject: 'Complete your Shura intake form',
+      idempotencyKey: `intake-link:${intakeEventId}`,
+      html: emailShell('Complete your intake form', `
+        <p style="color:#555;line-height:1.6">Dear ${escapeHtml(name)},</p>
+        <p style="color:#555;line-height:1.6">Please complete your secure intake form before your first session.</p>
+        <p><a href="${escapeHtml(intakeLink)}">Complete intake form</a></p>
+        <p style="color:#777;font-size:14px">This single-use link expires in seven days. Do not forward it.</p>
+      `),
+      text: `Dear ${name},\n\nPlease complete your secure intake form before your first session:\n${intakeLink}\n\nThis single-use link expires in seven days. Do not forward it.`,
+    }, 'intake_link', queryable);
+    if (result.success) console.log('Email queued: intake_link');
+    return result;
   } catch (error) {
-    console.error('❌ Error sending intake form link:', error);
+    console.error('Intake link email queue failed:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-// Send intake form submission notification to admin
-const sendIntakeFormSubmission = async (clientEmail, clientName, formData) => {
+const sendIntakeFormSubmission = async (intakeFormId, queryable = pool) => {
+  if (!intakeFormId) {
+    return { success: false, error: 'intakeFormId is required for intake submission email' };
+  }
   try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    const result = await queueEmail({
       to: process.env.ADMIN_EMAIL,
-      subject: `📋 Intake Form Completed - ${String(clientName || 'Client')}`,
-      idempotencyKey: `intake-submission:${clientEmail}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
-          <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0;">Intake Form Submission</h1>
-          </div>
-          
-          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #333;">A new client intake form has been submitted.</p>
-            
-            <div style="margin: 24px 0; padding: 16px; background-color: #f8f5f0; border-radius: 8px;">
-              <p style="margin: 6px 0; color: #555;"><strong>Client Name:</strong> ${textOrFallback(clientName)}</p>
-              <p style="margin: 6px 0; color: #555;"><strong>Client Email:</strong> ${textOrFallback(clientEmail)}</p>
-              <p style="margin: 6px 0; color: #555;"><strong>Submission Time:</strong> ${new Date().toLocaleString('en-IN')}</p>
-            </div>
-            
-            <p style="color: #555; line-height: 1.6;">
-              Please log in to the admin portal to review the full intake form details securely.
-            </p>
-            
-            <p style="color: #666; font-size: 12px; margin-top: 24px; line-height: 1.6;">
-              <strong>Note:</strong> For privacy and security, detailed intake information is not included in this email. 
-              Access full details through the secure admin portal where all sensitive health information is encrypted and access-controlled.
-            </p>
-            
-            <div style="text-align: center; margin-top: 20px; color: #8B7355; font-size: 12px;">
-              <p>This is an automated notification from Shura Platform</p>
-            </div>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailViaProvider(mailOptions, 'intake_submission');
-    if (!result.success) throw new Error(result.error);
-    console.log('✅ Email sent: intake_submission');
-    return { success: true };
+      subject: 'Client intake form requires review',
+      idempotencyKey: `intake-submission:${intakeFormId}`,
+      html: emailShell('Intake form submitted', `
+        <p style="color:#555;line-height:1.6">A client completed an intake form. Sign in to Shura to review it securely.</p>
+      `),
+      text: 'A client completed an intake form. Sign in to Shura to review it securely.',
+    }, 'intake_submission', queryable);
+    if (result.success) console.log('Email queued: intake_submission');
+    return result;
   } catch (error) {
-    console.error('❌ Error sending intake form submission email:', error);
+    console.error('Intake submission email queue failed:', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -432,16 +147,16 @@ const formatBookingDate = (value) => {
   if (!value) return 'your selected date';
   const parsed = new Date(`${String(value).slice(0, 10)}T00:00:00`);
   return Number.isNaN(parsed.getTime())
-    ? escapeHtml(value)
+    ? String(value)
     : parsed.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-const sendBookingConfirmation = async (bookingData) => {
+const sendBookingConfirmation = async (bookingData, queryable = pool) => {
   try {
     if (!bookingData.clientId) {
       return { success: false, error: 'clientId is required for booking confirmation emails' };
     }
-    const { rows } = await pool.query(
+    const { rows } = await queryable.query(
       'SELECT notification_booking_confirmation FROM users WHERE id = $1',
       [bookingData.clientId]
     );
@@ -449,197 +164,199 @@ const sendBookingConfirmation = async (bookingData) => {
       return { success: false, error: 'Booking confirmation client was not found' };
     }
     if (rows[0].notification_booking_confirmation === false) {
-      console.log(`⏭️  Email skipped: booking_confirmation (${bookingData.bookingId})`);
+      console.log(`Email skipped: booking_confirmation (${bookingData.bookingId})`);
       return { success: true, skipped: true };
     }
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    const date = formatBookingDate(bookingData.date);
+    const time = textValue(String(bookingData.time || '').slice(0, 5), 'the selected time');
+    const therapistName = textValue(bookingData.therapistName, 'your therapist');
+    const sessionType = textValue(bookingData.sessionType, 'session');
+    const result = await queueEmail({
       to: bookingData.clientEmail,
       subject: 'Your Shura session is booked',
       idempotencyKey: `booking-confirmation:${bookingData.bookingId}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
-          <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0;">Your Session Is Confirmed</h1>
-          </div>
-          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #333;">Dear ${textOrFallback(bookingData.clientName)},</p>
-            <p style="color: #555; line-height: 1.6;">Your session with ${textOrFallback(bookingData.therapistName)} has been booked successfully.</p>
-            <div style="margin: 24px 0; padding: 16px; background-color: #f8f5f0; border-radius: 8px;">
-              <p style="margin: 6px 0; color: #555;"><strong>Session:</strong> ${textOrFallback(bookingData.sessionType)}</p>
-              <p style="margin: 6px 0; color: #555;"><strong>Date:</strong> ${formatBookingDate(bookingData.date)}</p>
-              <p style="margin: 6px 0; color: #555;"><strong>Time:</strong> ${textOrFallback(String(bookingData.time || '').slice(0, 5))}</p>
-            </div>
-            <p style="color: #555; line-height: 1.6;">We look forward to supporting you on your healing journey.</p>
-            <p style="color: #555;">Warm regards,<br/><strong>The Shura Team</strong></p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailViaProvider(mailOptions, 'booking_confirmation');
-    if (result.success) {
-      console.log('✅ Email sent: booking_confirmation');
-      return result;
-    } else {
-      console.error('❌ Error sending booking confirmation email:', result.error);
-      return { success: false, error: result.error };
-    }
+      html: emailShell('Your session is confirmed', `
+        <p style="color:#555;line-height:1.6">Dear ${escapeHtml(textValue(bookingData.clientName, 'Client'))},</p>
+        <p style="color:#555;line-height:1.6">Your session with ${escapeHtml(therapistName)} has been booked.</p>
+        <p style="color:#555"><strong>Session:</strong> ${escapeHtml(sessionType)}<br>
+        <strong>Date:</strong> ${escapeHtml(date)}<br><strong>Time:</strong> ${escapeHtml(time)}</p>
+      `),
+      text: `Your session with ${therapistName} is booked.\nSession: ${sessionType}\nDate: ${date}\nTime: ${time}`,
+    }, 'booking_confirmation', queryable);
+    if (result.success) console.log('Email queued: booking_confirmation');
+    return result;
   } catch (error) {
-    console.error('❌ Error sending booking confirmation email:', error);
+    console.error('Booking confirmation email queue failed:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-const sendBookingNotificationToTherapist = async (bookingData) => {
+const sendBookingNotificationToTherapist = async (bookingData, queryable = pool) => {
+  const date = formatBookingDate(bookingData.date);
+  const time = textValue(String(bookingData.time || '').slice(0, 5), 'the selected time');
+  const clientName = textValue(bookingData.clientName, 'A client');
+  const sessionType = textValue(bookingData.sessionType, 'session');
   try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
+    const result = await queueEmail({
       to: bookingData.therapistEmail,
       subject: 'New Shura session booking',
       idempotencyKey: `booking-therapist-notification:${bookingData.bookingId}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f8f5f0; border-radius: 10px;">
-          <div style="background-color: #8B7355; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-            <h1 style="color: #ffffff; margin: 0;">New Session Booking</h1>
-          </div>
-          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px;">
-            <p style="font-size: 16px; color: #333;">Dear ${textOrFallback(bookingData.therapistName)},</p>
-            <p style="color: #555; line-height: 1.6;">${textOrFallback(bookingData.clientName)} has booked a session with you.</p>
-            <div style="margin: 24px 0; padding: 16px; background-color: #f8f5f0; border-radius: 8px;">
-              <p style="margin: 6px 0; color: #555;"><strong>Client:</strong> ${textOrFallback(bookingData.clientName)} (${textOrFallback(bookingData.clientEmail)})</p>
-              <p style="margin: 6px 0; color: #555;"><strong>Session:</strong> ${textOrFallback(bookingData.sessionType)}</p>
-              <p style="margin: 6px 0; color: #555;"><strong>Date:</strong> ${formatBookingDate(bookingData.date)}</p>
-              <p style="margin: 6px 0; color: #555;"><strong>Time:</strong> ${textOrFallback(String(bookingData.time || '').slice(0, 5))}</p>
-            </div>
-            <p style="color: #555;">Please review your calendar for the updated appointment.</p>
-          </div>
-        </div>
-      `,
-    };
-
-    const result = await sendEmailViaProvider(mailOptions, 'booking_notification');
-    if (!result.success) throw new Error(result.error);
-    console.log('✅ Email sent: booking_notification');
-    return { success: true };
+      html: emailShell('New session booking', `
+        <p style="color:#555;line-height:1.6">${escapeHtml(clientName)} booked a session with you.</p>
+        <p style="color:#555"><strong>Session:</strong> ${escapeHtml(sessionType)}<br>
+        <strong>Date:</strong> ${escapeHtml(date)}<br><strong>Time:</strong> ${escapeHtml(time)}</p>
+      `),
+      text: `${clientName} booked a session with you.\nSession: ${sessionType}\nDate: ${date}\nTime: ${time}`,
+    }, 'booking_notification', queryable);
+    if (result.success) console.log('Email queued: booking_notification');
+    return result;
   } catch (error) {
-    console.error('❌ Error sending therapist booking notification:', error);
+    console.error('Therapist booking email queue failed:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-const sendTherapistReleaseNotification = async ({ therapistEmail, therapistName, clientName }) => {
+const sendTherapistReleaseNotification = async (data, queryable = pool) => {
+  if (!data.assignmentId) {
+    return { success: false, error: 'assignmentId is required for therapist release email' };
+  }
+  const therapistName = textValue(data.therapistName, 'Therapist');
+  const clientName = textValue(data.clientName, 'A client');
   try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: therapistEmail,
+    const result = await queueEmail({
+      to: data.therapistEmail,
       subject: 'Shura client assignment update',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #f8f5f0;">
-          <div style="background-color: #ffffff; padding: 28px; border-radius: 12px; border-top: 4px solid #8B7355;">
-            <h1 style="font-size: 22px; color: #5C5043; margin-top: 0;">Client assignment update</h1>
-            <p style="color: #555; line-height: 1.6;">Assalamu Alaikum ${textOrFallback(therapistName)},</p>
-            <p style="color: #555; line-height: 1.6;">
-              ${textOrFallback(clientName, 'A client')} has requested a different therapist. Their active assignment with you has been released in Shura.
-            </p>
-            <p style="color: #555; line-height: 1.6;">No action is required. Existing session records remain available according to Shura policy.</p>
-          </div>
-        </div>
-      `,
-      idempotencyKey: `therapist-release:${therapistEmail}:${clientName}`,
-    };
-    const result = await sendEmailViaProvider(mailOptions, 'therapist_release');
-    if (!result.success) throw new Error(result.error);
-    console.log('✅ Email sent: therapist_release');
-    return { success: true };
+      idempotencyKey: `therapist-release:${data.assignmentId}`,
+      html: emailShell('Client assignment update', `
+        <p style="color:#555;line-height:1.6">Assalamu Alaikum ${escapeHtml(therapistName)},</p>
+        <p style="color:#555;line-height:1.6">${escapeHtml(clientName)} has requested a different therapist. The active assignment has been released.</p>
+      `),
+      text: `Assalamu Alaikum ${therapistName},\n\n${clientName} has requested a different therapist. The active assignment has been released.`,
+    }, 'therapist_release', queryable);
+    if (result.success) console.log('Email queued: therapist_release');
+    return result;
   } catch (error) {
-    console.error('Error sending therapist release notification:', error);
+    console.error('Therapist release email queue failed:', error.message);
     return { success: false, error: error.message };
   }
 };
 
 const formatSessionDateTime = (value, timezone = 'UTC') => {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return textOrFallback(value, 'the scheduled time');
+  if (Number.isNaN(date.getTime())) return textValue(value, 'the scheduled time');
   try {
     return date.toLocaleString('en-GB', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-      hour: 'numeric', minute: '2-digit', timeZone: timezone, timeZoneName: 'short',
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: timezone,
+      timeZoneName: 'short',
     });
   } catch {
     return date.toISOString();
   }
 };
 
-const sendSessionRescheduledNotifications = async (session) => {
+const sendSessionRescheduledNotifications = async (
+  session,
+  sessionEventId,
+  queryable = pool
+) => {
+  if (!sessionEventId) {
+    return { success: false, error: 'sessionEventId is required for reschedule emails' };
+  }
+  const oldTime = formatSessionDateTime(
+    session.previousScheduledAt,
+    session.client_timezone || session.clientTimezone
+  );
+  const newTime = formatSessionDateTime(
+    session.nextScheduledAt,
+    session.client_timezone || session.clientTimezone
+  );
+  const panel = `<p style="color:#555"><strong>Previous time:</strong> ${escapeHtml(oldTime)}<br><strong>New time:</strong> ${escapeHtml(newTime)}</p>`;
   try {
-    const oldTime = formatSessionDateTime(session.previousScheduledAt, session.client_timezone || session.clientTimezone);
-    const newTime = formatSessionDateTime(session.nextScheduledAt, session.client_timezone || session.clientTimezone);
-    const panel = `<div style="margin:20px 0;padding:16px;background:#f8f5f0;border-radius:8px;color:#555;line-height:1.6"><div><strong>Previous time:</strong> ${oldTime}</div><div><strong>New time:</strong> ${newTime}</div></div>`;
-    const shell = (greeting, message) => `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f8f5f0"><div style="background:#fff;padding:28px;border-radius:12px;border-top:4px solid #8B7355"><h1 style="font-size:22px;color:#5C5043;margin-top:0">Session rescheduled</h1><p style="color:#555">Assalamu Alaikum ${textOrFallback(greeting)},</p><p style="color:#555;line-height:1.6">${message}</p>${panel}</div></div>`;
-    const results = await Promise.allSettled([
-      sendEmailViaProvider({
-        from: process.env.EMAIL_USER,
+    const results = await Promise.all([
+      queueEmail({
         to: session.client_email || session.clientEmail,
         subject: 'Your Shura session has been rescheduled',
-        html: shell(session.client_name || session.clientName, `Your session with ${textOrFallback(session.therapist_name || session.therapistName)} has been moved.`),
-        idempotencyKey: `session-rescheduled:client:${session.booking_id || session.bookingId}`,
-      }, 'session_rescheduled'),
-      sendEmailViaProvider({
-        from: process.env.EMAIL_USER,
+        idempotencyKey: `session-rescheduled:client:${sessionEventId}`,
+        html: emailShell('Session rescheduled', `
+          <p style="color:#555">Your session with ${escapeHtml(textValue(session.therapist_name || session.therapistName, 'your therapist'))} has moved.</p>${panel}
+        `),
+        text: `Your Shura session has moved.\nPrevious time: ${oldTime}\nNew time: ${newTime}`,
+      }, 'session_rescheduled', queryable),
+      queueEmail({
         to: session.therapist_email || session.therapistEmail,
         subject: 'A Shura session has been rescheduled',
-        html: shell(session.therapist_name || session.therapistName, `${textOrFallback(session.client_name || session.clientName)} has moved their session.`),
-        idempotencyKey: `session-rescheduled:therapist:${session.booking_id || session.bookingId}`,
-      }, 'session_rescheduled'),
+        idempotencyKey: `session-rescheduled:therapist:${sessionEventId}`,
+        html: emailShell('Session rescheduled', `
+          <p style="color:#555">${escapeHtml(textValue(session.client_name || session.clientName, 'A client'))} moved their session.</p>${panel}
+        `),
+        text: `A client moved their Shura session.\nPrevious time: ${oldTime}\nNew time: ${newTime}`,
+      }, 'session_rescheduled', queryable),
     ]);
-    return { success: results.every((result) => result.status === 'fulfilled') };
+    return { success: results.every((result) => result.success), results };
   } catch (error) {
-    console.error('Error sending reschedule notifications:', error);
+    console.error('Reschedule email queue failed:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-const sendSessionCancellationNotifications = async (session) => {
+const sendSessionCancellationNotifications = async (session, queryable = pool) => {
+  const bookingId = session.booking_id || session.bookingId || session.id;
+  if (!bookingId) {
+    return { success: false, error: 'bookingId is required for cancellation emails' };
+  }
+  const sessionTime = formatSessionDateTime(
+    session.scheduled_at || session.scheduledAt,
+    session.client_timezone || session.clientTimezone
+  );
+  const refundNote = session.refundEligible
+    ? 'Refund progress is available in your Shura billing history.'
+    : 'This cancellation is outside the refundable window.';
   try {
-    const sessionTime = formatSessionDateTime(session.scheduled_at || session.scheduledAt, session.client_timezone || session.clientTimezone);
-    const refundNote = session.refundEligible
-      ? (session.refundStatus === 'failed' ? 'The refund requires follow-up from the Shura team.' : 'A full refund has been initiated and will be returned through the original payment method.')
-      : 'This cancellation is outside the refundable window.';
-    const shell = (greeting, message, includeRefund) => `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#f8f5f0"><div style="background:#fff;padding:28px;border-radius:12px;border-top:4px solid #8B7355"><h1 style="font-size:22px;color:#5C5043;margin-top:0">Session cancelled</h1><p style="color:#555">Assalamu Alaikum ${textOrFallback(greeting)},</p><p style="color:#555;line-height:1.6">${message}</p><p style="padding:14px;background:#f8f5f0;border-radius:8px;color:#555"><strong>Original time:</strong> ${sessionTime}</p>${includeRefund ? `<p style="color:#555;line-height:1.6">${refundNote}</p>` : ''}</div></div>`;
-    const results = await Promise.allSettled([
-      sendEmailViaProvider({
-        from: process.env.EMAIL_USER,
+    const results = await Promise.all([
+      queueEmail({
         to: session.client_email || session.clientEmail,
         subject: 'Your Shura session has been cancelled',
-        html: shell(session.client_name || session.clientName, `Your session with ${textOrFallback(session.therapist_name || session.therapistName)} has been cancelled.`, true),
-        idempotencyKey: `session-cancelled:client:${session.booking_id || session.bookingId}`,
-      }, 'session_cancelled'),
-      sendEmailViaProvider({
-        from: process.env.EMAIL_USER,
+        idempotencyKey: `session-cancelled:client:${bookingId}`,
+        html: emailShell('Session cancelled', `
+          <p style="color:#555">Your session with ${escapeHtml(textValue(session.therapist_name || session.therapistName, 'your therapist'))} has been cancelled.</p>
+          <p style="color:#555"><strong>Original time:</strong> ${escapeHtml(sessionTime)}</p>
+          <p style="color:#555">${escapeHtml(refundNote)}</p>
+        `),
+        text: `Your Shura session has been cancelled.\nOriginal time: ${sessionTime}\n${refundNote}`,
+      }, 'session_cancelled', queryable),
+      queueEmail({
         to: session.therapist_email || session.therapistEmail,
         subject: 'A Shura session has been cancelled',
-        html: shell(session.therapist_name || session.therapistName, `${textOrFallback(session.client_name || session.clientName)} has cancelled their session.`, false),
-        idempotencyKey: `session-cancelled:therapist:${session.booking_id || session.bookingId}`,
-      }, 'session_cancelled'),
+        idempotencyKey: `session-cancelled:therapist:${bookingId}`,
+        html: emailShell('Session cancelled', `
+          <p style="color:#555">${escapeHtml(textValue(session.client_name || session.clientName, 'A client'))} cancelled their session.</p>
+          <p style="color:#555"><strong>Original time:</strong> ${escapeHtml(sessionTime)}</p>
+        `),
+        text: `A client cancelled their Shura session.\nOriginal time: ${sessionTime}`,
+      }, 'session_cancelled', queryable),
     ]);
-    return { success: results.every((result) => result.status === 'fulfilled') };
+    return { success: results.every((result) => result.success), results };
   } catch (error) {
-    console.error('Error sending cancellation notifications:', error);
+    console.error('Cancellation email queue failed:', error.message);
     return { success: false, error: error.message };
   }
 };
 
 module.exports = {
-  sendTherapistApplicationNotification,
-  sendTherapistApprovalEmail,
-  sendClientSignupNotification,
-  sendIntakeFormLink,
-  sendIntakeFormSubmission,
   sendBookingConfirmation,
   sendBookingNotificationToTherapist,
-  sendTherapistReleaseNotification,
-  sendSessionRescheduledNotifications,
+  sendIntakeFormLink,
+  sendIntakeFormSubmission,
+  sendQuestionnaireAdminNotification,
   sendSessionCancellationNotifications,
+  sendSessionRescheduledNotifications,
+  sendTherapistApplicationNotification,
+  sendTherapistReleaseNotification,
 };

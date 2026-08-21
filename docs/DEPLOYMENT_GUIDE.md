@@ -56,11 +56,11 @@ Backend runtime configuration belongs in Container App secrets/environment varia
 - Auth0: domain, audience, claim namespace, Management API client credentials, and therapist role ID.
 - Azure Blob Storage: account/container/SAS TTL and optional user-assigned identity client ID. Production uses Managed Identity; do not store an account key when identity access is available.
 - Razorpay: key ID, key secret, and a distinct webhook secret.
-- Email: Gmail SMTP username/app password and administrative recipient.
+- Email: Resend API key, verified sender, webhook signing secret, administrative recipient, and explicit outbox worker switch.
 - Calendars: token-encryption secret, backend URL, and optional Google/Outlook OAuth credentials and exact callback URLs.
 - Observability and web boundaries: Application Insights connection string, frontend/origin allowlists, and cookie same-site mode.
 
-The checked-in workflow still maps legacy Cloudinary variables and omits several current provider variables. That is a known delivery gap, not evidence that Azure Blob, Razorpay, email, calendars, or DB TLS are configured out of band. Reconcile the workflow/app configuration before relying on those features.
+The checked-in workflow still maps legacy Cloudinary variables and omits several current provider variables. It does configure the Resend email group, subject to the corresponding Container App secrets existing. Reconcile the workflow/app configuration before relying on Azure Blob, Razorpay, calendars, or DB TLS.
 
 ## Identity and least privilege
 
@@ -77,13 +77,13 @@ Database changes are not applied by the GitHub workflow.
 
 1. Resolve the exact target database and confirm whether it is a truly empty database or an existing installation.
 2. For a new empty database only, deliberately apply `shura-backend/production_schema.sql` once to create the legacy-compatible base.
-3. From `shura-backend`, run `npm run migrate`. Current migrations are `001` through `017`; the migrator records filenames in `schema_migrations` and skips applied files.
+3. From `shura-backend`, run `npm run migrate`. Current migrations are `001` through `018`; the migrator records filenames in `schema_migrations` and skips applied files.
 4. Run the migrator a second time and confirm every migration is skipped.
 5. Never run the disposable E2E bootstrap/seed against staging or production, and never edit an already-applied migration.
 
 For a release containing a new migration, verify both a base-schema-plus-all-migrations install and an upgrade from the preceding state before applying it to staging. Plan backward compatibility between the old and new app revisions and the migrated schema.
 
-Migration 017 is a backward-compatible prerequisite for the Resend-only email runtime. Apply and verify it in staging and production before deploying code that writes the new delivery states. It retains the legacy `sent` status so the previous revision remains valid during an Azure Container Apps rolling update.
+Migrations 017 and 018 are backward-compatible prerequisites for the Resend-only email runtime. Apply and verify both in staging and production before deployment. Migration 017 adds the delivery states while retaining legacy `sent` compatibility; migration 018 adds the complete accepted/terminal retention index.
 
 ## Staging and production rollout
 

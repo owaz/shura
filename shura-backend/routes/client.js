@@ -285,13 +285,14 @@ router.post('/therapist/release', sensitiveLimiter, async (req, res) => {
                $2::jsonb)`,
       [req.clientId, JSON.stringify({ therapistId: releasedAssignment.therapist_id })]
     );
-    await client.query('COMMIT');
-
     const notification = await sendTherapistReleaseNotification({
+      assignmentId: releasedAssignment.assignment_id,
       therapistEmail: releasedAssignment.therapist_email,
       therapistName: releasedAssignment.therapist_name,
       clientName: releasedAssignment.client_name,
-    });
+    }, client);
+    if (!notification.success) throw new Error(notification.error);
+    await client.query('COMMIT');
     return res.json({
       data: {
         released: true,

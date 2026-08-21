@@ -101,7 +101,8 @@ jobs:
             RESEND_API_KEY=secretref:resend-api-key
             RESEND_FROM_EMAIL=secretref:resend-from-email
             RESEND_WEBHOOK_SECRET=secretref:resend-webhook-secret
-            EMAIL_OUTBOX_ENABLED=false
+            ADMIN_EMAIL=secretref:admin-email
+            EMAIL_OUTBOX_WORKER_ENABLED=true
 
   deploy-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -145,4 +146,5 @@ jobs:
             RESEND_API_KEY=secretref:resend-api-key
             RESEND_FROM_EMAIL=secretref:resend-from-email
             RESEND_WEBHOOK_SECRET=secretref:resend-webhook-secret
-            EMAIL_OUTBOX_ENABLED=false
+            ADMIN_EMAIL=secretref:admin-email
+            EMAIL_OUTBOX_WORKER_ENABLED=true

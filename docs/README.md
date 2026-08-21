@@ -10,7 +10,7 @@ Before continuing work:
 2. Run `git status --short --branch` and inspect recent commits. Preserve unrelated working-tree changes.
 3. Confirm behavior in the current composition roots: `shura-frontend/App.tsx`, `shura-backend/server.js`, registered route modules, consuming services, tests, and ordered migrations.
 4. Treat the current client portal as backend-backed through home/dashboard, notifications, onboarding, profile, preferences, assigned therapist, booking, sessions, billing, and PDF receipts. Do not infer that therapist payments/chat/calls or secure video/audio are complete.
-5. For a schema change, verify the highest numbered migration before choosing the next filename. This checkout contains migrations `001` through `017`; do not edit an applied file.
+5. For a schema change, verify the highest numbered migration before choosing the next filename. This checkout contains migrations `001` through `018`; do not edit an applied file.
 6. Use the verification commands in root `AGENTS.md`. Database bootstrap/seed commands require the explicit disposable-database safety flag from `LOCAL_E2E_SETUP.md`.
 
 The implementation-maturity section in [System overview](architecture/system-overview.md) is the concise capability baseline. The architecture and product pages record durable behavior; pull requests and issues should carry task history and proposed future milestones.
@@ -24,7 +24,7 @@ The implementation-maturity section in [System overview](architecture/system-ove
 - [Data model](architecture/data-model.md): schema ownership, migration lifecycle, and principal relationships.
 - [Scheduling and payments](architecture/scheduling-and-payments.md): availability, concurrency, Razorpay, refunds, and session policies.
 - [Integrations and deployment](architecture/integrations-and-deployment.md): email, calendars, storage, monitoring, Docker, and Azure Container Apps.
-- [Resend email replacement feasibility](architecture/email-resend-feasibility.md): current application-email inventory, Resend capability and privacy assessment, migration options, decision gates, and recommended target architecture.
+- [Email delivery](architecture/email-delivery.md): Resend provider boundary, durable outbox, delivery lifecycle, privacy retention, and operations.
 
 ## Product and domain
 

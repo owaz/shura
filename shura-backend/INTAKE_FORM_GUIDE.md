@@ -166,7 +166,7 @@ curl -X POST http://localhost:5001/api/intake/generate-link \
   -d '{"userId": 1}'
 ```
 
-### 2. Check your email (shuraa.life@gmail.com) for the link
+### 2. Check the test client's inbox for the link
 
 ### 3. Click the link and complete the form
 
@@ -260,8 +260,9 @@ Edit `emailService.js`:
 - Verify user exists in database
 
 **Email not sending?**
-- Check `.env` has correct Gmail credentials
-- Verify App Password is correct
+- Check `.env` has complete Resend configuration
+- Verify the sender domain and webhook endpoint in Resend
+- Check the outbox worker is enabled
 - Check backend logs for email errors
 
 **Form not submitting?**

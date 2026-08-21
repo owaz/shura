@@ -149,7 +149,13 @@ function validateConfiguration(backend, frontend) {
     ['Auth0 M2M', ['AUTH0_M2M_CLIENT_ID', 'AUTH0_M2M_CLIENT_SECRET']],
     ['Razorpay test mode', ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET']],
     ['Azure Storage', ['AZURE_STORAGE_ACCOUNT_NAME', 'AZURE_STORAGE_CONNECTION_STRING']],
-    ['Email', ['EMAIL_USER', 'EMAIL_PASSWORD', 'ADMIN_EMAIL']],
+    ['Email', [
+      'RESEND_API_KEY',
+      'RESEND_FROM_EMAIL',
+      'RESEND_WEBHOOK_SECRET',
+      'ADMIN_EMAIL',
+      'EMAIL_OUTBOX_WORKER_ENABLED',
+    ]],
   ];
   for (const [label, keys] of phaseTwoGroups) {
     if (keys.some((key) => !isConfigured(backend[key]))) {

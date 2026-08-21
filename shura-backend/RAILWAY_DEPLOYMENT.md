@@ -39,10 +39,12 @@ Azure-hosted production deployments should use Managed Identity instead of a
 connection string. The connection string is retained here only for non-Azure
 legacy deployments.
 
-**Email (Gmail):**
-- `EMAIL_USER=shuraa.life@gmail.com`
-- `EMAIL_PASSWORD=<your-gmail-app-password>`
-- `ADMIN_EMAIL=shuraa.life@gmail.com`
+**Email (Resend):**
+- `RESEND_API_KEY=<your-resend-api-key>`
+- `RESEND_FROM_EMAIL=<sender-on-your-verified-domain>`
+- `RESEND_WEBHOOK_SECRET=<your-webhook-signing-secret>`
+- `ADMIN_EMAIL=<administrative-recipient>`
+- `EMAIL_OUTBOX_WORKER_ENABLED=true`
 
 **Razorpay (Payment - Add AFTER getting production keys):**
 - `RAZORPAY_KEY_ID=rzp_live_xxxxx`

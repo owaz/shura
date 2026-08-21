@@ -30,7 +30,6 @@
     "jsonwebtoken": "^9.0.2",
     "jws": "^4.0.1",
     "multer": "^2.0.2",
-    "nodemailer": "^8.0.7",
     "pdfkit": "^0.19.1",
     "pg": "^8.16.3",
     "razorpay": "^2.9.6",
