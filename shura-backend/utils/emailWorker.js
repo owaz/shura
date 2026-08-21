@@ -20,9 +20,14 @@ const processEmailOutbox = async () => {
 
 const startEmailWorker = () => {
   if (process.env.EMAIL_OUTBOX_ENABLED !== 'true') return null;
+  let isProcessing = false;
   const interval = setInterval(() => {
+    if (isProcessing) return;
+    isProcessing = true;
     processEmailOutbox().catch((error) => {
       console.error('Email outbox worker failed:', error.message);
+    }).finally(() => {
+      isProcessing = false;
     });
   }, 60000);
   interval.unref();

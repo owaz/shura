@@ -10,7 +10,9 @@ const verifySignature = (req) => {
   const timestamp = req.headers['svix-timestamp'];
   const signatures = String(req.headers['svix-signature'] || '').split(' ');
   if (!secret || !id || !timestamp || !req.rawBody) return false;
-  if (Math.abs(Date.now() - Number(timestamp) * 1000) > 5 * 60 * 1000) return false;
+  const timestampSeconds = Number(timestamp);
+  if (!Number.isFinite(timestampSeconds)) return false;
+  if (Math.abs(Date.now() - timestampSeconds * 1000) > 5 * 60 * 1000) return false;
   const signedContent = `${id}.${timestamp}.${req.rawBody.toString('utf8')}`;
   const expected = crypto
     .createHmac('sha256', Buffer.from(secret.replace(/^whsec_/, ''), 'base64'))

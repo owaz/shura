@@ -59,10 +59,10 @@ const markFailed = (id, error, attempts) => {
   const delayMinutes = Math.min(60, 2 ** Math.max(0, attempts - 1));
   return pool.query(
     `UPDATE email_outbox
-     SET status = CASE WHEN attempts >= $2 THEN 'failed' ELSE 'pending' END,
-         last_error = $3, next_attempt_at = NOW() + ($4 * INTERVAL '1 minute'), updated_at = NOW()
+     SET status = 'failed',
+         last_error = $2, next_attempt_at = NOW() + ($3 * INTERVAL '1 minute'), updated_at = NOW()
      WHERE id = $1`,
-    [id, MAX_ATTEMPTS, String(error).slice(0, 1000), delayMinutes]
+    [id, String(error).slice(0, 1000), delayMinutes]
   );
 };
 

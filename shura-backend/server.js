@@ -103,7 +103,7 @@ app.use((req, res, next) => {
 app.use(express.json({
   limit: '1mb',
   verify: (req, res, buf) => {
-    if (req.originalUrl === '/api/payments/webhook' || req.originalUrl === '/api/webhooks/resend') {
+    if (req.originalUrl === '/api/payments/webhook' || req.originalUrl.startsWith('/api/webhooks/resend')) {
       req.rawBody = buf;
     }
   }
@@ -135,6 +135,7 @@ const authLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, ma
 const uploadLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 60 * 1000, max: 30 });
 const newsletterLimiter = rateLimit({ ...limiterDefaults, windowMs: 60 * 60 * 1000, max: 20 });
 const intakeLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, max: 50 });
+const webhookLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, max: 600 });
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -181,7 +182,7 @@ if (bookingRoutes) app.use('/api/bookings', generalLimiter, bookingRoutes);
 const paymentRoutes = require('./routes/payments');
 if (paymentRoutes) app.use('/api/payments', paymentLimiter, paymentRoutes);
 const resendWebhookRoutes = require('./routes/resendWebhook');
-app.use('/api/webhooks/resend', resendWebhookRoutes);
+app.use('/api/webhooks/resend', webhookLimiter, resendWebhookRoutes);
 
 const calendarRoutes = require('./routes/calendar');
 if (calendarRoutes) app.use('/api/calendar', generalLimiter, calendarRoutes);
