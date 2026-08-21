@@ -100,6 +100,8 @@ jobs:
             AUTH0_ROLE_THERAPIST_ID=secretref:auth0-role-therapist-id
             RESEND_API_KEY=secretref:resend-api-key
             RESEND_FROM_EMAIL=secretref:resend-from-email
+            RESEND_WEBHOOK_SECRET=secretref:resend-webhook-secret
+            EMAIL_OUTBOX_ENABLED=false
 
   deploy-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -142,3 +144,5 @@ jobs:
             AUTH0_ROLE_THERAPIST_ID=secretref:auth0-role-therapist-id
             RESEND_API_KEY=secretref:resend-api-key
             RESEND_FROM_EMAIL=secretref:resend-from-email
+            RESEND_WEBHOOK_SECRET=secretref:resend-webhook-secret
+            EMAIL_OUTBOX_ENABLED=false
