@@ -7,7 +7,7 @@ This runbook defines the evidence required to promote Shura and the first respon
 A releaser must retain links or logs showing:
 
 1. Backend tests, frontend typecheck/build, PostgreSQL fresh-bootstrap/upgrade/idempotency tests, and the full-history Gitleaks scan passed on the exact commit.
-2. Authenticated Playwright and axe suites ran with synthetic client/therapist/admin identities at desktop, tablet, and mobile widths. Skipped Auth0 tests do not count.
+2. Authenticated Playwright and axe suites ran with a synthetic client at desktop, tablet, and mobile widths, and separate manual smoke evidence covers synthetic therapist/admin Auth0 login plus role/status routing. Skipped Auth0 tests do not count.
 3. The manually approved migration workflow completed in staging, including its second-run `Skipping` evidence. Production migration is a separate protected approval.
 4. Staging health, protected-route rejection, Auth0 login/role/status routing, database connectivity, client portal navigation, Razorpay test webhook/signature behavior, private Blob upload/read/delete, Resend outbox/webhook delivery, and configured calendar callbacks were verified.
 5. The previous healthy Container App revision and latest restorable PostgreSQL backup were identified before production approval.

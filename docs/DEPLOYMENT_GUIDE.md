@@ -90,7 +90,7 @@ Use root `DEPLOYMENT_GUIDE.md` for the Auth0-specific checklist and `shura-backe
 
 ## Database release order
 
-Database changes are not applied by the deployment workflow. Dispatch `migrate-database.yml` only after selecting the protected environment and typing its exact confirmation string.
+Database changes are not applied by the deployment workflow. Dispatch `migrate-database.yml` only from `main`; the job rejects other refs, checks out the selected immutable `main` SHA, and still requires the protected environment plus its exact confirmation string.
 
 1. Resolve the exact target database and confirm whether it is a truly empty database or an existing installation.
 2. For a new empty database only, deliberately apply `shura-backend/production_schema.sql` once to create the legacy-compatible base.

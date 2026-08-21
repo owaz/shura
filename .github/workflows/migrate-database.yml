@@ -15,12 +15,18 @@ on:
 
 jobs:
   migrate:
-    if: (inputs.environment == 'staging' && inputs.confirmation == 'MIGRATE-STAGING') || (inputs.environment == 'production' && inputs.confirmation == 'MIGRATE-PRODUCTION')
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      ((inputs.environment == 'staging' && inputs.confirmation == 'MIGRATE-STAGING') ||
+      (inputs.environment == 'production' && inputs.confirmation == 'MIGRATE-PRODUCTION'))
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     concurrency: database-migration-${{ inputs.environment }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 20

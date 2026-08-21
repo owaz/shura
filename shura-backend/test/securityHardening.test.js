@@ -50,6 +50,10 @@ test('production database TLS verifies certificates and cannot be disabled', () 
     NODE_ENV: 'production', DATABASE_URL: 'postgresql://example.invalid/shura',
     DB_SSL: 'true', DB_SSL_REJECT_UNAUTHORIZED: 'false',
   }), /not permitted in production/);
+  assert.throws(() => buildConnectionConfig({
+    NODE_ENV: 'production', DATABASE_URL: 'postgresql://example.invalid/shura',
+    DB_SSL: 'false',
+  }), /DB_SSL=false is not permitted in production/);
 });
 
 test('therapist intake reads require an active assignment in SQL', () => {

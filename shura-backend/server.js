@@ -93,7 +93,9 @@ console.log('✅ CORS enabled for explicitly configured origins and local develo
 
 // Rate limiting
 const limiterDefaults = { standardHeaders: true, legacyHeaders: false };
-const generalLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, max: 200 });
+// Portal navigation fans out across several read-only endpoints. Keep a broad
+// abuse ceiling here while sensitive mutations retain their tighter limiters.
+const generalLimiter = rateLimit({ ...limiterDefaults, windowMs: 15 * 60 * 1000, max: 600 });
 const paymentLimiter = rateLimit({
   ...limiterDefaults,
   windowMs: 15 * 60 * 1000,

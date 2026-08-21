@@ -622,7 +622,7 @@ router.delete('/account', sensitiveLimiter, async (req, res) => {
       res,
       503,
       'ACCOUNT_DELETION_INCOMPLETE',
-      'Your account was secured, but deletion could not be fully completed. Please contact support.'
+      'Account deletion could not be completed. Please contact support before attempting to sign in again.'
     );
   }
 });

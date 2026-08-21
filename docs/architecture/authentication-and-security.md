@@ -53,7 +53,7 @@ The repository processes mental-health intake responses, messages, profile/emerg
 
 ## Account and lifecycle security
 
-Client account deletion first blocks the Auth0 identity, deletes the local user (cascading related records), deletes Auth0 identity, and asynchronously removes an Azure-hosted profile image. Cross-provider deletion is not atomic; partial failure returns an explicit incomplete-deletion error and needs operational follow-up.
+Client account deletion first marks the local user suspended with `account_deletion_requested_at`, then blocks and deletes the Auth0 identity. Only after Auth0 deletion succeeds does it delete the local user (cascading related records), followed by best-effort Azure profile-image cleanup. Cross-provider deletion is not atomic; a provider failure retains the marked local row for operational reconciliation, while an earlier database failure returns neutral incomplete-deletion guidance without claiming the account was secured.
 
 Therapist/client suspension synchronizes local state to Auth0 when `auth0_sub` exists. Unlinked legacy records cannot be centrally blocked until linked.
 

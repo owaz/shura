@@ -185,13 +185,16 @@ Playwright never stores a password in source. Sign in interactively with a synth
 
 ```powershell
 Set-Location shura-frontend
+npx playwright install chromium
 npx playwright codegen --save-storage=playwright/.auth/client.json http://localhost:3006
 $env:E2E_STORAGE_STATE = "playwright/.auth/client.json"
 npm run test:e2e
 npm run test:a11y
 ```
 
-The suite covers Chromium desktop, tablet, and mobile profiles, axe WCAG 2.1 A/AA checks, keyboard menus/dialogs, role routing, primary client destinations, and protected legacy-call behavior. If `E2E_STORAGE_STATE` is absent, authenticated tests are skipped; skips are useful locally but do not satisfy release acceptance. Use only seeded synthetic users. Cancellation, refund, payment, and deletion cases remain operator-confirmed destructive scenarios and must target the disposable database/test providers described above.
+On Linux CI, install the browser and its system packages with `npx playwright install --with-deps chromium` before running the suite.
+
+The automated suite covers a synthetic client at Chromium desktop, tablet, and mobile profiles, axe WCAG 2.1 A/AA checks, keyboard disclosure/dialog behavior, exact settled client destinations, and protected legacy-call behavior. Therapist/admin login, role/status routing, and their portal surfaces remain manual smoke checks. If `E2E_STORAGE_STATE` is absent, authenticated tests are skipped; skips are useful locally but do not satisfy release acceptance. Use only seeded synthetic users. Cancellation, refund, payment, and deletion cases remain operator-confirmed destructive scenarios and must target the disposable database/test providers described above.
 
 Start the backend and frontend in separate terminals:
 

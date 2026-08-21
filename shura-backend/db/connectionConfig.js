@@ -11,6 +11,9 @@ const parseBoolean = (value, fallback) => {
 
 const buildSslConfig = (env = process.env) => {
   const enabled = parseBoolean(env.DB_SSL, env.NODE_ENV === 'production');
+  if (env.NODE_ENV === 'production' && !enabled) {
+    throw new Error('DB_SSL=false is not permitted in production');
+  }
   if (!enabled) return false;
   const rejectUnauthorized = parseBoolean(env.DB_SSL_REJECT_UNAUTHORIZED, true);
   if (env.NODE_ENV === 'production' && !rejectUnauthorized) {

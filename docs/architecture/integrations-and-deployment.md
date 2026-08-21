@@ -55,7 +55,7 @@ Express serves static assets and an SPA fallback only when `NODE_ENV=production`
 
 `.github/workflows/deploy-aca.yml` runs on pushes to `main`, gates the image on backend tests, frontend typecheck/build, PostgreSQL migration integration tests, and Gitleaks, then builds and pushes SHA/latest tags, deploys staging, performs health/unauthorized-access smoke checks, and promotes through the protected production environment. Both apps share one Container Apps environment and external ingress on port 5001.
 
-`.github/workflows/migrate-database.yml` is a separate manually dispatched, protected-environment workflow. It requires an environment-specific confirmation string, applies additive migrations, and reruns the migrator to confirm idempotency. Deployment never auto-applies database changes. Current Azure Blob, Razorpay, Resend, Auth0, monitoring, and strict TLS mappings are declared without secret values; calendar variables remain environment-managed and must be checked when calendar behavior changes. See the production-readiness runbook for live verification and rollback.
+`.github/workflows/migrate-database.yml` is a separate manually dispatched, protected-environment workflow. It accepts only a dispatch from `main`, checks out that event's immutable SHA, requires an environment-specific confirmation string, applies additive migrations, and reruns the migrator to confirm idempotency. Deployment never auto-applies database changes. Current Azure Blob, Razorpay, Resend, Auth0, monitoring, and strict TLS mappings are declared without secret values; calendar variables remain environment-managed and must be checked when calendar behavior changes. See the production-readiness runbook for live verification and rollback.
 
 ## Scaling constraints
 

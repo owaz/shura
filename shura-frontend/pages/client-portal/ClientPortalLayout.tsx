@@ -79,6 +79,17 @@ const ClientPortalLayout: React.FC = () => {
 
   useEffect(() => {
     if (!sidebarOpen) return;
+    const desktopMedia = window.matchMedia('(min-width: 1024px)');
+    const closeAtDesktop = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (event.matches) setSidebarOpen(false);
+    };
+    closeAtDesktop(desktopMedia);
+    desktopMedia.addEventListener('change', closeAtDesktop);
+    return () => desktopMedia.removeEventListener('change', closeAtDesktop);
+  }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (!sidebarOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     mobileSidebar.current?.querySelector<HTMLElement>('button, a')?.focus();
@@ -104,7 +115,11 @@ const ClientPortalLayout: React.FC = () => {
     return () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleSidebarKeys);
-      mobileMenuButton.current?.focus();
+      if (window.matchMedia('(min-width: 1024px)').matches) {
+        document.getElementById('portal-main')?.focus();
+      } else {
+        mobileMenuButton.current?.focus();
+      }
     };
   }, [sidebarOpen]);
 
@@ -187,12 +202,12 @@ const ClientPortalLayout: React.FC = () => {
           <div className="flex items-center gap-3">
             <ClientNotificationsMenu />
             <div ref={accountRoot} className="relative">
-              <button ref={accountButton} type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F1D7C5] text-xs font-bold text-brown-dark ring-2 ring-white focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2" aria-label="Account menu" aria-haspopup="menu" aria-expanded={menuOpen} aria-controls="client-account-menu">{initials(currentUser?.full_name, currentUser?.email)}</button>
-              {menuOpen && <div id="client-account-menu" role="menu" className="absolute right-0 mt-2 w-44 rounded-xl border border-sand bg-white p-1 shadow-lg">
-                <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); navigate('/portal/profile'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A]">My Profile</button>
-                <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); navigate('/portal/preferences'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] md:hidden">Preferences</button>
-                {billingEnabled && <button role="menuitem" type="button" onClick={() => { setMenuOpen(false); navigate('/portal/billing'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] md:hidden">Billing</button>}
-                <button role="menuitem" type="button" onClick={handleLogout} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A]">Sign Out</button>
+              <button ref={accountButton} type="button" onClick={() => setMenuOpen((value) => !value)} className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F1D7C5] text-xs font-bold text-brown-dark ring-2 ring-white focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2" aria-label="Account menu" aria-expanded={menuOpen} aria-controls="client-account-menu">{initials(currentUser?.full_name, currentUser?.email)}</button>
+              {menuOpen && <div id="client-account-menu" className="absolute right-0 mt-2 w-44 rounded-xl border border-sand bg-white p-1 shadow-lg">
+                <button type="button" onClick={() => { setMenuOpen(false); navigate('/portal/profile'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A]">My Profile</button>
+                <button type="button" onClick={() => { setMenuOpen(false); navigate('/portal/preferences'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] md:hidden">Preferences</button>
+                {billingEnabled && <button type="button" onClick={() => { setMenuOpen(false); navigate('/portal/billing'); }} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] md:hidden">Billing</button>}
+                <button type="button" onClick={handleLogout} className="w-full rounded-lg px-3 py-2 text-left text-sm text-brown-dark hover:bg-sand focus:outline-none focus:ring-2 focus:ring-[#8C4F3A]">Sign Out</button>
               </div>}
             </div>
           </div>
