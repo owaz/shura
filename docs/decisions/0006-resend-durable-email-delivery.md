@@ -33,6 +33,7 @@ The HTTPS API exposes structured provider IDs and retry signals without an addit
 
 - Migrations 017 and 018 must exist before the Resend-only runtime is deployed.
 - Production requires Resend API, sender, webhook, administrative recipient, and worker-switch configuration.
+- The Resend webhook must subscribe to delivered, bounced, complained, and failed events; provider acceptance alone is not delivery.
 - Pausing delivery can grow pending rows and therefore requires backlog monitoring.
 - Provider calls and webhook handling must remain idempotent and order tolerant.
 - Auth0 identity emails remain outside this decision.

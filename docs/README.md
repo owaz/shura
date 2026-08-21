@@ -11,7 +11,7 @@ Before continuing work:
 3. Confirm behavior in the current composition roots: `shura-frontend/App.tsx`, `shura-backend/server.js`, registered route modules, consuming services, tests, and ordered migrations.
 4. Treat the current client portal as backend-backed through home/dashboard, notifications, onboarding, profile, preferences, assigned therapist, booking, sessions, billing, and PDF receipts. Do not infer that therapist payments/chat/calls or secure video/audio are complete.
 5. For a schema change, verify the highest numbered migration before choosing the next filename. This checkout contains migrations `001` through `018`; do not edit an applied file.
-6. Use the verification commands in root `AGENTS.md`. Database bootstrap/seed commands require the explicit disposable-database safety flag from `LOCAL_E2E_SETUP.md`.
+6. Use the verification commands in root `AGENTS.md`. Database bootstrap/seed and migration integration tests require the explicit safety flag from `LOCAL_E2E_SETUP.md`; fresh migration tests also require a development role with `CREATEDB`.
 
 The implementation-maturity section in [System overview](architecture/system-overview.md) is the concise capability baseline. The architecture and product pages record durable behavior; pull requests and issues should carry task history and proposed future milestones.
 

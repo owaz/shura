@@ -16,9 +16,9 @@ Razorpay order/payment/refund and signed webhook flows are server-side. Required
 
 ### Email
 
-Application helpers enqueue typed email intent in PostgreSQL and never call the provider synchronously. `utils/emailWorker.js` claims ready rows with `SKIP LOCKED`; `utils/resendAdapter.js` sends through the Resend HTTPS API with stable idempotency keys. `POST /api/webhooks/resend` verifies signed raw payloads and advances accepted messages to delivered, bounced, or complained without allowing stale events to downgrade later state.
+Application helpers enqueue typed email intent in PostgreSQL and never call the provider synchronously. `utils/emailWorker.js` claims ready rows with `SKIP LOCKED`; `utils/resendAdapter.js` sends through the Resend HTTPS API with stable idempotency keys. `POST /api/webhooks/resend` verifies signed raw payloads and advances accepted messages to delivered, bounced, complained, or terminal dead for provider failure without allowing stale events to downgrade later state.
 
-Production requires `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_WEBHOOK_SECRET`, `ADMIN_EMAIL`, and an explicit `EMAIL_OUTBOX_WORKER_ENABLED` value. Setting the worker switch to `false` pauses claims while preserving new pending messages. Terminal message payloads and old webhook dedupe rows are purged after 30 days; minimal delivery metadata remains. See [email delivery](email-delivery.md) and [ADR-0006](../decisions/0006-resend-durable-email-delivery.md).
+Production requires `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_WEBHOOK_SECRET`, `ADMIN_EMAIL`, and an explicit `EMAIL_OUTBOX_WORKER_ENABLED` value. `ADMIN_EMAIL` is the monitored internal-alert recipient, not the sender. Setting the worker switch to `false` pauses claims while preserving new pending messages and retention cleanup. Accepted/terminal message payloads and old webhook dedupe rows are purged after 30 days; minimal delivery metadata remains. See [email delivery](email-delivery.md) and [ADR-0006](../decisions/0006-resend-durable-email-delivery.md).
 
 ### Google and Outlook calendars
 
@@ -38,7 +38,7 @@ No external video provider is selected or configured. The adapter in `services/v
 - `shura-backend/.env`: database and every provider secret/credential.
 - Never commit either file, log values, include them in screenshots, or pass production values to local E2E tooling.
 
-`shura-backend/.env.example` and `.env.production.example` list current variable names. Optional provider groups can be absent, but the corresponding feature must fail explicitly and safely.
+`shura-backend/.env.example` and `.env.production.example` list current variable names. Production email configuration is mandatory and validated at startup. Other optional provider groups can be absent, but the corresponding feature must fail explicitly and safely.
 
 ## Container image
 
@@ -55,7 +55,7 @@ Express serves static assets and an SPA fallback only when `NODE_ENV=production`
 
 `.github/workflows/deploy-aca.yml` runs on pushes to `main`, builds and pushes SHA/latest tags to Azure Container Registry, deploys staging, then deploys production using GitHub environments. Both apps share one Container Apps environment and external ingress on port 5001.
 
-The workflow currently does not run backend tests, frontend typecheck/build as separate quality gates, database migrations, smoke tests, or automatic rollback. It also contains stale Cloudinary secret mappings and omits several current Azure Blob, Razorpay, calendar, and DB TLS variables. Resend variables and the enabled outbox worker are configured, but required Container App secret values must exist before deployment. Actual environment secrets might also be configured outside the YAML, which cannot be established from the repository.
+The deployment workflow currently does not run backend tests, frontend typecheck/build as separate quality gates, database migrations, smoke tests, or automatic rollback. A separate PostgreSQL 16 workflow runs focused email migration upgrade and isolated fresh-bootstrap tests, but it does not apply migrations to any environment. The deployment workflow also contains stale Cloudinary secret mappings and omits several current Azure Blob, Razorpay, calendar, and DB TLS variables. Resend variables and the enabled outbox worker are configured, but required Container App secret values must exist before deployment. Actual environment secrets might also be configured outside the YAML, which cannot be established from the repository.
 
 Before relying on the pipeline for production, reconcile the workflow with `.env.production.example`, add safe migration orchestration, and define verification/rollback behavior. Do not place secrets directly in workflow text.
 

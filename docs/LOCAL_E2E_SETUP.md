@@ -126,6 +126,26 @@ npm run migrate
 npm run e2e:preflight
 ```
 
+### Migration integration tests
+
+The focused migration suite is separate from ordinary E2E bootstrap. It verifies:
+
+1. migration 016 to 017 upgrade compatibility in a temporary schema
+2. `production_schema.sql` plus every numbered migration in a newly created disposable database
+3. migration 018 retention-index behavior in a temporary schema
+
+Set `MIGRATION_TEST_DATABASE_URL` to a development-only PostgreSQL database and retain `E2E_DATABASE_SAFE_TO_MUTATE=true`. The configured database role must have `CREATEDB`, because the fresh-bootstrap test creates and force-drops a uniquely named database. Do not use staging or production credentials.
+
+```powershell
+$env:MIGRATION_TEST_DATABASE_URL = "<development-only-postgresql-url>"
+$env:E2E_DATABASE_SAFE_TO_MUTATE = "true"
+npm run test:email-migrations
+```
+
+Expected result is three executed tests with zero failures and zero skips. A skipped result means the URL or safety flag is absent and is not migration verification.
+
+Fresh bootstrap deliberately uses a separate database rather than another schema in a populated database. Applied legacy migration 001 contains metadata checks that are not schema-qualified; a schema-only test can therefore observe similarly named columns elsewhere and produce a false migration result. Do not edit migration 001 to accommodate the test because already-applied migrations are immutable.
+
 Seed the synthetic identities and stable portal fixtures:
 
 ```powershell

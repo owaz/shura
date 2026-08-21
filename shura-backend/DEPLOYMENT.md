@@ -39,6 +39,8 @@ EMAIL_OUTBOX_WORKER_ENABLED=true
 FRONTEND_URL=https://your-frontend-domain.com
 ```
 
+Configure `https://<production-host>/api/webhooks/resend` for delivered, bounced, complained, and failed events. `ADMIN_EMAIL` is the authorized internal-alert mailbox, while `RESEND_FROM_EMAIL` is the verified sender.
+
 Grant the backend's Managed Identity `Storage Blob Data Contributor` and
 `Storage Blob Delegator` on the storage account. Keep the image container
 private. See `AZURE_BLOB_STORAGE.md` for the full setup.
@@ -56,7 +58,7 @@ private. See `AZURE_BLOB_STORAGE.md` for the full setup.
    npm run migrate
    ```
 
-   The migration runner applies SQL files from `migrations/` in filename order and records completed files in `schema_migrations`.
+   The migration runner applies SQL files from `migrations/` in filename order and records completed files in `schema_migrations`. Apply through migration 018 before the Resend-only runtime and run the migrator twice to confirm the second pass skips all files.
 
 3. **Backup strategy:**
    - Set up automated daily backups

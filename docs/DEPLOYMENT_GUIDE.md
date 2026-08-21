@@ -62,6 +62,21 @@ Backend runtime configuration belongs in Container App secrets/environment varia
 
 The checked-in workflow still maps legacy Cloudinary variables and omits several current provider variables. It does configure the Resend email group, subject to the corresponding Container App secrets existing. Reconcile the workflow/app configuration before relying on Azure Blob, Razorpay, calendars, or DB TLS.
 
+### Resend email configuration
+
+Create these Container App secrets before deploying a revision that references them:
+
+- `resend-api-key`: environment-specific Resend API credential
+- `resend-from-email`: sender on a verified Resend domain
+- `resend-webhook-secret`: signing secret for that environment's webhook
+- `admin-email`: monitored mailbox authorized to receive internal application alerts
+
+The workflow maps them to `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_WEBHOOK_SECRET`, and `ADMIN_EMAIL`, and sets `EMAIL_OUTBOX_WORKER_ENABLED=true`. The administrative mailbox may differ from the verified sender. Never place any of these values in frontend build variables.
+
+Configure each environment in Resend with `https://<environment-host>/api/webhooks/resend` and the delivered, bounced, complained, and failed email events. Staging and production must not share webhook signing secrets. Apply migrations 017 and 018 before deploying the runtime.
+
+For a provider incident, setting `EMAIL_OUTBOX_WORKER_ENABLED=false` pauses claims but continues queue insertion and 30-day privacy cleanup. It does not switch to another provider. Re-enable only after testing a controlled message and signed webhook round trip.
+
 ## Identity and least privilege
 
 - GitHub deployment credentials should be scoped to the required resource group/resources.
@@ -85,15 +100,17 @@ For a release containing a new migration, verify both a base-schema-plus-all-mig
 
 Migrations 017 and 018 are backward-compatible prerequisites for the Resend-only email runtime. Apply and verify both in staging and production before deployment. Migration 017 adds the delivery states while retaining legacy `sent` compatibility; migration 018 adds the complete accepted/terminal retention index.
 
+The `Email migration tests` GitHub workflow performs PostgreSQL 16 verification only; it never migrates an environment. Its fresh-bootstrap case creates and drops an isolated database using a CI role with `CREATEDB`, while upgrade cases use temporary schemas. This separation prevents applied legacy migrations with unqualified metadata checks from seeing similarly named tables in another schema. Do not grant `CREATEDB` to the production application role and do not treat a passing workflow as evidence that staging or production migrations were applied.
+
 ## Staging and production rollout
 
 1. Verify the image tag is immutable and matches the intended commit.
 2. Apply required database migrations to staging using an explicitly controlled job or operator session.
-3. Deploy staging and smoke-test `/api/health`, SPA routing, Auth0 login/role routing, protected API rejection, database access, and every provider touched by the release.
+3. Deploy staging and smoke-test `/api/health`, SPA routing, Auth0 login/role routing, protected API rejection, database access, and every provider touched by the release. For Resend, verify one controlled message reaches `accepted` and then webhook-confirmed `delivered`.
 4. Inspect logs without exposing tokens, webhooks, intake data, messages, calendar tokens, or signed blob URLs.
 5. Apply production migrations in the planned compatibility window.
 6. Deploy the same verified image to production through the protected GitHub environment.
-7. Repeat health, authentication, core client-flow, and touched-provider smoke tests. Verify the active Container App revision and database migration state.
+7. Repeat health, authentication, core client-flow, and touched-provider smoke tests. Verify the active Container App revision, migrations 017/018, outbox worker setting, and webhook state transition.
 
 Provider delivery is eventually consistent in several flows. A successful booking or cancellation does not prove email, calendar sync, or refund completion; inspect the durable state designed for each integration.
 

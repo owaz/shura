@@ -65,11 +65,13 @@ There is no configured lint command and no frontend automated test command. Do n
 
 For a fresh disposable development database, follow [docs/LOCAL_E2E_SETUP.md](docs/LOCAL_E2E_SETUP.md): explicitly confirm the database is safe to mutate, run `npm run e2e:bootstrap`, then `npm run migrate`. `npm run migrate` alone does not create every legacy base table on an empty database.
 
+PostgreSQL migration integration tests use `MIGRATION_TEST_DATABASE_URL` plus `E2E_DATABASE_SAFE_TO_MUTATE=true`. The configured role must have `CREATEDB`: fresh-bootstrap coverage creates and drops a separate disposable database so legacy migrations cannot inspect similarly named tables in other schemas. Never point this test at staging or production.
+
 Before publishing, run `scripts/check-public-repo.ps1`; it requires Gitleaks and fails closed when Gitleaks is unavailable.
 
 ## Change rules
 
-- Database/schema: add a new numbered, additive SQL file under `shura-backend/migrations/`; never edit an already-applied migration. Test fresh bootstrap plus migrations and upgrade from the previous state. Do not add more runtime DDL to `server.js`.
+- Database/schema: add a new numbered, additive SQL file under `shura-backend/migrations/`; never edit an already-applied migration. Test fresh bootstrap plus migrations in an isolated disposable database and test upgrade from the previous state. Do not add more runtime DDL to `server.js`.
 - Auth/security: update backend enforcement, Auth0 Actions/configuration, tests, and docs together. Never trust role, owner, price, or status values supplied only by the browser.
 - External integrations: keep credentials server-side, verify provider signatures/state, make retries idempotent, preserve failure state, and document required environment variables and least-privilege permissions.
 - API changes: preserve intentional compatibility or version/break the consumer deliberately; update frontend callers, error shapes, and relevant docs.

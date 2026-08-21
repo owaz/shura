@@ -92,13 +92,16 @@ DB_HOST=[provided by platform]
 DB_NAME=shura_production  
 DB_PASSWORD=[provided by platform]
 JWT_SECRET=[generate strong secret]
-CLOUD_NAME=[your cloudinary]
-CLOUD_API_KEY=[your cloudinary]
-CLOUD_API_SECRET=[your cloudinary]
-EMAIL_USER=[your gmail]
-EMAIL_PASSWORD=[app password]
+AZURE_STORAGE_ACCOUNT_NAME=[your storage account]
+RESEND_API_KEY=[your Resend API key]
+RESEND_FROM_EMAIL=[sender on a verified domain]
+RESEND_WEBHOOK_SECRET=[environment webhook signing secret]
+ADMIN_EMAIL=[authorized internal-alert mailbox]
+EMAIL_OUTBOX_WORKER_ENABLED=true
 FRONTEND_URL=[your frontend domain]
 ```
+
+This legacy platform example is not the selected deployment path. Any deployment must also apply migrations through 018 and configure `/api/webhooks/resend`; use the canonical deployment guide.
 
 ### Frontend (Vercel/Netlify)
 ```

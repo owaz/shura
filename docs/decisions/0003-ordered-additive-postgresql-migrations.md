@@ -20,6 +20,8 @@ Legacy `setup.sql`, `intake_schema.sql`, `local_compat_schema.sql`, one-off scri
 
 - Fresh setup currently has a two-step bootstrap plus migration process.
 - Already-applied files cannot be edited safely.
+- Fresh migration verification must use an isolated disposable database. Some immutable legacy migrations contain unqualified metadata checks, so a temporary schema inside a populated database is not an equivalent clean-bootstrap boundary.
+- The migration-test role requires `CREATEDB` only in isolated development/CI; the application runtime role does not.
 - Compatibility columns and runtime DDL remain technical debt.
 - Deployment must orchestrate migrations separately; the current Azure workflow does not.
 
