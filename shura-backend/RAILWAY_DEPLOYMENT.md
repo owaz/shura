@@ -46,6 +46,8 @@ legacy deployments.
 - `ADMIN_EMAIL=<administrative-recipient>`
 - `EMAIL_OUTBOX_WORKER_ENABLED=true`
 
+Configure `https://<railway-host>/api/webhooks/resend` for delivered, bounced, complained, and failed events. This legacy alternative still requires migrations through 018 before runtime deployment.
+
 **Razorpay (Payment - Add AFTER getting production keys):**
 - `RAZORPAY_KEY_ID=rzp_live_xxxxx`
 - `RAZORPAY_KEY_SECRET=xxxxxxx`
@@ -66,7 +68,7 @@ railway up
 railway run npm run migrate
 ```
 
-The migration runner applies every SQL file in `migrations/` once and stores applied file names in `schema_migrations`.
+The migration runner applies every SQL file in `migrations/` once and stores applied file names in `schema_migrations`. Run it twice, confirm migrations 017 and 018 are recorded, and verify the second run skips every file.
 
 ### Your Backend URL
 Railway will provide: `https://shura-backend.up.railway.app`

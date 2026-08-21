@@ -63,7 +63,9 @@ The schema has two layers:
 
 `setup.sql`, `intake_schema.sql`, `local_compat_schema.sql`, `database_schema_old.sql`, and one-off `migrate_*.sql` files are legacy/bootstrap references, not the forward migration path.
 
-A truly empty database cannot currently be built by `npm run migrate` alone because migration 001 expects base identity tables. Follow `docs/LOCAL_E2E_SETUP.md` for disposable development setup. Production provisioning must deliberately run the base schema once, then all ordered migrations; the CI workflow does not currently show this step.
+A truly empty database cannot currently be built by `npm run migrate` alone because migration 001 expects base identity tables. Follow `docs/LOCAL_E2E_SETUP.md` for disposable development setup. Production provisioning must deliberately run the base schema once, then all ordered migrations; deployment does not automate this step.
+
+The PostgreSQL 16 email-migration workflow verifies both upgrade behavior and fresh base-schema-plus-all-migrations behavior. Upgrade tests use temporary schemas. Fresh bootstrap uses a newly created disposable database because applied legacy migration 001 has unqualified `information_schema` checks that can observe similarly named tables in other schemas. The migration-test role therefore requires `CREATEDB`; this permission belongs only on an isolated development/CI server, never on the application runtime role.
 
 ## Runtime DDL
 
@@ -77,7 +79,7 @@ Treat this as legacy compatibility debt. Do not add new schema changes there. Ne
 2. Prefer additive, backward-compatible changes; write explicit constraints/indexes and data backfills.
 3. Ensure destructive or type-changing operations account for real legacy data and can run transactionally.
 4. Update queries, API mapping, fixtures, and focused tests together.
-5. Verify a base-schema-plus-all-migrations install and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior. Migrations 017 and 018 are required for the Resend-only email runtime and indexed retention cleanup.
+5. Verify a base-schema-plus-all-migrations install in an isolated disposable database and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior. Migrations 017 and 018 are required for the Resend-only email runtime and indexed retention cleanup.
 6. Update this document and any product/API documentation if the durable model or rule changed.
 
 Do not run E2E bootstrap/seed unless `E2E_DATABASE_SAFE_TO_MUTATE=true` points to an isolated, disposable non-production database.

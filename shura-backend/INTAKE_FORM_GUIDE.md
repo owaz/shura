@@ -3,7 +3,7 @@
 > **Legacy workflow/API guide.** It contains older URLs, request examples, and implementation assumptions. Use [`../docs/product/workflows.md`](../docs/product/workflows.md), [`../docs/architecture/authentication-and-security.md`](../docs/architecture/authentication-and-security.md), and current intake route code. Intake tokens and responses are sensitive authorization/clinical data.
 
 ## Overview
-The intake form system allows you to send comprehensive questionnaires to clients via email. When clients complete the form, you receive all their responses automatically.
+The intake form system sends clients a single-use link through the durable email outbox. Completed responses remain in PostgreSQL; email contains only a minimal administrative alert and never the intake answers.
 
 ---
 
@@ -21,7 +21,7 @@ curl -X POST http://localhost:5001/api/intake/generate-link \
 
 **What happens:**
 - A unique token is generated
-- An email is sent to the client with a link to the intake form
+- Durable email intent is queued for the client with a link to the intake form
 - The link expires in 7 days
 - Example link: `http://localhost:3000/intake/a1b2c3d4e5f6...`
 
@@ -64,11 +64,11 @@ The client clicks the link and fills out a **3-page intake form** with:
 
 ---
 
-### 3. **Admin Receives Submission**
+### 3. **Admin Alert Is Queued**
 
 When the client submits:
 - Form data is stored in the database
-- Admin receives a comprehensive email with all responses
+- A minimal administrative alert is queued without answers, client identity, or a direct client-review link
 - The token is marked as completed (can't be reused)
 - Client sees a success page with "What happens next?" info
 
@@ -80,7 +80,7 @@ When the client submits:
 ```
 POST /api/intake/generate-link
 Body: { "userId": 123 }
-Response: { "message": "Intake form link sent successfully", "link": "..." }
+Response: consult the current route contract; API success means durable intent, not confirmed delivery
 ```
 
 ### Verify Token
@@ -132,10 +132,9 @@ Stores all form responses
 - Expiration notice (7 days)
 
 ### To Admin: "Intake Form Completed"
-- Client name and email
-- All form responses organized by section
-- Formatted HTML for easy reading
-- Highlights critical info (e.g., suicidal thoughts)
+- Minimal notice that an intake form was completed
+- No intake answers, free-text notes, client identity, or nonexistent admin-client URL
+- Authorized staff retrieve sensitive data through relationship-scoped application APIs
 
 ---
 
@@ -170,31 +169,15 @@ curl -X POST http://localhost:5001/api/intake/generate-link \
 
 ### 3. Click the link and complete the form
 
-### 4. Check email again for the submission notification
+### 4. Verify the minimal administrative alert and the outbox/webhook delivery state
 
 ---
 
 ## How to Send to Real Clients
 
-### Option 1: Automatically after signup
-Add to your signup flow in `routes/auth.js`:
+### Option 1: Integrate with a current authenticated workflow
 
-```javascript
-// After successful signup
-const { sendIntakeFormLink } = require('../utils/emailService');
-const crypto = require('crypto');
-
-const token = crypto.randomBytes(32).toString('hex');
-const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-await pool.query(
-  'INSERT INTO intake_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
-  [userId, token, expiresAt]
-);
-
-const intakeLink = `http://localhost:3000/intake/${token}`;
-await sendIntakeFormLink(userEmail, userName, intakeLink);
-```
+Do not copy a detached email-helper snippet from this legacy guide. Token insertion and email intent must share the current route transaction, and the event key must use the one-way token digest rather than the bearer token or URL.
 
 ### Option 2: Admin panel button
 Create an admin interface where you can:
@@ -263,7 +246,8 @@ Edit `emailService.js`:
 - Check `.env` has complete Resend configuration
 - Verify the sender domain and webhook endpoint in Resend
 - Check the outbox worker is enabled
-- Check backend logs for email errors
+- Inspect sanitized outbox state (`pending`, `failed`, `accepted`, `delivered`, or terminal state)
+- Check backend logs without printing recipient addresses, tokens, bodies, or raw webhooks
 
 **Form not submitting?**
 - Check browser console for errors
@@ -277,7 +261,7 @@ Edit `emailService.js`:
 1. ✅ Database tables created
 2. ✅ Backend routes implemented
 3. ✅ Frontend pages created
-4. ✅ Email system configured
+4. ✅ Durable Resend email intent and signed webhook handling implemented
 5. ✅ Routes added to App.tsx
 
-**Ready to test!** Generate a link and try it out.
+**Ready for controlled development testing only.** Apply migrations through 018 and verify the outbox plus signed webhook lifecycle.

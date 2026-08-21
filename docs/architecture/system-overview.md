@@ -2,7 +2,7 @@
 
 ## Purpose and boundaries
 
-Shura combines a public faith-centered mental-health site with authenticated client, therapist, and administrator workflows. The implemented server owns local profile and domain state; Auth0 owns interactive authentication. PostgreSQL stores durable application data. Razorpay, Azure Blob Storage, email, and Google/Outlook calendars are optional server-side integrations.
+Shura combines a public faith-centered mental-health site with authenticated client, therapist, and administrator workflows. The implemented server owns local profile and domain state; Auth0 owns interactive authentication. PostgreSQL stores durable application data. Resend email configuration is required in production; Razorpay, Azure Blob Storage, and Google/Outlook calendars are server-side integrations enabled according to environment capability.
 
 ```text
 Browser (React SPA)
@@ -36,7 +36,7 @@ In local development, Vite runs on port 3006 and the backend is configured on po
 3. Backend authentication verifies issuer, audience, signature, and custom claims against Auth0 JWKS.
 4. The middleware maps the Auth0 subject/email to one local role table and attaches the local numeric ID to `req.user`.
 5. Route-specific role and ownership checks authorize the action; database transactions protect cross-row state changes.
-6. Provider calls happen after or around durable state transitions depending on the workflow. Failures are commonly recorded or logged rather than made atomic with external providers.
+6. Email intent is persisted in PostgreSQL before asynchronous Resend delivery. Other provider calls happen after or around durable state transitions depending on the workflow; calendar/refund failures are recorded or logged according to their subsystem.
 
 ## Major subsystems
 

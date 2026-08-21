@@ -28,7 +28,7 @@ Supported session types are `video`, `audio`, and `text`. Portal therapist durat
 - refund eligibility: paid and at least 24 hours before start
 - completed sessions allow exactly one rating (1–5) and optional comment up to 1,000 characters
 
-Cancellation reasons are optional and capped at 1,000 characters. Reschedule/cancel changes write `client_session_events` and notifications. Email and calendar updates occur after the database commit.
+Cancellation reasons are optional and capped at 1,000 characters. Reschedule/cancel changes write `client_session_events`, notifications, and durable email intent transactionally. Resend delivery and calendar synchronization occur after the database commit.
 
 ## Razorpay paid-slot flow
 

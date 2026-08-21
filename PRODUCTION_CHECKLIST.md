@@ -27,7 +27,7 @@
 - [x] **Video Calls**: WebRTC with Socket.io signaling for both clients and therapists
 - [x] **Intake Forms**: Client onboarding questionnaires
 - [x] **Admin Portal**: Client management, therapist approval, assignments
-- [x] **Email Notifications**: Nodemailer configured for Gmail
+- [x] **Application Email**: Resend HTTPS delivery backed by the PostgreSQL outbox
 
 ---
 
@@ -53,7 +53,7 @@
 
 - [ ] **Cloudinary Setup**: Verify image upload credentials work
 
-- [ ] **Email Testing**: Test Nodemailer with production Gmail app password
+- [ ] **Email Testing**: Apply migrations through 018, verify Resend secrets/domain/webhook, and test accepted-to-delivered state
 
 ### 3. Testing
 - [ ] **Test Complete User Journey**:
@@ -150,7 +150,7 @@ curl https://your-vercel-app.vercel.app
 - [ ] Booking creation
 - [ ] Payment processing (test mode first)
 - [ ] Video call initialization
-- [ ] Email notifications sent
+- [ ] Email intent queued and webhook-confirmed delivery observed
 
 ### Monitoring
 - [ ] Check Railway logs for errors
@@ -175,8 +175,8 @@ After deployment, update these locations:
 3. **Razorpay Dashboard**:
    - Website URL: `https://your-vercel-app.vercel.app`
 
-4. **Gmail OAuth** (if using OAuth instead of app password):
-   - Authorized redirect URIs: Add production URL
+4. **Resend Dashboard**:
+   - Verify the sender domain and environment-specific `/api/webhooks/resend` endpoint
 
 ---
 
