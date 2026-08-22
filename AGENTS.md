@@ -40,6 +40,18 @@ See [system overview](docs/architecture/system-overview.md), [authentication and
 
 See [domain model and rules](docs/product/domain-model-and-rules.md) and [user workflows](docs/product/workflows.md).
 
+## Video calling workstream ground rules
+
+These rules govern the phased Daily.co video-calling design and implementation effort and remain in force until that workstream is complete:
+
+1. Do not write implementation code until the design phases are complete and explicitly approved. Design phases are read-and-think only.
+2. Stop at the end of every phase, summarize findings, and wait for explicit approval before continuing.
+3. One atomic commit per phase, using a conventional-commit message.
+4. Never invent an API, database column, environment variable, status enum, or file path. Verify claims against the real code and the official Daily.co documentation at docs.daily.co. If something cannot be verified, say so and ask rather than guessing.
+5. When something is ambiguous, present options with a recommendation and trade-offs; do not silently pick one.
+6. Do not add a dependency without justifying it. Minimize new dependencies.
+7. Never log, store, or transmit counselling content. This is sensitive mental health data.
+
 ## Development commands
 
 Use Node.js 24.19.0 and npm 11. Run commands from the indicated package directory.
