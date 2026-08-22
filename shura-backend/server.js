@@ -12,6 +12,7 @@ const { verifyAccessToken } = require('./middleware/auth');
 const { assertEmailConfiguration } = require('./utils/emailConfig');
 const { assertProductionOrigins, isAllowedOrigin } = require('./utils/originPolicy');
 const { assertVideoProviderConfiguration } = require('./services/video/videoProvider');
+const { startVideoReconciliationWorker } = require('./utils/videoReconciliationWorker');
 
 if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
   useAzureMonitor();
@@ -70,6 +71,12 @@ app.use((req, res, next) => {
   }
   next();
 });
+const dailyWebhookRoutes = require('./routes/dailyWebhook');
+app.use(
+  '/api/webhooks/video/daily',
+  express.raw({ type: 'application/json', limit: '1mb' }),
+  dailyWebhookRoutes
+);
 app.use(express.json({
   limit: '1mb',
   verify: (req, res, buf) => {
@@ -361,6 +368,7 @@ async function runStartupMigrations() {
   assertVideoProviderConfiguration();
   await runStartupMigrations();
   const emailWorker = require('./utils/emailWorker').startEmailWorker();
+  const videoReconciliationWorker = startVideoReconciliationWorker();
   server.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🌐 http://localhost:${PORT}/api/health`);
@@ -373,6 +381,7 @@ async function runStartupMigrations() {
     shuttingDown = true;
     console.log(`${signal} received; draining email worker`);
     if (emailWorker) await emailWorker.stop();
+    if (videoReconciliationWorker) await videoReconciliationWorker.stop();
     await new Promise((resolve) => server.close(resolve));
     await pool.end();
   };
