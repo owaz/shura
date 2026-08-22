@@ -118,6 +118,7 @@ const toJoinContext = (row) => {
     videoSessionUpdatedAt: row.video_session_updated_at || null,
     participantProviderUserId: row.participant_provider_user_id || null,
     participantPreviouslyJoined: Boolean(row.participant_first_joined_at) || Number(row.participant_connection_count || 0) > 0,
+    otherParticipantJoined: Boolean(row.other_participant_joined),
     hasPaidPayment: Boolean(row.has_paid_payment),
     refundBlocked: Boolean(row.refund_blocked),
   };
@@ -136,33 +137,61 @@ class VideoSessionService {
     this.now = now;
   }
 
+  async getSessionState({ bookingId, principalRole, principalId }) {
+    const context = await this.resolveAuthorizedContext({ bookingId, principalRole, principalId });
+    const evaluation = evaluateVideoJoinPredicate({
+      role: normalizeLower(principalRole),
+      bookingStatus: context.bookingStatus,
+      sessionType: context.sessionType,
+      paymentKind: context.paymentKind,
+      hasPaidPayment: context.hasPaidPayment,
+      refundBlocked: context.refundBlocked,
+      scheduledAt: context.scheduledAt,
+      durationMinutes: context.durationMinutes,
+      videoStatus: context.videoStatus,
+      participantPreviouslyJoined: context.participantPreviouslyJoined,
+      now: this.now(),
+    });
+
+    const join = {
+      allowed: evaluation.allowed,
+      reason: evaluation.allowed ? null : evaluation.code,
+      opensAt: evaluation.details?.join?.opensAt || null,
+      closesAt: evaluation.details?.join?.closesAt || null,
+      reconnectUntil: evaluation.details?.join?.reconnectUntil || null,
+      hardEndsAt: evaluation.details?.join?.hardEndsAt || null,
+    };
+
+    return {
+      bookingId: context.bookingId,
+      mode: context.sessionType,
+      videoStatus: context.videoStatus,
+      join,
+      presence: {
+        selfJoined: context.participantPreviouslyJoined,
+        otherParticipantJoined: context.otherParticipantJoined,
+      },
+    };
+  }
+
+  async signalLeave({ bookingId, principalRole, principalId }) {
+    await this.resolveAuthorizedContext({ bookingId, principalRole, principalId });
+    return { acknowledged: true };
+  }
+
   async issueParticipantAccess({
     bookingId,
     principalRole,
     principalId,
     participantName = null,
   }) {
-    const resolvedBookingId = parsePositiveInteger(bookingId);
-    if (!resolvedBookingId) {
-      throw new VideoSessionServiceError({
-        status: 400,
-        code: 'INVALID_BOOKING_ID',
-        message: 'Choose a valid booking.',
-      });
-    }
-
     const role = normalizeLower(principalRole);
     const resolvedPrincipalId = parsePositiveInteger(principalId);
-    if (!ALLOWED_JOIN_ROLES.has(role) || !resolvedPrincipalId) {
-      throw accessDeniedError();
-    }
-
-    let context = await this.loadJoinContext({
-      bookingId: resolvedBookingId,
+    let context = await this.resolveAuthorizedContext({
+      bookingId,
       principalRole: role,
       principalId: resolvedPrincipalId,
     });
-    if (!context) throw accessDeniedError();
 
     if (!JOINABLE_SESSION_TYPES.has(context.sessionType)) {
       const unsupported = evaluateVideoJoinPredicate({
@@ -188,12 +217,12 @@ class VideoSessionService {
 
     if (!context.videoSessionId) {
       await this.ensureVideoSession({
-        bookingId: resolvedBookingId,
+        bookingId: context.bookingId,
         principalRole: role,
         principalId: resolvedPrincipalId,
       });
       context = await this.loadJoinContext({
-        bookingId: resolvedBookingId,
+        bookingId: context.bookingId,
         principalRole: role,
         principalId: resolvedPrincipalId,
       });
@@ -284,6 +313,31 @@ class VideoSessionService {
     };
   }
 
+  async resolveAuthorizedContext({ bookingId, principalRole, principalId }) {
+    const resolvedBookingId = parsePositiveInteger(bookingId);
+    if (!resolvedBookingId) {
+      throw new VideoSessionServiceError({
+        status: 400,
+        code: 'INVALID_BOOKING_ID',
+        message: 'Choose a valid booking.',
+      });
+    }
+
+    const role = normalizeLower(principalRole);
+    const resolvedPrincipalId = parsePositiveInteger(principalId);
+    if (!ALLOWED_JOIN_ROLES.has(role) || !resolvedPrincipalId) {
+      throw accessDeniedError();
+    }
+
+    const context = await this.loadJoinContext({
+      bookingId: resolvedBookingId,
+      principalRole: role,
+      principalId: resolvedPrincipalId,
+    });
+    if (!context) throw accessDeniedError();
+    return context;
+  }
+
   async loadJoinContext({ bookingId, principalRole, principalId }, queryable = this.db) {
     const { rows } = await queryable.query(
       `SELECT b.id AS booking_id,
@@ -301,6 +355,7 @@ class VideoSessionService {
               vp.provider_user_id AS participant_provider_user_id,
               vp.first_joined_at AS participant_first_joined_at,
               vp.connection_count AS participant_connection_count,
+              COALESCE(presence_flags.other_participant_joined, FALSE) AS other_participant_joined,
               COALESCE(payment_flags.has_paid_payment, FALSE) AS has_paid_payment,
               COALESCE(payment_flags.refund_blocked, FALSE) AS refund_blocked
        FROM bookings b
@@ -310,6 +365,15 @@ class VideoSessionService {
          ON vp.video_session_id = vs.id
         AND vp.principal_role = $2
         AND vp.principal_id = $3
+       LEFT JOIN LATERAL (
+        SELECT BOOL_OR(
+          participant.first_joined_at IS NOT NULL
+          OR COALESCE(participant.connection_count, 0) > 0
+        ) AS other_participant_joined
+        FROM video_participants participant
+        WHERE participant.video_session_id = vs.id
+          AND participant.principal_role <> $2
+       ) presence_flags ON TRUE
        LEFT JOIN LATERAL (
          SELECT BOOL_OR(LOWER(COALESCE(p.status, '')) IN ('completed', 'success', 'paid')) AS has_paid_payment,
                 BOOL_OR(

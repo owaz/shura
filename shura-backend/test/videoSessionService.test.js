@@ -45,6 +45,7 @@ const makeState = (overrides = {}) => {
     booking,
     videoSession,
     participant,
+    other_participant_joined: overrides.other_participant_joined ?? false,
     has_paid_payment: overrides.has_paid_payment ?? true,
     refund_blocked: overrides.refund_blocked ?? false,
   };
@@ -73,6 +74,7 @@ const createFakeDb = (state) => {
     participant_provider_user_id: state.participant?.provider_user_id || null,
     participant_first_joined_at: state.participant?.first_joined_at || null,
     participant_connection_count: state.participant?.connection_count || 0,
+    other_participant_joined: state.other_participant_joined,
     has_paid_payment: state.has_paid_payment,
     refund_blocked: state.refund_blocked,
   });
@@ -407,5 +409,72 @@ test('maps provider not configured errors to stable public 503 codes', async () 
     (error) => error instanceof VideoSessionServiceError
       && error.status === 503
       && error.code === 'VIDEO_PROVIDER_NOT_CONFIGURED'
+  );
+});
+
+test('builds session state with canonical join window and reason', async () => {
+  const db = createFakeDb(makeState({
+    booking: { video_room_id: null },
+    videoSession: {
+      id: 101,
+      booking_id: 33,
+      status: 'ready',
+      updated_at: new Date('2026-08-22T09:30:00.000Z'),
+    },
+    participant: {
+      provider_user_id: 'c7752f50-f86e-47cb-89d8-a89cc2d54f6f',
+      first_joined_at: null,
+      connection_count: 0,
+    },
+    other_participant_joined: true,
+  }));
+
+  const service = new VideoSessionService({
+    db,
+    now: () => new Date('2026-08-22T09:45:00.000Z'),
+    providerFactory: () => ({ createToken: async () => ({}) }),
+  });
+
+  const state = await service.getSessionState({
+    bookingId: 33,
+    principalRole: 'client',
+    principalId: 7,
+  });
+
+  assert.equal(state.bookingId, 33);
+  assert.equal(state.mode, 'video');
+  assert.equal(state.videoStatus, 'ready');
+  assert.equal(state.join.allowed, false);
+  assert.equal(state.join.reason, 'SESSION_NOT_OPEN');
+  assert.equal(state.join.opensAt, '2026-08-22T09:50:00.000Z');
+  assert.equal(state.join.closesAt, '2026-08-22T10:50:00.000Z');
+  assert.equal(state.join.reconnectUntil, '2026-08-22T11:00:00.000Z');
+  assert.equal(state.join.hardEndsAt, '2026-08-22T11:05:00.000Z');
+  assert.deepEqual(state.presence, { selfJoined: false, otherParticipantJoined: true });
+});
+
+test('leave signal requires ownership and acknowledges authorized participants', async () => {
+  const db = createFakeDb(makeState());
+  const service = new VideoSessionService({
+    db,
+    providerFactory: () => ({ createToken: async () => ({}) }),
+  });
+
+  const leave = await service.signalLeave({
+    bookingId: 33,
+    principalRole: 'client',
+    principalId: 7,
+  });
+  assert.deepEqual(leave, { acknowledged: true });
+
+  await assert.rejects(
+    () => service.signalLeave({
+      bookingId: 33,
+      principalRole: 'client',
+      principalId: 999,
+    }),
+    (error) => error instanceof VideoSessionServiceError
+      && error.status === 403
+      && error.code === 'SESSION_ACCESS_DENIED'
   );
 });
