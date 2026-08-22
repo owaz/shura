@@ -11,6 +11,7 @@ const { authenticateToken } = require('./middleware/auth');
 const { verifyAccessToken } = require('./middleware/auth');
 const { assertEmailConfiguration } = require('./utils/emailConfig');
 const { assertProductionOrigins, isAllowedOrigin } = require('./utils/originPolicy');
+const { assertVideoProviderConfiguration } = require('./services/video/videoProvider');
 
 if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING) {
   useAzureMonitor();
@@ -354,6 +355,7 @@ async function runStartupMigrations() {
 
 (async () => {
   assertEmailConfiguration();
+  assertVideoProviderConfiguration();
   await runStartupMigrations();
   const emailWorker = require('./utils/emailWorker').startEmailWorker();
   server.listen(PORT, () => {
