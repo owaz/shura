@@ -62,6 +62,7 @@ const mapDashboardSession = async (row, policies) => {
     actions: sessionActions({
       scheduledAt: row.scheduled_at,
       durationMinutes: row.duration_minutes,
+      sessionType: row.session_type,
       status,
       paid,
     }, policies),

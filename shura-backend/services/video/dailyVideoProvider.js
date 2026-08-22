@@ -299,7 +299,8 @@ class DailyVideoProvider {
       scheduledAt: input?.scheduledAt,
       durationMinutes: input?.durationMinutes,
     });
-    const roomName = buildRoomName();
+    const requestedRoomName = trimValue(input?.roomName);
+    const roomName = requestedRoomName || buildRoomName();
     const roomPayload = {
       name: roomName,
       privacy: 'private',

@@ -19,6 +19,7 @@
 | `/api/chats` | assignment-scoped conversations and messages |
 | `/api/calendar` | therapist Google/Outlook OAuth and integration state |
 | `/api/upload` | authenticated image validation, sanitization, and Azure Blob upload |
+| `/api/video` | authenticated secure video-session API (`POST /sessions/:bookingId/join`) for assigned client/therapist access tokens |
 | `/api/calls` | legacy/placeholder call endpoints, not the secure video-provider contract |
 | `/api/newsletter`, `/api/platform` | newsletter mutation and client-facing platform configuration |
 | `/api/webhooks/resend` | signed Resend lifecycle events correlated to durable email outbox rows |
@@ -62,6 +63,13 @@ Current client-billing contracts are:
 
 The billing API never returns Razorpay signatures, webhook payloads, card data, provider secrets, failure details, therapy notes, intake responses, or messages. Current Razorpay checkout does not implement saved payment methods or scheduled future charges.
 
+Current secure-video contract implemented in this phase:
+
+- `POST /api/video/sessions/:bookingId/join` is bearer-authenticated and derives caller role/identity server-side from Auth0 claims.
+- Authorization checks run on every token request: assigned client/therapist ownership, joinable booking status, non-text mode, payment/refund eligibility, non-terminal video status, and UTC join-window boundaries from `scheduled_at` plus `duration_minutes`.
+- Missing booking, cross-account booking, and non-client/therapist role all return `403 SESSION_ACCESS_DENIED` to avoid ownership/existence leakage.
+- Room and token provisioning remains server-only; browser callers never submit room names, participant IDs, or role assertions.
+
 ## Service and policy boundaries
 
 - Auth0 Management API: `services/auth0Management.js`
@@ -71,6 +79,7 @@ The billing API never returns Razorpay signatures, webhook payloads, card data, 
 - Client booking orchestration: `services/clientBookingService.js`
 - Client notification insertion: `services/clientNotifications.js`
 - Video provider contract: `services/video/videoProvider.js`
+- Video session orchestration and join authorization: `services/video/videoSessionService.js`, `utils/videoJoinPolicy.js`
 - Calendar OAuth/event sync: `utils/calendarIntegrations.js`
 - Email templates/enqueueing: `utils/emailService.js`, `utils/emailOutbox.js`
 - Resend provider/worker/configuration: `utils/resendAdapter.js`, `utils/emailWorker.js`, `utils/emailConfig.js`

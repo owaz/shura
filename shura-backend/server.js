@@ -150,6 +150,9 @@ if (chatRoutes) app.use('/api/chats', generalLimiter, chatRoutes);
 const callRoutes = require('./routes/calls');
 if (callRoutes) app.use('/api/calls', generalLimiter, callRoutes);
 
+const videoSessionRoutes = require('./routes/videoSessions');
+if (videoSessionRoutes) app.use('/api/video', generalLimiter, videoSessionRoutes);
+
 const bookingRoutes = require('./routes/bookings');
 if (bookingRoutes) app.use('/api/bookings', generalLimiter, bookingRoutes);
 

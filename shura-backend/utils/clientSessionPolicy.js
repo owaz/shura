@@ -1,5 +1,10 @@
 const UPCOMING_STATUSES = new Set(['pending', 'confirmed', 'upcoming', 'live']);
 const PAST_STATUSES = new Set(['completed', 'no_show_client', 'no_show_therapist', 'no-show']);
+const {
+  JOINABLE_BOOKING_STATUSES,
+  JOINABLE_SESSION_TYPES,
+  buildJoinWindow,
+} = require('./videoJoinPolicy');
 
 const defaultPolicies = Object.freeze({
   joinWindowMinutes: 10,
@@ -27,17 +32,34 @@ const normalizeSessionStatus = (status) => {
 const hoursUntil = (scheduledAt, now = new Date()) =>
   (new Date(scheduledAt).getTime() - now.getTime()) / 3_600_000;
 
-const sessionActions = ({ scheduledAt, durationMinutes = 50, status, paid = false }, policies, now = new Date()) => {
+const sessionActions = (
+  {
+    scheduledAt,
+    durationMinutes = 50,
+    status,
+    paid = false,
+    sessionType = 'video',
+  },
+  policies,
+  now = new Date()
+) => {
   const policy = normalizePolicies(policies);
   const normalizedStatus = normalizeSessionStatus(status);
+  const normalizedSessionType = String(sessionType || '').trim().toLowerCase();
   const start = new Date(scheduledAt);
   const end = new Date(start.getTime() + Number(durationMinutes || 50) * 60_000);
-  const joinOpensAt = new Date(start.getTime() - policy.joinWindowMinutes * 60_000);
+  const joinWindow = buildJoinWindow({ scheduledAt, durationMinutes, role: 'client' });
   const active = UPCOMING_STATUSES.has(normalizedStatus);
+  const joinableStatus = JOINABLE_BOOKING_STATUSES.has(normalizedStatus);
+  const joinableMode = JOINABLE_SESSION_TYPES.has(normalizedSessionType);
   const remainingHours = hoursUntil(start, now);
   return {
-    canJoin: active && now >= joinOpensAt && now <= end,
-    joinAvailableAt: joinOpensAt.toISOString(),
+    canJoin: joinableStatus
+      && joinableMode
+      && Boolean(joinWindow)
+      && now >= joinWindow.opensAt
+      && now <= joinWindow.scheduledEnd,
+    joinAvailableAt: joinWindow ? joinWindow.opensAt.toISOString() : null,
     canReschedule: active && remainingHours >= policy.rescheduleCutoffHours,
     canCancel: active && now < end,
     refundEligible: active && paid && remainingHours >= policy.cancellationCutoffHours,
