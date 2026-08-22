@@ -47,6 +47,12 @@ const resolveTransitionSourceStatuses = (nextStatus, expectedCurrentStatuses = n
   return expectedCurrentStatuses;
 };
 
+const assertPositiveInteger = (value, fieldName) => {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+};
+
 const createVideoSession = async ({ bookingId, status = 'scheduled', statusReason = null }, queryable = pool) => {
   if (!Number.isInteger(bookingId) || bookingId <= 0) throw new Error('bookingId must be a positive integer');
   if (!VIDEO_SESSION_STATUSES.includes(status)) throw new Error('Invalid video session status');
@@ -298,10 +304,11 @@ const claimVideoWebhookEvents = async (
 };
 
 const markVideoWebhookProcessed = async (
-  { provider, providerEventId, processedAt = new Date() },
+  { provider, providerEventId, expectedAttemptCount, processedAt = new Date() },
   queryable = pool
 ) => {
   if (!provider || !providerEventId) throw new Error('provider and providerEventId are required');
+  assertPositiveInteger(expectedAttemptCount, 'expectedAttemptCount');
   const { rows } = await queryable.query(
     `UPDATE video_webhook_events
      SET processing_status = 'processed',
@@ -310,17 +317,20 @@ const markVideoWebhookProcessed = async (
         next_attempt_at = NOW()
      WHERE provider = $1
        AND provider_event_id = $2
+       AND processing_status = 'processing'
+       AND attempt_count = $4
      RETURNING *`,
-    [provider, providerEventId, processedAt]
+    [provider, providerEventId, processedAt, expectedAttemptCount]
   );
   return rows[0] || null;
 };
 
 const markVideoWebhookFailed = async (
-  { provider, providerEventId, errorCode, nextAttemptAt },
+  { provider, providerEventId, expectedAttemptCount, errorCode, nextAttemptAt },
   queryable = pool
 ) => {
   if (!provider || !providerEventId) throw new Error('provider and providerEventId are required');
+  assertPositiveInteger(expectedAttemptCount, 'expectedAttemptCount');
   if (!errorCode) throw new Error('errorCode is required');
   if (!nextAttemptAt) throw new Error('nextAttemptAt is required');
   const { rows } = await queryable.query(
@@ -331,8 +341,10 @@ const markVideoWebhookFailed = async (
         processed_at = NULL
      WHERE provider = $1
        AND provider_event_id = $2
+       AND processing_status = 'processing'
+       AND attempt_count = $5
      RETURNING *`,
-    [provider, providerEventId, String(errorCode), nextAttemptAt]
+    [provider, providerEventId, String(errorCode), nextAttemptAt, expectedAttemptCount]
   );
   return rows[0] || null;
 };

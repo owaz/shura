@@ -10,6 +10,7 @@ const {
   markParticipantJoined,
   markParticipantLeft,
   markVideoWebhookFailed,
+  markVideoWebhookProcessed,
   updateVideoSessionStatus,
   upsertVideoParticipant,
 } = require('../db/videoSessions');
@@ -146,12 +147,78 @@ test('markVideoWebhookFailed requires retry scheduling input', async () => {
       {
         provider: 'daily',
         providerEventId: 'evt_2',
+        expectedAttemptCount: 1,
         errorCode: 'TRANSIENT',
       },
       { query: async () => ({ rows: [] }) }
     ),
     /nextAttemptAt is required/
   );
+});
+
+test('markVideoWebhookProcessed uses attempt compare-and-set and no-ops stale workers', async () => {
+  let call;
+  const queryable = {
+    async query(sql, params) {
+      call = { sql, params };
+      return { rows: [] };
+    },
+  };
+
+  const row = await markVideoWebhookProcessed(
+    {
+      provider: 'daily',
+      providerEventId: 'evt_3',
+      expectedAttemptCount: 4,
+    },
+    queryable
+  );
+
+  assert.equal(row, null);
+  assert.equal(call.params[3], 4);
+  assert.match(call.sql, /processing_status = 'processing'/);
+  assert.match(call.sql, /attempt_count = \$4/);
+});
+
+test('markVideoWebhookFailed requires attempt compare-and-set input', async () => {
+  await assert.rejects(
+    () => markVideoWebhookFailed(
+      {
+        provider: 'daily',
+        providerEventId: 'evt_4',
+        errorCode: 'TRANSIENT',
+        nextAttemptAt: new Date(),
+      },
+      { query: async () => ({ rows: [] }) }
+    ),
+    /expectedAttemptCount must be a positive integer/
+  );
+});
+
+test('markVideoWebhookFailed uses attempt compare-and-set guard', async () => {
+  let call;
+  const queryable = {
+    async query(sql, params) {
+      call = { sql, params };
+      return { rows: [] };
+    },
+  };
+
+  const row = await markVideoWebhookFailed(
+    {
+      provider: 'daily',
+      providerEventId: 'evt_5',
+      expectedAttemptCount: 2,
+      errorCode: 'TRANSIENT',
+      nextAttemptAt: new Date('2026-01-01T00:00:00.000Z'),
+    },
+    queryable
+  );
+
+  assert.equal(row, null);
+  assert.equal(call.params[4], 2);
+  assert.match(call.sql, /processing_status = 'processing'/);
+  assert.match(call.sql, /attempt_count = \$5/);
 });
 
 test('participant presence updates are additive and timestamped', async () => {

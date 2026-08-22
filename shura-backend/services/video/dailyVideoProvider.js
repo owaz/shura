@@ -241,6 +241,7 @@ class DailyVideoProvider {
         signal: controller.signal,
       });
     } catch (error) {
+      clearTimeout(timeout);
       if (error?.name === 'AbortError') {
         throw new VideoProviderError({
           code: 'TIMEOUT',
@@ -253,25 +254,43 @@ class DailyVideoProvider {
         message: `Daily ${operation} request failed`,
         retryable: true,
       });
+    }
+
+    try {
+      const responseText = await response.text();
+      let payload = null;
+      if (responseText) {
+        try {
+          payload = JSON.parse(responseText);
+        } catch {
+          payload = null;
+        }
+      }
+
+      if (response.ok) {
+        return payload || {};
+      }
+
+      throw normalizeErrorFromResponse(response.status, operation);
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new VideoProviderError({
+          code: 'TIMEOUT',
+          message: `Daily ${operation} timed out`,
+          retryable: true,
+        });
+      }
+      if (error instanceof VideoProviderError) {
+        throw error;
+      }
+      throw new VideoProviderError({
+        code: 'UNAVAILABLE',
+        message: `Daily ${operation} request failed`,
+        retryable: true,
+      });
     } finally {
       clearTimeout(timeout);
     }
-
-    const responseText = await response.text();
-    let payload = null;
-    if (responseText) {
-      try {
-        payload = JSON.parse(responseText);
-      } catch {
-        payload = null;
-      }
-    }
-
-    if (response.ok) {
-      return payload || {};
-    }
-
-    throw normalizeErrorFromResponse(response.status, operation);
   }
 
   async createRoom(input) {
@@ -304,12 +323,24 @@ class DailyVideoProvider {
       },
     };
 
-    const created = await this.requestWithRetry({
-      method: 'POST',
-      path: '/rooms',
-      operation: 'room provisioning',
-      body: roomPayload,
-    });
+    let created;
+    try {
+      created = await this.requestWithRetry({
+        method: 'POST',
+        path: '/rooms',
+        operation: 'room provisioning',
+        body: roomPayload,
+      });
+    } catch (error) {
+      if (!(error instanceof VideoProviderError) || error.code !== 'ROOM_ALREADY_EXISTS') {
+        throw error;
+      }
+      const existingRoom = await this.getRoomByName(roomName);
+      if (!existingRoom) {
+        throw error;
+      }
+      created = existingRoom;
+    }
 
     const providerRoomName = trimValue(created.name) || roomName;
     const roomUrl = trimValue(created.url) || buildRoomUrl(this.config.domain, providerRoomName);
@@ -322,6 +353,21 @@ class DailyVideoProvider {
       notBefore: times.roomOpenAt.toISOString(),
       expiresAt: times.hardEnd.toISOString(),
     };
+  }
+
+  async getRoomByName(roomName) {
+    try {
+      return await this.requestWithRetry({
+        method: 'GET',
+        path: `/rooms/${encodeURIComponent(roomName)}`,
+        operation: 'room lookup',
+      });
+    } catch (error) {
+      if (error instanceof VideoProviderError && error.code === 'ROOM_NOT_FOUND') {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async createToken(input) {

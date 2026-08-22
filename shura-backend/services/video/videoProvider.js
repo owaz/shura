@@ -65,6 +65,13 @@ class UnconfiguredVideoProvider {
 
 const normalizeProviderName = (value) => String(value || '').trim().toLowerCase();
 
+const getConfiguredVideoProviderName = (env = process.env) => {
+  const provider = normalizeProviderName(env.VIDEO_PROVIDER);
+  return SUPPORTED_VIDEO_PROVIDERS.includes(provider) ? provider : '';
+};
+
+const isLegacyClientSessionJoinEnabled = (env = process.env) => !getConfiguredVideoProviderName(env);
+
 const assertVideoProviderConfiguration = (env = process.env) => {
   const provider = normalizeProviderName(env.VIDEO_PROVIDER);
   if (!provider) return;
@@ -83,7 +90,7 @@ const assertVideoProviderConfiguration = (env = process.env) => {
 };
 
 const getVideoProvider = (env = process.env) => {
-  const provider = normalizeProviderName(env.VIDEO_PROVIDER);
+  const provider = getConfiguredVideoProviderName(env);
   if (provider === 'daily') {
     const { DailyVideoProvider, readDailyVideoConfiguration } = require('./dailyVideoProvider');
     return new DailyVideoProvider(readDailyVideoConfiguration(env));
@@ -96,5 +103,7 @@ module.exports = {
   VideoProviderNotConfiguredError,
   VIDEO_PROVIDER_ERROR_CODES,
   assertVideoProviderConfiguration,
+  getConfiguredVideoProviderName,
   getVideoProvider,
+  isLegacyClientSessionJoinEnabled,
 };

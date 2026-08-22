@@ -3,7 +3,11 @@ const rateLimit = require('express-rate-limit');
 const pool = require('../db');
 const { errorResponse, parsePagination, paginatedResponse } = require('../utils/apiResponse');
 const { getImageReadUrl } = require('../services/azureBlobStorage');
-const { getVideoProvider, VideoProviderNotConfiguredError } = require('../services/video/videoProvider');
+const {
+  getVideoProvider,
+  isLegacyClientSessionJoinEnabled,
+  VideoProviderNotConfiguredError,
+} = require('../services/video/videoProvider');
 const { refundPayment } = require('../services/razorpayRefunds');
 const { createClientNotification } = require('../services/clientNotifications');
 const {
@@ -585,6 +589,14 @@ router.post('/:id/join', sessionMutationLimiter, async (req, res) => {
     }
     if (String(row.session_type).toLowerCase() === 'text') {
       return res.json({ data: { mode: 'text', url: `/chat/${row.therapist_id}` } });
+    }
+    if (!isLegacyClientSessionJoinEnabled()) {
+      return errorResponse(
+        res,
+        503,
+        'VIDEO_PROVIDER_NOT_CONFIGURED',
+        'Secure session joining is being upgraded and is not available yet.'
+      );
     }
     const provider = getVideoProvider();
     let roomId = row.video_room_id;

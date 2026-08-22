@@ -780,7 +780,7 @@ Without this approval, Daily may be used only in non-production environments wit
 
 ## 13. Documentation and validation plan
 
-Implementation should add ADR-0007 covering:
+ADR-0007 now records the accepted architecture decisions for this rollout:
 
 - Daily provider selection.
 - Provider boundary.

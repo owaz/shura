@@ -5,6 +5,7 @@ const {
   VideoProviderError,
   VideoProviderNotConfiguredError,
   assertVideoProviderConfiguration,
+  isLegacyClientSessionJoinEnabled,
   getVideoProvider,
 } = require('../services/video/videoProvider');
 const {
@@ -57,6 +58,11 @@ test('getVideoProvider returns unconfigured provider when VIDEO_PROVIDER is unse
     () => provider.createRoom(),
     (error) => error instanceof VideoProviderNotConfiguredError && error.code === 'NOT_CONFIGURED'
   );
+});
+
+test('legacy client join path stays disabled when VIDEO_PROVIDER is configured', () => {
+  assert.equal(isLegacyClientSessionJoinEnabled({ VIDEO_PROVIDER: '' }), true);
+  assert.equal(isLegacyClientSessionJoinEnabled({ VIDEO_PROVIDER: 'daily' }), false);
 });
 
 test('DailyVideoProvider createRoom uses private hardened room settings', async () => {
@@ -193,6 +199,78 @@ test('DailyVideoProvider retries transient provider failures and does not retry 
         && error.code === 'INVALID_REQUEST'
         && attempts === 1
     );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('DailyVideoProvider request timeout also applies while reading response body', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async (_url, options) => ({
+    ok: true,
+    status: 200,
+    text: () => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(JSON.stringify({ ok: true })), 100);
+      options.signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        const error = new Error('aborted');
+        error.name = 'AbortError';
+        reject(error);
+      });
+    }),
+  });
+
+  try {
+    const provider = new DailyVideoProvider({
+      ...readDailyVideoConfiguration(validEnv),
+      requestTimeoutMs: 10,
+      retryDelaysMs: [],
+    });
+    await assert.rejects(
+      () => provider.getRoomStatus({ roomName: 'opaque-room-name' }),
+      (error) => error instanceof VideoProviderError && error.code === 'TIMEOUT'
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('DailyVideoProvider createRoom reconciles idempotent conflict with room lookup', async () => {
+  const calls = [];
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    calls.push({
+      url,
+      method: options.method,
+      body: options.body ? JSON.parse(options.body) : null,
+    });
+    if (calls.length === 1) {
+      return mockResponse(409, { error: 'already exists' });
+    }
+    return mockResponse(200, {
+      id: 'provider-room-id',
+      name: calls[0].body.name,
+      url: `https://shura.daily.co/${calls[0].body.name}`,
+    });
+  };
+
+  try {
+    const provider = new DailyVideoProvider({
+      ...readDailyVideoConfiguration(validEnv),
+      retryDelaysMs: [],
+    });
+    const room = await provider.createRoom({
+      scheduledAt: '2026-06-01T10:00:00.000Z',
+      durationMinutes: 50,
+      sessionMode: 'video',
+    });
+
+    const expectedLookupUrl = `https://api.daily.co/v1/rooms/${encodeURIComponent(calls[0].body.name)}`;
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].method, 'POST');
+    assert.equal(calls[1].method, 'GET');
+    assert.equal(calls[1].url, expectedLookupUrl);
+    assert.equal(room.roomName, calls[0].body.name);
   } finally {
     global.fetch = originalFetch;
   }
