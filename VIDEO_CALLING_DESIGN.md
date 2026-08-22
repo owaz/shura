@@ -840,3 +840,9 @@ Validation executed during Phase 2:
   - legacy existing booking statuses remained valid
   - writes to `no_show_client` and `no_show_therapist` succeeded
   - `video_sessions`, `video_participants`, and `video_webhook_events` exist after migration.
+
+---
+
+## 15. Pending implementation decision
+
+- **Session-policy configuration alignment:** decide in a later phase whether `platform_settings.session_policies.joinWindowMinutes` should remain a configurable client-portal policy surface, or be explicitly retired in favor of the fixed canonical secure-video windows (client -10 minutes, therapist -20 minutes) across all session availability/join surfaces. Until resolved, secure-video join authorization follows the canonical fixed windows from Section 6.

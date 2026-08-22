@@ -4,9 +4,10 @@ const pool = require('../db');
 const { errorResponse, parsePagination, paginatedResponse } = require('../utils/apiResponse');
 const { getImageReadUrl } = require('../services/azureBlobStorage');
 const {
-  VideoSessionServiceError,
-  createVideoSessionService,
-} = require('../services/video/videoSessionService');
+  getVideoProvider,
+  isLegacyClientSessionJoinEnabled,
+  VideoProviderNotConfiguredError,
+} = require('../services/video/videoProvider');
 const { refundPayment } = require('../services/razorpayRefunds');
 const { createClientNotification } = require('../services/clientNotifications');
 const {
@@ -26,7 +27,6 @@ const {
 } = require('../utils/calendarIntegrations');
 
 const router = express.Router();
-const videoSessionService = createVideoSessionService();
 
 const sessionMutationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -581,16 +581,40 @@ router.post('/:id/review', sessionMutationLimiter, async (req, res) => {
 router.post('/:id/join', sessionMutationLimiter, async (req, res) => {
   if (!validSessionId(req.params.id)) return errorResponse(res, 400, 'INVALID_SESSION_ID', 'Choose a valid session.');
   try {
-    const access = await videoSessionService.issueParticipantAccess({
-      bookingId: Number(req.params.id),
-      principalRole: 'client',
-      principalId: req.clientId,
-      participantName: req.user?.full_name || req.user?.name || null,
-    });
-    return res.json({ data: access });
+    const [row, policies] = await Promise.all([fetchSession(req.clientId, req.params.id), loadPolicies()]);
+    if (!row) return errorResponse(res, 404, 'SESSION_NOT_FOUND', 'This session could not be found.');
+    const actions = sessionActions({
+      scheduledAt: row.scheduled_at,
+      durationMinutes: row.duration_minutes,
+      sessionType: row.session_type,
+      status: row.status,
+    }, policies);
+    if (!actions.canJoin) {
+      return errorResponse(res, 409, 'JOIN_WINDOW_CLOSED', `You can join ${policies.joinWindowMinutes} minutes before your session.`);
+    }
+    if (String(row.session_type).toLowerCase() === 'text') {
+      return res.json({ data: { mode: 'text', url: `/chat/${row.therapist_id}` } });
+    }
+    if (!isLegacyClientSessionJoinEnabled()) {
+      return errorResponse(
+        res,
+        503,
+        'VIDEO_PROVIDER_NOT_CONFIGURED',
+        'Secure session joining is being upgraded and is not available yet.'
+      );
+    }
+    const provider = getVideoProvider();
+    let roomId = row.video_room_id;
+    if (!roomId) {
+      const room = await provider.createRoom({ sessionId: row.id, startsAt: row.scheduled_at, durationMinutes: row.duration_minutes });
+      roomId = room.id || room.roomId;
+      await pool.query('UPDATE bookings SET video_room_id = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3', [roomId, row.id, req.clientId]);
+    }
+    const access = await provider.createParticipantAccess({ roomId, sessionId: row.id, participantId: req.clientId, role: 'client' });
+    return res.json({ data: { mode: row.session_type, ...access } });
   } catch (err) {
-    if (err instanceof VideoSessionServiceError) {
-      return errorResponse(res, err.status, err.code, err.message, err.details || null);
+    if (err instanceof VideoProviderNotConfiguredError || err.code === 'VIDEO_PROVIDER_NOT_CONFIGURED') {
+      return errorResponse(res, 503, 'VIDEO_PROVIDER_NOT_CONFIGURED', 'Secure session joining is being upgraded and is not available yet.');
     }
     console.error('Join session error', { code: err?.code || 'SESSION_JOIN_FAILED' });
     return errorResponse(res, 500, 'SESSION_JOIN_FAILED', 'We could not open your session.');

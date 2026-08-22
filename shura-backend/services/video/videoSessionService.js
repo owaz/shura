@@ -18,6 +18,7 @@ const {
 } = require('../../utils/videoJoinPolicy');
 
 const ALLOWED_JOIN_ROLES = new Set(['client', 'therapist']);
+const STALE_PROVISIONING_MS = 2 * 60 * 1000;
 
 class VideoSessionServiceError extends Error {
   constructor({ status = 500, code = 'SESSION_JOIN_FAILED', message = 'We could not open your session.', details = null } = {}) {
@@ -114,11 +115,18 @@ const toJoinContext = (row) => {
     videoRoomId: row.video_room_id || null,
     videoSessionId: row.video_session_id ? Number(row.video_session_id) : null,
     videoStatus: normalizeLower(row.video_status || 'scheduled'),
+    videoSessionUpdatedAt: row.video_session_updated_at || null,
     participantProviderUserId: row.participant_provider_user_id || null,
     participantPreviouslyJoined: Boolean(row.participant_first_joined_at) || Number(row.participant_connection_count || 0) > 0,
     hasPaidPayment: Boolean(row.has_paid_payment),
     refundBlocked: Boolean(row.refund_blocked),
   };
+};
+
+const trustedRoomName = ({ bookingId, videoSessionId, scheduledAt, videoRoomId }) => {
+  if (!bookingId || !videoSessionId || !scheduledAt || !videoRoomId) return null;
+  const expected = buildDeterministicRoomName({ bookingId, videoSessionId, scheduledAt });
+  return videoRoomId === expected ? expected : null;
 };
 
 class VideoSessionService {
@@ -192,6 +200,18 @@ class VideoSessionService {
       if (!context) throw accessDeniedError();
     }
 
+    const expectedRoomName = buildDeterministicRoomName({
+      bookingId: context.bookingId,
+      videoSessionId: context.videoSessionId,
+      scheduledAt: context.scheduledAt,
+    });
+    context.videoRoomId = trustedRoomName({
+      bookingId: context.bookingId,
+      videoSessionId: context.videoSessionId,
+      scheduledAt: context.scheduledAt,
+      videoRoomId: context.videoRoomId,
+    });
+
     const evaluation = evaluateVideoJoinPredicate({
       role,
       bookingStatus: context.bookingStatus,
@@ -221,6 +241,7 @@ class VideoSessionService {
         principalRole: role,
         principalId: resolvedPrincipalId,
         videoSessionId: context.videoSessionId,
+        expectedRoomName,
         scheduledAt: context.scheduledAt,
         durationMinutes: context.durationMinutes,
         sessionType: context.sessionType,
@@ -276,6 +297,7 @@ class VideoSessionService {
               b.video_room_id,
               vs.id AS video_session_id,
               vs.status AS video_status,
+              vs.updated_at AS video_session_updated_at,
               vp.provider_user_id AS participant_provider_user_id,
               vp.first_joined_at AS participant_first_joined_at,
               vp.connection_count AS participant_connection_count,
@@ -349,6 +371,7 @@ class VideoSessionService {
     principalRole,
     principalId,
     videoSessionId,
+    expectedRoomName,
     scheduledAt,
     durationMinutes,
     sessionType,
@@ -358,6 +381,7 @@ class VideoSessionService {
       principalRole,
       principalId,
       videoSessionId,
+      expectedRoomName,
     });
 
     if (claimResult.videoRoomId) return claimResult.videoRoomId;
@@ -369,11 +393,10 @@ class VideoSessionService {
       });
     }
 
-    const roomName = buildDeterministicRoomName({ bookingId, videoSessionId, scheduledAt });
+    const roomName = expectedRoomName;
     const provider = this.providerFactory();
-    let room;
     try {
-      room = await provider.createRoom({
+      await provider.createRoom({
         roomName,
         scheduledAt,
         durationMinutes,
@@ -391,18 +414,19 @@ class VideoSessionService {
       principalRole,
       principalId,
       videoSessionId,
-      roomName: room.roomName || room.id || roomName,
+      roomName,
     });
 
     return persistedRoomName;
   }
 
-  async claimProvisioning({ bookingId, principalRole, principalId, videoSessionId }) {
+  async claimProvisioning({ bookingId, principalRole, principalId, videoSessionId, expectedRoomName }) {
     const client = await this.db.connect();
     try {
       await client.query('BEGIN');
       const { rows } = await client.query(
-        `SELECT b.video_room_id, vs.id AS video_session_id, LOWER(COALESCE(vs.status, '')) AS video_status
+        `SELECT b.video_room_id, vs.id AS video_session_id, LOWER(COALESCE(vs.status, '')) AS video_status,
+                vs.updated_at AS video_session_updated_at
          FROM bookings b
          JOIN video_sessions vs ON vs.booking_id = b.id
          WHERE b.id = $1
@@ -419,15 +443,65 @@ class VideoSessionService {
         throw accessDeniedError();
       }
 
-      if (locked.video_room_id) {
+      if (locked.video_room_id && locked.video_room_id === expectedRoomName) {
         await client.query('COMMIT');
         return { videoRoomId: locked.video_room_id, pending: false };
       }
 
-      const currentStatus = normalizeLower(locked.video_status || 'scheduled');
+      let currentStatus = normalizeLower(locked.video_status || 'scheduled');
+
+      if (locked.video_room_id && locked.video_room_id !== expectedRoomName && currentStatus === 'ready') {
+        const reset = await updateVideoSessionStatus(
+          {
+            videoSessionId,
+            status: 'scheduled',
+            statusReason: 'room_reference_replaced',
+            expectedCurrentStatuses: ['ready'],
+          },
+          client
+        );
+        if (!reset) {
+          await client.query('COMMIT');
+          return { videoRoomId: null, pending: true };
+        }
+        currentStatus = 'scheduled';
+      }
+
       if (currentStatus === 'provisioning') {
+        const updatedAt = locked.video_session_updated_at ? new Date(locked.video_session_updated_at) : null;
+        const staleProvisioning = !updatedAt || Number.isNaN(updatedAt.getTime())
+          ? true
+          : (this.now().getTime() - updatedAt.getTime()) >= STALE_PROVISIONING_MS;
+        if (!staleProvisioning) {
+          await client.query('COMMIT');
+          return { videoRoomId: null, pending: true };
+        }
+
+        const markedFailed = await updateVideoSessionStatus(
+          {
+            videoSessionId,
+            status: 'failed',
+            statusReason: 'provisioning_stale_recovery',
+            expectedCurrentStatuses: ['provisioning'],
+          },
+          client
+        );
+        if (!markedFailed) {
+          await client.query('COMMIT');
+          return { videoRoomId: null, pending: true };
+        }
+
+        const reclaimed = await updateVideoSessionStatus(
+          {
+            videoSessionId,
+            status: 'provisioning',
+            statusReason: 'first_join_recovered',
+            expectedCurrentStatuses: ['failed'],
+          },
+          client
+        );
         await client.query('COMMIT');
-        return { videoRoomId: null, pending: true };
+        return { videoRoomId: null, pending: !reclaimed };
       }
 
       if (TERMINAL_VIDEO_STATUSES.has(currentStatus)) {
@@ -482,7 +556,7 @@ class VideoSessionService {
         throw accessDeniedError();
       }
 
-      if (locked.video_room_id) {
+      if (locked.video_room_id && locked.video_room_id === roomName) {
         await client.query('COMMIT');
         return locked.video_room_id;
       }

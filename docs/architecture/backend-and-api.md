@@ -69,6 +69,7 @@ Current secure-video contract implemented in this phase:
 - Authorization checks run on every token request: assigned client/therapist ownership, joinable booking status, non-text mode, payment/refund eligibility, non-terminal video status, and UTC join-window boundaries from `scheduled_at` plus `duration_minutes`.
 - Missing booking, cross-account booking, and non-client/therapist role all return `403 SESSION_ACCESS_DENIED` to avoid ownership/existence leakage.
 - Room and token provisioning remains server-only; browser callers never submit room names, participant IDs, or role assertions.
+- Legacy `POST /api/client/sessions/:id/join` remains intentionally gated for provider-backed non-text joins until the dedicated session-page consumer migration is complete.
 
 ## Service and policy boundaries
 
