@@ -2,6 +2,8 @@
 
 > **Legacy deployment reference — do not use for current releases.** This guide predates the selected single-container Azure Container Apps deployment, Auth0-only interactive login, ordered migrations, and private Azure Blob uploads. Start with [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) and [`docs/README.md`](docs/README.md).
 
+> The supported runtime baseline is Node.js 24.19.0 with npm 11.
+
 ## Local Development (Current State)
 ```bash
 # Backend
