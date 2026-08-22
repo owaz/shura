@@ -40,6 +40,10 @@ Vite application.
 - Docker image build succeeded using the pinned Node.js 24.19.0 Alpine image.
 - Container health verification succeeded.
 - Container shutdown logged the expected email-worker drain message.
+- Auth0 client login verification succeeded with the configured frontend
+  environment: Universal Login completed, the callback returned to the local
+  app, the local session endpoint resolved the client, and the portal home
+  rendered an authenticated session.
 
 The local verification used an ignored `shura-backend/.env` and a disposable
 database. No environment file or credential was added to the repository.
@@ -49,7 +53,7 @@ database. No environment file or credential was added to the repository.
 The following require intentionally provisioned provider credentials or a
 deployed environment and were not validated by this migration:
 
-- Auth0 login, registration, status, and MFA flows
+- Auth0 registration, status, and MFA flows
 - Razorpay payment, signature, webhook, refund, and idempotency flows
 - Socket.IO client reconnect and signalling behavior
 - Azure Blob upload and private read URL behavior
