@@ -42,7 +42,7 @@ No external video provider is selected or configured. The adapter in `services/v
 
 ## Container image
 
-The root multi-stage `Dockerfile` uses Node 24 Alpine:
+The root multi-stage `Dockerfile` uses Node 24.19.0 Alpine:
 
 1. Install frontend dependencies with `npm ci` and build the Vite bundle using `VITE_*` build arguments.
 2. Install production backend dependencies with `npm ci --omit=dev`.

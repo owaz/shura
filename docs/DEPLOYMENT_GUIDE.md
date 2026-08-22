@@ -4,7 +4,7 @@ This is the current repository-backed production delivery guide. The root `Docke
 
 ## Deployed shape
 
-- One multi-stage Node 24 Alpine image builds the React/Vite SPA, installs production backend dependencies, copies the SPA into `shura-backend/public`, and starts `node server.js` on port 5001.
+- One multi-stage Node 24.19.0 Alpine image builds the React/Vite SPA, installs production backend dependencies, copies the SPA into `shura-backend/public`, and starts `node server.js` on port 5001.
 - Express serves the SPA, REST API, and Socket.IO from one process. The container health check calls `/api/health`.
 - `.github/workflows/deploy-aca.yml` gates the image on backend tests, frontend typecheck/build, isolated PostgreSQL migration tests, and Gitleaks; it then deploys staging, runs health/authorization smoke checks, and promotes through protected GitHub environments.
 - Database changes remain separately human-approved through `.github/workflows/migrate-database.yml`; deployment does not apply them and rollback is never automatic.
