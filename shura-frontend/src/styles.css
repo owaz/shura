@@ -4,7 +4,8 @@
   --color-cream: #FDFBF5;
   --color-sand: #F3E9DC;
   --color-taupe: #BFAEA0;
-  --color-brown-soft: #8D7B68;
+  /* Meets WCAG AA for normal-size text on the portal's white surfaces. */
+  --color-brown-soft: #75604D;
   --color-brown-dark: #5C5043;
   --color-slate-blue: #6B8A9A;
   --color-gold: #C0A062;

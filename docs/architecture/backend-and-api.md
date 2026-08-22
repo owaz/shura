@@ -4,7 +4,7 @@
 
 `shura-backend/server.js` creates one Express 5 application and HTTP server, attaches Socket.IO, configures CORS, JSON parsing, security headers, rate limiters, route modules, health endpoints, production static serving, and a final error handler. The backend uses CommonJS modules and direct `pg` queries; there is no ORM or dependency-injection framework.
 
-`db/index.js` creates a shared PostgreSQL pool from `DATABASE_URL` or individual `DB_*` values. Production and explicit `DB_SSL=true` connections use TLS with certificate verification disabled; see security risks in the repository assessment before changing this behavior.
+`db/index.js` creates a shared PostgreSQL pool from `DATABASE_URL` or individual `DB_*` values. Production enables TLS by default and requires certificate verification. `DB_SSL_CA_CERT` may provide an explicit CA. Disabling certificate verification is a local-development-only exception and production startup rejects it.
 
 ## Route families
 
@@ -83,7 +83,7 @@ Keep provider-specific code behind these boundaries. Route handlers may orchestr
 
 Socket.IO verifies an Auth0 access token during handshake and joins `user:<role>:<local-id>`. Chat mutations persist messages first, then emit to the client and therapist rooms.
 
-Call signaling has both room-based legacy events and older global `io.emit` events. The global offer/answer/candidate/end events ignore their `to` target and broadcast to every authenticated socket. Do not build new calling features on these events; replace them with ownership-validated session rooms and the video-provider abstraction.
+Legacy call signaling events are not registered. Socket.IO is limited to server-derived user rooms used by persisted chat notifications. A future calling implementation must use ownership-validated session rooms and the video-provider abstraction.
 
 ## Error and side-effect model
 

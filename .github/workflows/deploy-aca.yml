@@ -13,7 +13,63 @@ env:
   ENVIRONMENT_NAME: shura-env
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            shura-backend/package-lock.json
+            shura-frontend/package-lock.json
+      - name: Backend tests
+        working-directory: shura-backend
+        run: npm ci && npm test
+      - name: Frontend typecheck and build
+        working-directory: shura-frontend
+        run: npm ci && npm run typecheck && npm run build
+
+  migration-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: shura_migration_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: shura-backend/package-lock.json
+      - name: Fresh bootstrap, upgrade, and idempotency migration tests
+        working-directory: shura-backend
+        env:
+          MIGRATION_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/shura_migration_test
+          E2E_DATABASE_SAFE_TO_MUTATE: 'true'
+        run: npm ci && npm run test:email-migrations
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks public-repository scan
+        uses: gitleaks/gitleaks-action@v2
+
   build:
+    needs: [quality, migration-tests, secret-scan]
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.meta.outputs.sha_tag }}
@@ -86,11 +142,15 @@ jobs:
             DB_USER=secretref:db-user
             DB_PASSWORD=secretref:db-password
             DB_NAME=secretref:db-name
-            JWT_SECRET=secretref:jwt-secret
             FRONTEND_URL=https://${{ env.CONTAINER_APP_NAME }}-staging.azurecontainerapps.io
-            CLOUD_NAME=secretref:cloudinary-name
-            CLOUD_API_KEY=secretref:cloudinary-key
-            CLOUD_API_SECRET=secretref:cloudinary-secret
+            DB_SSL=true
+            DB_SSL_REJECT_UNAUTHORIZED=true
+            AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name
+            AZURE_STORAGE_IMAGE_CONTAINER=secretref:azure-storage-image-container
+            AZURE_STORAGE_SAS_TTL_MINUTES=15
+            RAZORPAY_KEY_ID=secretref:razorpay-key-id
+            RAZORPAY_KEY_SECRET=secretref:razorpay-key-secret
+            RAZORPAY_WEBHOOK_SECRET=secretref:razorpay-webhook-secret
             APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-conn
             AUTH0_DOMAIN=${{ secrets.VITE_AUTH0_DOMAIN }}
             AUTH0_AUDIENCE=${{ secrets.VITE_AUTH0_AUDIENCE }}
@@ -98,11 +158,19 @@ jobs:
             AUTH0_M2M_CLIENT_ID=secretref:auth0-m2m-client-id
             AUTH0_M2M_CLIENT_SECRET=secretref:auth0-m2m-client-secret
             AUTH0_ROLE_THERAPIST_ID=secretref:auth0-role-therapist-id
+            BACKEND_URL=https://${{ env.CONTAINER_APP_NAME }}-staging.azurecontainerapps.io
+            CALENDAR_TOKEN_SECRET=secretref:calendar-token-secret
             RESEND_API_KEY=secretref:resend-api-key
             RESEND_FROM_EMAIL=secretref:resend-from-email
             RESEND_WEBHOOK_SECRET=secretref:resend-webhook-secret
             ADMIN_EMAIL=secretref:admin-email
             EMAIL_OUTBOX_WORKER_ENABLED=true
+
+      - name: Staging health and authorization smoke checks
+        run: |
+          BASE_URL="https://${{ env.CONTAINER_APP_NAME }}-staging.azurecontainerapps.io"
+          curl --fail --retry 12 --retry-delay 10 --retry-all-errors "$BASE_URL/api/health"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$BASE_URL/api/client/home")" = "401"
 
   deploy-production:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -131,11 +199,15 @@ jobs:
             DB_USER=secretref:db-user
             DB_PASSWORD=secretref:db-password
             DB_NAME=secretref:db-name
-            JWT_SECRET=secretref:jwt-secret
             FRONTEND_URL=https://${{ env.CONTAINER_APP_NAME }}.azurecontainerapps.io
-            CLOUD_NAME=secretref:cloudinary-name
-            CLOUD_API_KEY=secretref:cloudinary-key
-            CLOUD_API_SECRET=secretref:cloudinary-secret
+            DB_SSL=true
+            DB_SSL_REJECT_UNAUTHORIZED=true
+            AZURE_STORAGE_ACCOUNT_NAME=secretref:azure-storage-account-name
+            AZURE_STORAGE_IMAGE_CONTAINER=secretref:azure-storage-image-container
+            AZURE_STORAGE_SAS_TTL_MINUTES=15
+            RAZORPAY_KEY_ID=secretref:razorpay-key-id
+            RAZORPAY_KEY_SECRET=secretref:razorpay-key-secret
+            RAZORPAY_WEBHOOK_SECRET=secretref:razorpay-webhook-secret
             APPLICATIONINSIGHTS_CONNECTION_STRING=secretref:appinsights-conn
             AUTH0_DOMAIN=${{ secrets.VITE_AUTH0_DOMAIN }}
             AUTH0_AUDIENCE=${{ secrets.VITE_AUTH0_AUDIENCE }}
@@ -143,8 +215,16 @@ jobs:
             AUTH0_M2M_CLIENT_ID=secretref:auth0-m2m-client-id
             AUTH0_M2M_CLIENT_SECRET=secretref:auth0-m2m-client-secret
             AUTH0_ROLE_THERAPIST_ID=secretref:auth0-role-therapist-id
+            BACKEND_URL=https://${{ env.CONTAINER_APP_NAME }}.azurecontainerapps.io
+            CALENDAR_TOKEN_SECRET=secretref:calendar-token-secret
             RESEND_API_KEY=secretref:resend-api-key
             RESEND_FROM_EMAIL=secretref:resend-from-email
             RESEND_WEBHOOK_SECRET=secretref:resend-webhook-secret
             ADMIN_EMAIL=secretref:admin-email
             EMAIL_OUTBOX_WORKER_ENABLED=true
+
+      - name: Production health and authorization smoke checks
+        run: |
+          BASE_URL="https://${{ env.CONTAINER_APP_NAME }}.azurecontainerapps.io"
+          curl --fail --retry 12 --retry-delay 10 --retry-all-errors "$BASE_URL/api/health"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$BASE_URL/api/client/home")" = "401"

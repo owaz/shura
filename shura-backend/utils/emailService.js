@@ -62,7 +62,7 @@ const sendTherapistApplicationNotification = async (therapistData, queryable = p
     if (result.success) console.log('Email queued: therapist_application');
     return result;
   } catch (error) {
-    console.error('Therapist application email queue failed:', error.message);
+    console.error('Therapist application email queue failed', { code: error?.code || 'EMAIL_QUEUE_FAILED' });
     return { success: false, error: error.message };
   }
 };
@@ -84,7 +84,7 @@ const sendQuestionnaireAdminNotification = async (clientData, queryable = pool) 
     if (result.success) console.log('Email queued: questionnaire_submission');
     return result;
   } catch (error) {
-    console.error('Questionnaire email queue failed:', error.message);
+    console.error('Questionnaire email queue failed', { code: error?.code || 'EMAIL_QUEUE_FAILED' });
     return { success: false, error: error.message };
   }
 };
@@ -116,7 +116,7 @@ const sendIntakeFormLink = async (
     if (result.success) console.log('Email queued: intake_link');
     return result;
   } catch (error) {
-    console.error('Intake link email queue failed:', error.message);
+    console.error('Intake link email queue failed', { code: error?.code || 'EMAIL_QUEUE_FAILED' });
     return { success: false, error: error.message };
   }
 };
@@ -138,7 +138,7 @@ const sendIntakeFormSubmission = async (intakeFormId, queryable = pool) => {
     if (result.success) console.log('Email queued: intake_submission');
     return result;
   } catch (error) {
-    console.error('Intake submission email queue failed:', error.message);
+    console.error('Intake submission email queue failed', { code: error?.code || 'EMAIL_QUEUE_FAILED' });
     return { success: false, error: error.message };
   }
 };
@@ -187,7 +187,7 @@ const sendBookingConfirmation = async (bookingData, queryable = pool) => {
     if (result.success) console.log('Email queued: booking_confirmation');
     return result;
   } catch (error) {
-    console.error('Booking confirmation email queue failed:', error.message);
+    console.error('Booking confirmation email queue failed', { code: error?.code || 'EMAIL_QUEUE_FAILED' });
     return { success: false, error: error.message };
   }
 };
@@ -212,7 +212,7 @@ const sendBookingNotificationToTherapist = async (bookingData, queryable = pool)
     if (result.success) console.log('Email queued: booking_notification');
     return result;
   } catch (error) {
-    console.error('Therapist booking email queue failed:', error.message);
+    console.error('Therapist booking email queue failed', { code: error?.code || 'EMAIL_QUEUE_FAILED' });
     return { success: false, error: error.message };
   }
 };
@@ -237,7 +237,7 @@ const sendTherapistReleaseNotification = async (data, queryable = pool) => {
     if (result.success) console.log('Email queued: therapist_release');
     return result;
   } catch (error) {
-    console.error('Therapist release email queue failed:', error.message);
+    console.error('Therapist release email queue failed', { code: error?.code || 'EMAIL_QUEUE_FAILED' });
     return { success: false, error: error.message };
   }
 };
@@ -301,7 +301,7 @@ const sendSessionRescheduledNotifications = async (
     ]);
     return { success: results.every((result) => result.success), results };
   } catch (error) {
-    console.error('Reschedule email queue failed:', error.message);
+    console.error('Reschedule email queue failed', { code: error?.code || 'EMAIL_QUEUE_FAILED' });
     return { success: false, error: error.message };
   }
 };
@@ -344,7 +344,7 @@ const sendSessionCancellationNotifications = async (session, queryable = pool) =
     ]);
     return { success: results.every((result) => result.success), results };
   } catch (error) {
-    console.error('Cancellation email queue failed:', error.message);
+    console.error('Cancellation email queue failed', { code: error?.code || 'EMAIL_QUEUE_FAILED' });
     return { success: false, error: error.message };
   }
 };

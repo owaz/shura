@@ -146,7 +146,7 @@ const ClientNotificationsMenu: React.FC = () => {
         {unreadCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#B76243] px-1 text-[9px] font-bold text-white" aria-hidden="true">{visibleCount}</span>}
         <span className="sr-only">{unreadCount} unread {unreadCount === 1 ? 'notification' : 'notifications'}</span>
       </button>
-      {open && <div id="client-notification-panel" ref={panel} tabIndex={-1} className="fixed inset-x-3 top-[4.5rem] z-50 max-h-[75vh] overflow-hidden rounded-2xl border border-[#E2D5C9] bg-white shadow-2xl outline-none sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-[390px]" aria-label="Notifications panel">
+      {open && <div id="client-notification-panel" ref={panel} tabIndex={-1} role="dialog" aria-modal="false" className="fixed inset-x-3 top-[4.5rem] z-50 max-h-[75vh] overflow-hidden rounded-2xl border border-[#E2D5C9] bg-white shadow-2xl outline-none sm:absolute sm:inset-x-auto sm:right-0 sm:top-12 sm:w-[390px]" aria-label="Notifications panel">
         <div className="flex items-center gap-3 border-b border-sand px-5 py-4">
           <div><h2 className="font-serif text-xl font-semibold text-brown-dark">Notifications</h2><p className="text-xs text-brown-soft">Updates about your care and account</p></div>
           {unreadCount > 0 && <button type="button" onClick={() => void markAllRead()} className="ml-auto rounded-lg px-2 py-1 text-xs font-semibold text-[#8C4F3A] hover:bg-[#FBF2EC] focus:outline-none focus:ring-2 focus:ring-[#8C4F3A]">Mark all read</button>}

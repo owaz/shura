@@ -50,7 +50,7 @@ router.post('/subscribe', async (req, res) => {
       subscription: rows[0],
     });
   } catch (err) {
-    console.error('Newsletter subscribe error:', err);
+    console.error('Newsletter subscribe error', { code: err?.code || 'NEWSLETTER_SUBSCRIBE_FAILED' });
     res.status(500).json({ error: 'Unable to update newsletter subscription' });
   }
 });
@@ -72,7 +72,7 @@ router.post('/unsubscribe', async (req, res) => {
     );
     res.json({ message: 'Successfully unsubscribed' });
   } catch (err) {
-    console.error('Newsletter unsubscribe error:', err);
+    console.error('Newsletter unsubscribe error', { code: err?.code || 'NEWSLETTER_UNSUBSCRIBE_FAILED' });
     res.status(500).json({ error: 'Unable to update newsletter subscription' });
   }
 });

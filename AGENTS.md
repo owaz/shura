@@ -59,9 +59,11 @@ Set-Location ../shura-frontend
 npm run dev
 npm run typecheck
 npm run build
+npm run test:e2e
+npm run test:a11y
 ```
 
-There is no configured lint command and no frontend automated test command. Do not claim otherwise. The frontend default is `http://localhost:3006`; the documented backend default is `http://localhost:5001` when `PORT=5001` is set.
+There is no configured lint command. Playwright browser and axe accessibility commands are configured; authenticated cases require an ignored Auth0 storage-state file and must not store passwords in the repository. The frontend default is `http://localhost:3006`; the documented backend default is `http://localhost:5001` when `PORT=5001` is set.
 
 For a fresh disposable development database, follow [docs/LOCAL_E2E_SETUP.md](docs/LOCAL_E2E_SETUP.md): explicitly confirm the database is safe to mutate, run `npm run e2e:bootstrap`, then `npm run migrate`. `npm run migrate` alone does not create every legacy base table on an empty database.
 

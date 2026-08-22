@@ -17,7 +17,7 @@ router.get('/profile', requireAdmin, async (req, res) => {
     if (rows.length === 0) return res.status(404).json({ error: 'Admin not found' });
     return res.json({ admin: rows[0] });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Unable to load the admin profile.' });
   }
 });
 
@@ -29,7 +29,7 @@ router.put('/profile', requireAdmin, async (req, res) => {
     const { rows } = await pool.query('UPDATE admins SET full_name = COALESCE($1, full_name), phone = COALESCE($2, phone), updated_at = NOW() WHERE id = $3 RETURNING id, email, full_name, role, phone', [full_name, phone, adminId]);
     return res.json({ admin: rows[0] });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Unable to update the admin profile.' });
   }
 });
 
@@ -43,7 +43,7 @@ router.get('/stats', requireAdmin, async (req, res) => {
     ]);
     return res.json({ stats: { totalClients: parseInt(clients.rows[0].count), activeTherapists: parseInt(therapists.rows[0].count), activeAssignments: parseInt(assignments.rows[0].count), totalIntakeForms: parseInt(forms.rows[0].count) } });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Unable to load admin statistics.' });
   }
 });
 
@@ -68,7 +68,7 @@ router.get('/intake-forms', requireAdmin, async (req, res) => {
     
     return res.json({ forms: rows });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: 'Unable to load intake forms.' });
   }
 });
 

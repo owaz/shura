@@ -82,7 +82,7 @@ router.post('/generate-link', authenticateToken, async (req, res) => {
 
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('Generate intake link error:', error);
+    console.error('Generate intake link error', { code: error?.code || 'INTAKE_LINK_FAILED' });
     res.status(500).json({ message: 'Failed to generate intake form link' });
   } finally {
     client.release();
@@ -95,7 +95,7 @@ router.get('/verify/:token', async (req, res) => {
     const { token } = req.params;
 
     const result = await pool.query(
-      `SELECT it.*, u.email, u.full_name 
+      `SELECT it.user_id, u.full_name
        FROM intake_tokens it
        JOIN users u ON it.user_id = u.id
        WHERE it.token = $1 AND it.expires_at > NOW() AND it.completed_at IS NULL`,
@@ -110,13 +110,12 @@ router.get('/verify/:token', async (req, res) => {
     res.json({ 
       client: {
         id: data.user_id,
-        email: data.email,
         full_name: data.full_name
       }
     });
 
   } catch (error) {
-    console.error('Verify token error:', error);
+    console.error('Verify intake token error', { code: error?.code || 'INTAKE_TOKEN_FAILED' });
     res.status(500).json({ message: 'Failed to verify link' });
   }
 });
@@ -194,7 +193,7 @@ router.post('/submit', async (req, res) => {
     try {
       assignment = await autoAssignTherapist(client.user_id, formData);
       if (assignment) {
-        console.log(`Client ${client.full_name} auto-assigned to therapist ${assignment.therapist.full_name}`);
+        console.log('Intake auto-assignment completed');
       }
     } catch (assignError) {
       console.error('Auto-assignment failed, but form submitted:', assignError);
@@ -212,7 +211,7 @@ router.post('/submit', async (req, res) => {
 
   } catch (error) {
     await clientConnection.query('ROLLBACK').catch(() => {});
-    console.error('Submit intake form error:', error);
+    console.error('Submit intake form error', { code: error?.code || 'INTAKE_SUBMISSION_FAILED' });
     res.status(500).json({ message: 'Failed to submit intake form' });
   } finally {
     clientConnection.release();
@@ -278,7 +277,7 @@ router.get('/therapist/:therapistId', authenticateToken, async (req, res) => {
     res.json({ intakeForms: result.rows });
 
   } catch (error) {
-    console.error('Get therapist intake forms error:', error);
+    console.error('Get therapist intake forms error', { code: error?.code || 'INTAKE_LIST_FAILED' });
     res.status(500).json({ message: 'Failed to fetch intake forms' });
   }
 });

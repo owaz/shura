@@ -179,7 +179,7 @@ router.get('/dashboard', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('GET /api/client/dashboard error', error);
+    console.error('GET client dashboard error', { code: error?.code || 'DASHBOARD_FAILED' });
     return errorResponse(res, 500, 'DASHBOARD_LOAD_FAILED', 'We could not load your home dashboard right now.');
   }
 });
@@ -194,7 +194,7 @@ router.get('/notifications/count', async (req, res) => {
     );
     return res.json({ data: { unreadCount: Number(rows[0]?.unread_count || 0) } });
   } catch (error) {
-    console.error('GET /api/client/notifications/count error', error);
+    console.error('GET notification count error', { code: error?.code || 'NOTIFICATION_COUNT_FAILED' });
     return errorResponse(res, 500, 'NOTIFICATION_COUNT_FAILED', 'We could not load your notification count.');
   }
 });
@@ -232,7 +232,7 @@ router.get('/notifications', async (req, res) => {
       total: Number(count.rows[0]?.total || 0),
     });
   } catch (error) {
-    console.error('GET /api/client/notifications error', error);
+    console.error('GET notifications error', { code: error?.code || 'NOTIFICATIONS_FAILED' });
     return errorResponse(res, 500, 'NOTIFICATIONS_LOAD_FAILED', 'We could not load your notifications.');
   }
 });
@@ -247,7 +247,7 @@ router.patch('/notifications/read-all', notificationMutationLimiter, async (req,
     );
     return res.json({ data: { updated: Number(rowCount || 0), unreadCount: 0 } });
   } catch (error) {
-    console.error('PATCH /api/client/notifications/read-all error', error);
+    console.error('Mark all notifications read error', { code: error?.code || 'NOTIFICATIONS_READ_FAILED' });
     return errorResponse(res, 500, 'NOTIFICATIONS_UPDATE_FAILED', 'We could not mark your notifications as read.');
   }
 });
@@ -267,7 +267,7 @@ router.patch('/notifications/:id/read', notificationMutationLimiter, async (req,
     if (!rows.length) return errorResponse(res, 404, 'NOTIFICATION_NOT_FOUND', 'This notification could not be found.');
     return res.json({ data: { id: String(rows[0].id), readAt: rows[0].read_at } });
   } catch (error) {
-    console.error('PATCH /api/client/notifications/:id/read error', error);
+    console.error('Mark notification read error', { code: error?.code || 'NOTIFICATION_READ_FAILED' });
     return errorResponse(res, 500, 'NOTIFICATION_UPDATE_FAILED', 'We could not update this notification.');
   }
 });

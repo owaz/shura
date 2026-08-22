@@ -46,7 +46,7 @@ router.get('/quote-of-the-day', async (_req, res) => {
       },
     });
   } catch (error) {
-    console.error('GET /api/platform/quote-of-the-day error', error);
+    console.error('GET quote error', { code: error?.code || 'QUOTE_FAILED' });
     return errorResponse(res, 500, 'QUOTE_LOAD_FAILED', 'The quote of the day could not be loaded.');
   }
 });
@@ -67,7 +67,7 @@ router.get('/settings/client', requireClient, async (_req, res) => {
       },
     });
   } catch (err) {
-    console.error('GET /api/platform/settings/client error', err);
+    console.error('GET client settings error', { code: err?.code || 'SETTINGS_FAILED' });
     return errorResponse(res, 500, 'CLIENT_SETTINGS_LOAD_FAILED', 'Client settings could not be loaded.');
   }
 });

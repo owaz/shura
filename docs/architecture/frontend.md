@@ -4,7 +4,7 @@
 
 `shura-frontend` is a React 19 TypeScript SPA built by Vite 6 with Tailwind CSS 4's Vite plugin. `index.tsx` mounts `App.tsx`; `App.tsx` composes React Router routes, global authentication, layout, lazy-loaded pages, and an error boundary. The alias `@/*` resolves from the frontend package root.
 
-The project has no separate application-state library, form framework, frontend test runner, or lint command. State is held in React contexts/hooks and page components.
+The project has no separate application-state library, form framework, or lint command. State is held in React contexts/hooks and page components. Playwright provides browser and axe accessibility suites; authenticated cases require an ignored Auth0 storage-state artifact.
 
 ## Route areas
 
@@ -61,4 +61,4 @@ npm run typecheck
 npm run build
 ```
 
-There is no frontend automated test or lint script. Manually verify affected roles, loading/error states, accessibility, mobile/desktop layouts, browser console, and failed/unauthorized network requests.
+`npm run test:e2e` runs responsive Playwright projects and `npm run test:a11y` selects axe/keyboard coverage. An absent `E2E_STORAGE_STATE` intentionally skips authenticated cases and is not release evidence. Continue manual role, provider, destructive-flow, console, and failed-network verification; there is still no lint script.

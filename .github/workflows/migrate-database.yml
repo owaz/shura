@@ -1,0 +1,45 @@
+name: Manually migrate an approved environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected GitHub environment to migrate
+        required: true
+        type: choice
+        options: [staging, production]
+      confirmation:
+        description: Type MIGRATE-STAGING or MIGRATE-PRODUCTION
+        required: true
+        type: string
+
+jobs:
+  migrate:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      ((inputs.environment == 'staging' && inputs.confirmation == 'MIGRATE-STAGING') ||
+      (inputs.environment == 'production' && inputs.confirmation == 'MIGRATE-PRODUCTION'))
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency: database-migration-${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: shura-backend/package-lock.json
+      - name: Install backend dependencies
+        working-directory: shura-backend
+        run: npm ci
+      - name: Apply additive migrations once, then verify idempotency
+        working-directory: shura-backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NODE_ENV: production
+          DB_SSL: 'true'
+          DB_SSL_REJECT_UNAUTHORIZED: 'true'
+        run: npm run migrate && npm run migrate

@@ -177,7 +177,7 @@ router.get('/', async (req, res) => {
       total: Number(count.rows[0]?.total || 0),
     });
   } catch (err) {
-    console.error('GET /api/client/sessions error', err);
+    console.error('GET /api/client/sessions error', { code: err?.code || 'SESSIONS_LOAD_FAILED' });
     return errorResponse(res, 500, 'SESSIONS_LOAD_FAILED', 'We could not load your sessions right now.');
   }
 });
@@ -244,7 +244,7 @@ router.get('/:id/availability', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('GET /api/client/sessions/:id/availability error', err);
+    console.error('GET session availability error', { code: err?.code || 'SESSION_AVAILABILITY_FAILED' });
     return errorResponse(res, 500, 'AVAILABILITY_LOAD_FAILED', 'We could not load available times.');
   }
 });
@@ -256,7 +256,7 @@ router.get('/:id', async (req, res) => {
     if (!row) return errorResponse(res, 404, 'SESSION_NOT_FOUND', 'This session could not be found.');
     return res.json({ data: { session: await sessionDto(row, policies) } });
   } catch (err) {
-    console.error('GET /api/client/sessions/:id error', err);
+    console.error('GET client session error', { code: err?.code || 'SESSION_LOAD_FAILED' });
     return errorResponse(res, 500, 'SESSION_LOAD_FAILED', 'We could not load this session.');
   }
 });
@@ -374,7 +374,7 @@ router.patch('/:id/reschedule', sessionMutationLimiter, async (req, res) => {
     updatedId = booking.id;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('PATCH /api/client/sessions/:id/reschedule error', err);
+    console.error('Reschedule session error', { code: err?.code || 'RESCHEDULE_FAILED' });
     const status = err.code === 'SLOT_CONFLICT' ? 409 : err.code === 'SLOT_OUTSIDE_AVAILABILITY' ? 400 : 500;
     return errorResponse(res, status, err.code || 'RESCHEDULE_FAILED', status === 500 ? 'We could not reschedule this session.' : err.message);
   } finally {
@@ -384,7 +384,7 @@ router.patch('/:id/reschedule', sessionMutationLimiter, async (req, res) => {
   void Promise.allSettled([
     syncBookingUpdateToConnectedCalendars(updatedId),
   ]).then((results) => results.filter((result) => result.status === 'rejected')
-    .forEach((result) => console.error('Post-reschedule notification error', result.reason)));
+    .forEach((result) => console.error('Post-reschedule notification error', { code: result.reason?.code || 'NOTIFICATION_FAILED' })));
   const [row, policies] = await Promise.all([fetchSession(req.clientId, updatedId), loadPolicies()]);
   return res.json({ data: { session: await sessionDto(row, policies) } });
 });
@@ -477,7 +477,7 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('POST /api/client/sessions/:id/cancel error', err);
+    console.error('Cancel session error', { code: err?.code || 'CANCELLATION_FAILED' });
     return errorResponse(res, 500, 'CANCELLATION_FAILED', 'We could not cancel this session.');
   } finally {
     client.release();
@@ -514,7 +514,7 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
       });
     } catch (err) {
       refundStatus = 'failed';
-      console.error('Razorpay cancellation refund error', err);
+      console.error('Razorpay cancellation refund error', { code: err?.code || 'REFUND_FAILED' });
       await pool.query(
         `UPDATE payments SET refund_status = 'failed', refund_failure_reason = $1, updated_at = NOW()
          WHERE id = $2`,
@@ -536,7 +536,7 @@ router.post('/:id/cancel', sessionMutationLimiter, async (req, res) => {
     void Promise.allSettled([
       cancelBookingOnConnectedCalendars(booking.id),
     ]).then((results) => results.filter((result) => result.status === 'rejected')
-      .forEach((result) => console.error('Post-cancellation notification error', result.reason)));
+      .forEach((result) => console.error('Post-cancellation notification error', { code: result.reason?.code || 'NOTIFICATION_FAILED' })));
   }
   const [row, policies] = await Promise.all([fetchSession(req.clientId, booking.id), loadPolicies()]);
   return res.json({ data: { session: await sessionDto(row, policies), refundStatus } });
@@ -565,7 +565,7 @@ router.post('/:id/review', sessionMutationLimiter, async (req, res) => {
     return res.status(201).json({ data: { review: result.rows[0] } });
   } catch (err) {
     if (err.code === '23505') return errorResponse(res, 409, 'REVIEW_ALREADY_SUBMITTED', 'You have already reviewed this session.');
-    console.error('POST /api/client/sessions/:id/review error', err);
+    console.error('Submit review error', { code: err?.code || 'REVIEW_FAILED' });
     return errorResponse(res, 500, 'REVIEW_FAILED', 'We could not save your review.');
   }
 });
@@ -599,7 +599,7 @@ router.post('/:id/join', sessionMutationLimiter, async (req, res) => {
     if (err instanceof VideoProviderNotConfiguredError || err.code === 'VIDEO_PROVIDER_NOT_CONFIGURED') {
       return errorResponse(res, 503, 'VIDEO_PROVIDER_NOT_CONFIGURED', 'Secure session joining is being upgraded and is not available yet.');
     }
-    console.error('POST /api/client/sessions/:id/join error', err);
+    console.error('Join session error', { code: err?.code || 'SESSION_JOIN_FAILED' });
     return errorResponse(res, 500, 'SESSION_JOIN_FAILED', 'We could not open your session.');
   }
 });

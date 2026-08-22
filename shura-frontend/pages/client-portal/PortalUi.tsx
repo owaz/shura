@@ -1,5 +1,27 @@
 import React from 'react';
 
+type FieldAria = {
+  descriptionIds?: string;
+  error?: string;
+  required?: boolean;
+};
+
+const annotateFieldControls = (node: React.ReactNode, aria: FieldAria): React.ReactNode => {
+  if (!React.isValidElement<Record<string, unknown>>(node) || typeof node.type !== 'string') return node;
+  if (['input', 'select', 'textarea'].includes(node.type)) {
+    const existingDescription = String(node.props['aria-describedby'] || '').trim();
+    return React.cloneElement(node, {
+      'aria-describedby': [existingDescription, aria.descriptionIds].filter(Boolean).join(' ') || undefined,
+      'aria-invalid': aria.error ? true : undefined,
+      'aria-required': aria.required || undefined,
+    });
+  }
+  if (node.props.children === undefined) return node;
+  return React.cloneElement(node, {
+    children: React.Children.map(node.props.children as React.ReactNode, (child) => annotateFieldControls(child, aria)),
+  });
+};
+
 export const inputClass = 'mt-2 w-full rounded-xl border border-[#D9C9BB] bg-white px-3.5 py-3 text-[15px] text-brown-dark outline-none transition placeholder:text-taupe focus:border-[#9B5B43] focus:ring-2 focus:ring-[#B76243]/20 disabled:bg-[#F7F1EA] disabled:text-brown-soft';
 
 export const PortalCard: React.FC<React.PropsWithChildren<{ className?: string }>> = ({ children, className = '' }) => (
@@ -12,16 +34,18 @@ export const Field: React.FC<React.PropsWithChildren<{
   hint?: string;
   error?: string;
   required?: boolean;
-}>> = ({ label, htmlFor, hint, error, required, children }) => (
-  <div>
+}>> = ({ label, htmlFor, hint, error, required, children }) => {
+  const descriptionIds = [hint && `${htmlFor}-hint`, error && `${htmlFor}-error`].filter(Boolean).join(' ') || undefined;
+  const describedChildren = React.Children.map(children, (child) => annotateFieldControls(child, { descriptionIds, error, required }));
+  return <div>
     <label htmlFor={htmlFor} className="block text-sm font-semibold text-brown-dark">
       {label}{required && <span className="ml-1 text-[#A75035]" aria-hidden="true">*</span>}
     </label>
     {hint && <p id={`${htmlFor}-hint`} className="mt-1 text-sm leading-5 text-brown-soft">{hint}</p>}
-    {children}
+    {describedChildren}
     {error && <p id={`${htmlFor}-error`} className="mt-1.5 text-sm text-[#A54236]" role="alert">{error}</p>}
-  </div>
-);
+  </div>;
+};
 
 export const ErrorState: React.FC<{ message?: string; onRetry: () => void }> = ({ message = 'Something went wrong — please try again.', onRetry }) => (
   <PortalCard className="mx-auto max-w-xl text-center">
@@ -34,7 +58,7 @@ export const ErrorState: React.FC<{ message?: string; onRetry: () => void }> = (
 export const PageSkeleton: React.FC = () => (
   <div className="space-y-5" aria-label="Loading" role="status">
     <span className="sr-only">Loading your information</span>
-    {[1, 2].map((item) => <div key={item} className="h-48 animate-pulse rounded-2xl border border-sand bg-white/80"><div className="m-7 h-4 w-1/3 rounded bg-sand" /><div className="m-7 h-3 w-2/3 rounded bg-sand" /></div>)}
+    {[1, 2].map((item) => <div key={item} className="h-48 animate-pulse rounded-2xl border border-sand bg-white/80 motion-reduce:animate-none"><div className="m-7 h-4 w-1/3 rounded bg-sand" /><div className="m-7 h-3 w-2/3 rounded bg-sand" /></div>)}
   </div>
 );
 
@@ -56,7 +80,7 @@ export const Toggle: React.FC<{
 }> = ({ label, description, checked, disabled, onChange }) => (
   <div className="flex items-start justify-between gap-5 border-b border-sand py-4 last:border-0">
     <div><p className="font-medium text-brown-dark">{label}</p>{description && <p className="mt-1 text-sm leading-5 text-brown-soft">{description}</p>}</div>
-    <button type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)} className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2 disabled:opacity-50 ${checked ? 'bg-[#70866A]' : 'bg-[#C9BEB3]'}`}>
+    <button type="button" role="switch" aria-label={label} aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)} className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition focus:outline-none focus:ring-2 focus:ring-[#8C4F3A] focus:ring-offset-2 disabled:opacity-50 ${checked ? 'bg-[#70866A]' : 'bg-[#C9BEB3]'}`}>
       <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${checked ? 'left-6' : 'left-1'}`} />
     </button>
   </div>

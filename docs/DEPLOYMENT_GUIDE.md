@@ -6,8 +6,8 @@ This is the current repository-backed production delivery guide. The root `Docke
 
 - One multi-stage Node 20 Alpine image builds the React/Vite SPA, installs production backend dependencies, copies the SPA into `shura-backend/public`, and starts `node server.js` on port 5001.
 - Express serves the SPA, REST API, and Socket.IO from one process. The container health check calls `/api/health`.
-- `.github/workflows/deploy-aca.yml` builds and pushes SHA/latest images to Azure Container Registry, deploys staging, then deploys production through GitHub environments.
-- The workflow currently runs on pushes to `main`. It does not run backend tests, frontend typecheck/build as separate gates, database migrations, post-deploy smoke tests, or automatic rollback.
+- `.github/workflows/deploy-aca.yml` gates the image on backend tests, frontend typecheck/build, isolated PostgreSQL migration tests, and Gitleaks; it then deploys staging, runs health/authorization smoke checks, and promotes through protected GitHub environments.
+- Database changes remain separately human-approved through `.github/workflows/migrate-database.yml`; deployment does not apply them and rollback is never automatic.
 - Socket.IO has no cross-replica adapter. Keep one active replica unless a shared adapter and routing strategy have been implemented and verified.
 
 See [ADR-0001](decisions/0001-monorepo-single-production-container.md) and [Integrations and deployment](architecture/integrations-and-deployment.md) for the durable architecture and current limitations.
@@ -25,6 +25,8 @@ Set-Location ../shura-frontend
 npm ci
 npm run typecheck
 npm run build
+npm run test:e2e
+npm run test:a11y
 
 Set-Location ..
 .\scripts\check-public-repo.ps1
@@ -52,7 +54,7 @@ For the single-container same-origin deployment, API and WebSocket URLs should u
 
 Backend runtime configuration belongs in Container App secrets/environment variables. Reconcile the app with `shura-backend/.env.production.example` and the variables read by current source. Provider groups include:
 
-- PostgreSQL: `DATABASE_URL` or the complete `DB_*` set; Azure TLS deployments normally require `DB_SSL=true`.
+- PostgreSQL: `DATABASE_URL` or the complete `DB_*` set; production defaults to TLS with certificate verification, rejects `DB_SSL_REJECT_UNAUTHORIZED=false`, and optionally accepts `DB_SSL_CA_CERT`.
 - Auth0: domain, audience, claim namespace, Management API client credentials, and therapist role ID.
 - Azure Blob Storage: account/container/SAS TTL and optional user-assigned identity client ID. Production uses Managed Identity; do not store an account key when identity access is available.
 - Razorpay: key ID, key secret, and a distinct webhook secret.
@@ -60,7 +62,7 @@ Backend runtime configuration belongs in Container App secrets/environment varia
 - Calendars: token-encryption secret, backend URL, and optional Google/Outlook OAuth credentials and exact callback URLs.
 - Observability and web boundaries: Application Insights connection string, frontend/origin allowlists, and cookie same-site mode.
 
-The checked-in workflow still maps legacy Cloudinary variables and omits several current provider variables. It does configure the Resend email group, subject to the corresponding Container App secrets existing. Reconcile the workflow/app configuration before relying on Azure Blob, Razorpay, calendars, or DB TLS.
+The checked-in workflow maps current Azure Blob, Razorpay, Resend, Auth0, monitoring, and strict database-TLS variables. Calendar credentials remain environment-managed because they are optional. Confirm every referenced Container App secret and provider permission exists before promotion; workflow text never contains secret values.
 
 ### Resend email configuration
 
@@ -88,7 +90,7 @@ Use root `DEPLOYMENT_GUIDE.md` for the Auth0-specific checklist and `shura-backe
 
 ## Database release order
 
-Database changes are not applied by the GitHub workflow.
+Database changes are not applied by the deployment workflow. Dispatch `migrate-database.yml` only from `main`; the job rejects other refs, checks out the selected immutable `main` SHA, and still requires the protected environment plus its exact confirmation string.
 
 1. Resolve the exact target database and confirm whether it is a truly empty database or an existing installation.
 2. For a new empty database only, deliberately apply `shura-backend/production_schema.sql` once to create the legacy-compatible base.
@@ -116,7 +118,7 @@ Provider delivery is eventually consistent in several flows. A successful bookin
 
 ## Rollback
 
-The workflow has no automatic rollback. Before production deployment, identify the previously healthy immutable image/revision and define who can reactivate it. Application rollback does not reverse database migrations or external provider side effects. Prefer additive, backward-compatible migrations; if a new revision must be rolled back, confirm the old revision can operate safely against the migrated schema.
+The workflow has no automatic rollback. Before production deployment, identify the previously healthy immutable image/revision and define who can reactivate it. Application rollback does not reverse database migrations or external provider side effects. Prefer additive, backward-compatible migrations; if a new revision must be rolled back, confirm the old revision can operate safely against the migrated schema. Follow [Production readiness and incident operations](PRODUCTION_READINESS.md) for alert and reconciliation steps.
 
 ## Production readiness boundaries
 

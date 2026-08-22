@@ -60,7 +60,7 @@ router.post('/', async (req, res) => {
     return res.status(200).json({ ok: true });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('Resend webhook processing failed:', error.message);
+    console.error('Resend webhook processing failed', { code: error?.code || 'RESEND_WEBHOOK_FAILED' });
     return res.status(500).json({ error: 'Webhook processing failed' });
   } finally {
     client.release();

@@ -48,7 +48,7 @@ router.get('/clients', requireAdmin, async (req, res) => {
 
     res.json({ clients: result.rows });
   } catch (error) {
-    console.error('Error fetching clients:', error);
+    console.error('Error fetching clients', { code: error?.code || 'ADMIN_CLIENTS_FAILED' });
     res.status(500).json({ error: 'Failed to fetch clients' });
   }
 });
@@ -80,7 +80,7 @@ router.get('/therapists', requireAdmin, async (req, res) => {
 
     res.json({ therapists });
   } catch (error) {
-    console.error('Error fetching therapists:', error);
+    console.error('Error fetching therapists', { code: error?.code || 'ADMIN_THERAPISTS_FAILED' });
     res.status(500).json({ error: 'Failed to fetch therapists' });
   }
 });
@@ -108,7 +108,7 @@ router.get('/clients/:clientId/assignments', requireAdmin, async (req, res) => {
 
     res.json({ assignments: result.rows });
   } catch (error) {
-    console.error('Error fetching client assignments:', error);
+    console.error('Error fetching client assignments', { code: error?.code || 'ADMIN_ASSIGNMENTS_FAILED' });
     res.status(500).json({ error: 'Failed to fetch assignments' });
   }
 });
@@ -193,7 +193,7 @@ router.post('/assign', requireAdmin, async (req, res) => {
       assignment: result.rows[0]
     });
   } catch (error) {
-    console.error('Error assigning client:', error);
+    console.error('Error assigning client', { code: error?.code || 'ADMIN_ASSIGN_FAILED' });
     res.status(500).json({ error: 'Failed to assign client' });
   }
 });
@@ -218,7 +218,7 @@ router.delete('/assign/:assignmentId', requireAdmin, async (req, res) => {
       assignment: result.rows[0]
     });
   } catch (error) {
-    console.error('Error unassigning client:', error);
+    console.error('Error unassigning client', { code: error?.code || 'ADMIN_UNASSIGN_FAILED' });
     res.status(500).json({ error: 'Failed to unassign client' });
   }
 });
@@ -254,7 +254,7 @@ router.get('/assignments', requireAdmin, async (req, res) => {
 
     res.json({ assignments });
   } catch (error) {
-    console.error('Error fetching assignments:', error);
+    console.error('Error fetching assignments', { code: error?.code || 'ADMIN_ASSIGNMENTS_FAILED' });
     res.status(500).json({ error: 'Failed to fetch assignments' });
   }
 });
@@ -297,7 +297,7 @@ router.get('/clients/:clientId/matches', requireAdmin, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error getting matches:', error);
+    console.error('Error getting matches', { code: error?.code || 'ADMIN_MATCHES_FAILED' });
     res.status(500).json({ error: 'Failed to get matching therapists' });
   }
 });
@@ -340,7 +340,7 @@ router.get('/therapists/pending', requireAdmin, async (req, res) => {
 
     res.json({ therapists: pending });
   } catch (error) {
-    console.error('Error fetching pending therapists:', error);
+    console.error('Error fetching pending therapists', { code: error?.code || 'ADMIN_PENDING_THERAPISTS_FAILED' });
     res.status(500).json({ error: 'Failed to fetch pending therapists' });
   }
 });
@@ -401,7 +401,7 @@ router.post('/therapists/:id/approve', requireAdmin, async (req, res) => {
     }
     res.json({ message: 'Therapist approved successfully', therapist: result.therapist });
   } catch (error) {
-    console.error('Error approving therapist:', error);
+    console.error('Error approving therapist', { code: error?.code || 'ADMIN_APPROVE_FAILED' });
     res.status(500).json({ error: 'Failed to approve therapist' });
   }
 });
@@ -423,7 +423,7 @@ router.post('/therapists/:id/reject', requireAdmin, async (req, res) => {
     }
     res.json({ message: 'Therapist application rejected', therapist: result.therapist, reason });
   } catch (error) {
-    console.error('Error rejecting therapist:', error);
+    console.error('Error rejecting therapist', { code: error?.code || 'ADMIN_REJECT_FAILED' });
     res.status(500).json({ error: 'Failed to reject therapist' });
   }
 });
@@ -442,7 +442,7 @@ router.post('/therapists/:id/suspend', requireAdmin, async (req, res) => {
     }
     res.json({ message: 'Therapist suspended successfully', therapist: result.therapist });
   } catch (error) {
-    console.error('Error suspending therapist:', error);
+    console.error('Error suspending therapist', { code: error?.code || 'ADMIN_SUSPEND_THERAPIST_FAILED' });
     res.status(500).json({ error: 'Failed to suspend therapist' });
   }
 });
@@ -461,7 +461,7 @@ router.post('/therapists/:id/reactivate', requireAdmin, async (req, res) => {
     }
     res.json({ message: 'Therapist reactivated successfully', therapist: result.therapist });
   } catch (error) {
-    console.error('Error reactivating therapist:', error);
+    console.error('Error reactivating therapist', { code: error?.code || 'ADMIN_REACTIVATE_THERAPIST_FAILED' });
     res.status(500).json({ error: 'Failed to reactivate therapist' });
   }
 });
@@ -479,7 +479,7 @@ router.post('/clients/:id/suspend', requireAdmin, async (req, res) => {
     await syncClientAuth0State({ auth0Sub: rows[0].auth0_sub, status: 'suspended' });
     res.json({ message: 'Client suspended successfully', client: rows[0] });
   } catch (error) {
-    console.error('Error suspending client:', error);
+    console.error('Error suspending client', { code: error?.code || 'ADMIN_SUSPEND_CLIENT_FAILED' });
     res.status(500).json({ error: 'Failed to suspend client' });
   }
 });
@@ -497,7 +497,7 @@ router.post('/clients/:id/reactivate', requireAdmin, async (req, res) => {
     await syncClientAuth0State({ auth0Sub: rows[0].auth0_sub, status: 'active' });
     res.json({ message: 'Client reactivated successfully', client: rows[0] });
   } catch (error) {
-    console.error('Error reactivating client:', error);
+    console.error('Error reactivating client', { code: error?.code || 'ADMIN_REACTIVATE_CLIENT_FAILED' });
     res.status(500).json({ error: 'Failed to reactivate client' });
   }
 });
@@ -522,7 +522,7 @@ router.get('/users/search', requireAdmin, async (req, res) => {
     const remote = await searchUsers(`email:*${q}* OR name:*${q}*`, 0, 25);
     res.json({ users: local.rows, auth0Users: remote });
   } catch (error) {
-    console.error('Error searching users:', error);
+    console.error('Error searching users', { code: error?.code || 'ADMIN_USER_SEARCH_FAILED' });
     res.status(500).json({ error: 'Failed to search users' });
   }
 });

@@ -26,7 +26,7 @@ Therapists connect calendars through OAuth callbacks under `/api/calendar/<provi
 
 ### Monitoring
 
-When `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, startup enables Azure Monitor OpenTelemetry. The email outbox has its own durable worker; the repository has no general-purpose job runner, structured logging framework, or documented alert definitions.
+When `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, startup enables Azure Monitor OpenTelemetry. The email outbox has its own durable worker; the repository has no general-purpose job runner or structured logging framework. Required signals and alert ownership are defined in the production-readiness runbook.
 
 ### Video
 
@@ -53,11 +53,9 @@ Express serves static assets and an SPA fallback only when `NODE_ENV=production`
 
 ## Azure Container Apps delivery
 
-`.github/workflows/deploy-aca.yml` runs on pushes to `main`, builds and pushes SHA/latest tags to Azure Container Registry, deploys staging, then deploys production using GitHub environments. Both apps share one Container Apps environment and external ingress on port 5001.
+`.github/workflows/deploy-aca.yml` runs on pushes to `main`, gates the image on backend tests, frontend typecheck/build, PostgreSQL migration integration tests, and Gitleaks, then builds and pushes SHA/latest tags, deploys staging, performs health/unauthorized-access smoke checks, and promotes through the protected production environment. Both apps share one Container Apps environment and external ingress on port 5001.
 
-The deployment workflow currently does not run backend tests, frontend typecheck/build as separate quality gates, database migrations, smoke tests, or automatic rollback. A separate PostgreSQL 16 workflow runs focused email migration upgrade and isolated fresh-bootstrap tests, but it does not apply migrations to any environment. The deployment workflow also contains stale Cloudinary secret mappings and omits several current Azure Blob, Razorpay, calendar, and DB TLS variables. Resend variables and the enabled outbox worker are configured, but required Container App secret values must exist before deployment. Actual environment secrets might also be configured outside the YAML, which cannot be established from the repository.
-
-Before relying on the pipeline for production, reconcile the workflow with `.env.production.example`, add safe migration orchestration, and define verification/rollback behavior. Do not place secrets directly in workflow text.
+`.github/workflows/migrate-database.yml` is a separate manually dispatched, protected-environment workflow. It accepts only a dispatch from `main`, checks out that event's immutable SHA, requires an environment-specific confirmation string, applies additive migrations, and reruns the migrator to confirm idempotency. Deployment never auto-applies database changes. Current Azure Blob, Razorpay, Resend, Auth0, monitoring, and strict TLS mappings are declared without secret values; calendar variables remain environment-managed and must be checked when calendar behavior changes. See the production-readiness runbook for live verification and rollback.
 
 ## Scaling constraints
 

@@ -372,7 +372,7 @@ const finalizeIntentBookingAndPayment = async ({ orderId, paymentId, expectedCli
     await dbClient.query('COMMIT');
 
     syncBookingToConnectedCalendars(bookingResult.rows[0].id).catch((err) => {
-      console.error('Calendar sync error:', err);
+      console.error('Calendar sync error', { code: err?.code || 'CALENDAR_SYNC_FAILED' });
     });
 
     return {
@@ -507,7 +507,7 @@ router.post('/create-order', auth, async (req, res) => {
     });
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
-    console.error('Error creating Razorpay order:', err);
+    console.error('Error creating Razorpay order', { code: err?.code || 'RAZORPAY_ORDER_FAILED' });
     res.status(500).json({ error: 'Failed to create payment order' });
   } finally {
     client.release();
@@ -558,7 +558,7 @@ router.post('/verify-and-finalize-booking', auth, async (req, res) => {
     });
   } catch (err) {
     const statusCode = err.statusCode || 500;
-    res.status(statusCode).json({ error: err.message || 'Failed to finalize paid booking' });
+    res.status(statusCode).json({ error: statusCode >= 500 ? 'Failed to finalize paid booking' : err.message });
   }
 });
 
@@ -608,7 +608,7 @@ router.post('/verify', auth, requireAuthenticatedClient, async (req, res) => {
       payment: paymentResult.rows[0]
     });
   } catch (err) {
-    console.error('Error verifying payment:', err);
+    console.error('Error verifying payment', { code: err?.code || 'PAYMENT_VERIFICATION_FAILED' });
     res.status(500).json({ error: 'Failed to verify payment' });
   }
 });
@@ -633,7 +633,7 @@ router.get('/status/:payment_id', auth, requireAuthenticatedClient, async (req, 
 
     res.json({ payment: payment.rows[0] });
   } catch (err) {
-    console.error('Error fetching payment status:', err);
+    console.error('Error fetching payment status', { code: err?.code || 'PAYMENT_STATUS_FAILED' });
     res.status(500).json({ error: 'Failed to fetch payment status' });
   }
 });
@@ -818,7 +818,7 @@ router.post('/webhook', async (req, res) => {
 
     res.json({ received: true });
   } catch (err) {
-    console.error('Error handling Razorpay webhook:', err);
+    console.error('Error handling Razorpay webhook', { code: err?.code || 'RAZORPAY_WEBHOOK_FAILED' });
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 });
@@ -904,8 +904,8 @@ router.get('/therapist/my-payments', auth, async (req, res) => {
 
     return res.json({ payments: result.rows, summary });
   } catch (err) {
-    console.error('Get therapist payments error:', err);
-    return res.status(500).json({ error: err.message });
+    console.error('Get therapist payments error', { code: err?.code || 'THERAPIST_PAYMENTS_FAILED' });
+    return res.status(500).json({ error: 'Failed to load therapist payments' });
   }
 });
 

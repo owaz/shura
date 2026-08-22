@@ -2,10 +2,12 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const { authenticateToken } = require('../middleware/auth');
-const { createClientNotification } = require('../services/clientNotifications');
-
-// Middleware to authenticate chat requests
-const auth = authenticateToken;
+const requireChatParticipant = (req, res, next) => authenticateToken(req, res, () => {
+  if (!['client', 'therapist'].includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Client or therapist access required' });
+  }
+  return next();
+});
 
 const canAccessConversation = async (client_id, therapist_id) => {
   const assignment = await pool.query(
@@ -17,48 +19,12 @@ const canAccessConversation = async (client_id, therapist_id) => {
   return assignment.rows.length > 0;
 };
 
-const ensureClientSelectedAssignment = async (client_id, therapist_id) => {
-  const therapist = await pool.query(
-    'SELECT id, full_name FROM therapists WHERE id = $1 AND status = $2',
-    [therapist_id, 'approved']
-  );
-
-  if (!therapist.rows.length) return false;
-
-  const assignment = await pool.query(
-    `INSERT INTO therapist_clients (therapist_id, client_id, status, assignment_source, assigned_at)
-     VALUES ($1, $2, 'active', 'client_selected', NOW())
-     ON CONFLICT (therapist_id, client_id)
-     DO UPDATE SET status = 'active',
-                   assignment_source = 'client_selected',
-                   assigned_at = CASE
-                     WHEN therapist_clients.status IS DISTINCT FROM 'active' THEN NOW()
-                     ELSE therapist_clients.assigned_at
-                   END
-     RETURNING id, to_char(assigned_at AT TIME ZONE 'UTC', 'YYYYMMDDHH24MISS.US') AS activation_key`,
-    [therapist_id, client_id]
-  );
-
-  await createClientNotification(pool, {
-    clientId: client_id,
-    type: 'therapist_assigned',
-    title: 'Your therapist is ready',
-    body: `You are now connected with ${therapist.rows[0].full_name}.`,
-    metadata: { therapistId: therapist_id },
-    dedupeKey: `therapist-assigned:${assignment.rows[0].id}:${assignment.rows[0].activation_key}`,
-  }).catch((notificationError) => {
-    console.error('Client-selected assignment notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
-  });
-
-  return true;
-};
-
 /**
  * POST /api/chats/send
  * Send a message in a conversation
  * Body: { therapist_id, content, file_url?, file_type?, file_size? }
  */
-router.post('/send', auth, async (req, res) => {
+router.post('/send', requireChatParticipant, async (req, res) => {
   try {
     const { therapist_id, client_id: body_client_id, content, file_url, file_type, file_size } = req.body;
     const isTherapist = req.user.role === 'therapist';
@@ -69,10 +35,7 @@ router.post('/send', auth, async (req, res) => {
       return res.status(400).json({ error: 'client_id/therapist_id and content are required' });
     }
 
-    let allowed = await canAccessConversation(client_id, conversationTherapistId);
-    if (!allowed && !isTherapist) {
-      allowed = await ensureClientSelectedAssignment(client_id, conversationTherapistId);
-    }
+    const allowed = await canAccessConversation(client_id, conversationTherapistId);
     if (!allowed) {
       return res.status(403).json({ error: 'You are not assigned to this conversation' });
     }
@@ -146,7 +109,7 @@ router.post('/send', auth, async (req, res) => {
       client.release();
     }
   } catch (err) {
-    console.error('Error sending message:', err);
+    console.error('Error sending message', { code: err?.code || 'CHAT_SEND_FAILED' });
     res.status(500).json({ error: 'Failed to send message' });
   }
 });
@@ -156,7 +119,7 @@ router.post('/send', auth, async (req, res) => {
  * Get all messages in a conversation between client and therapist
  * Query params: limit=20, offset=0
  */
-router.get('/conversation/:therapist_id', auth, async (req, res) => {
+router.get('/conversation/:therapist_id', requireChatParticipant, async (req, res) => {
   try {
     const { therapist_id } = req.params;
     const isTherapist = req.user.role === 'therapist';
@@ -165,10 +128,7 @@ router.get('/conversation/:therapist_id', auth, async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const offset = parseInt(req.query.offset) || 0;
 
-    let allowed = await canAccessConversation(client_id, conversationTherapistId);
-    if (!allowed && !isTherapist) {
-      allowed = await ensureClientSelectedAssignment(client_id, conversationTherapistId);
-    }
+    const allowed = await canAccessConversation(client_id, conversationTherapistId);
     if (!allowed) {
       return res.status(403).json({ error: 'You are not assigned to this conversation' });
     }
@@ -206,7 +166,7 @@ router.get('/conversation/:therapist_id', auth, async (req, res) => {
       total: messages.rows.length
     });
   } catch (err) {
-    console.error('Error fetching conversation:', err);
+    console.error('Error fetching conversation', { code: err?.code || 'CHAT_LOAD_FAILED' });
     res.status(500).json({ error: 'Failed to fetch conversation' });
   }
 });
@@ -215,7 +175,7 @@ router.get('/conversation/:therapist_id', auth, async (req, res) => {
  * GET /api/chats/list
  * Get list of all conversations for the authenticated user
  */
-router.get('/list', auth, async (req, res) => {
+router.get('/list', requireChatParticipant, async (req, res) => {
   try {
     const user_id = req.user.id;
     const isTherapist = req.user.role === 'therapist';
@@ -251,7 +211,7 @@ router.get('/list', auth, async (req, res) => {
 
     res.json({ conversations: conversations.rows });
   } catch (err) {
-    console.error('Error fetching conversations:', err);
+    console.error('Error fetching conversations', { code: err?.code || 'CHAT_LIST_FAILED' });
     res.status(500).json({ error: 'Failed to fetch conversations' });
   }
 });
@@ -260,7 +220,7 @@ router.get('/list', auth, async (req, res) => {
  * PATCH /api/chats/:message_id/read
  * Mark a message as read
  */
-router.patch('/:message_id/read', auth, async (req, res) => {
+router.patch('/:message_id/read', requireChatParticipant, async (req, res) => {
   try {
     const { message_id } = req.params;
     const isTherapist = req.user.role === 'therapist';
@@ -277,7 +237,7 @@ router.patch('/:message_id/read', auth, async (req, res) => {
 
     res.json({ message: 'Message marked as read' });
   } catch (err) {
-    console.error('Error marking message as read:', err);
+    console.error('Error marking message as read', { code: err?.code || 'CHAT_READ_FAILED' });
     res.status(500).json({ error: 'Failed to mark message as read' });
   }
 });

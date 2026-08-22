@@ -89,7 +89,7 @@ async function findMatchingTherapists(intakeFormData) {
     return scoredTherapists;
 
   } catch (error) {
-    console.error('Matching service error:', error);
+    console.error('Matching service error', { code: error?.code || 'MATCHING_FAILED' });
     throw error;
   }
 }
@@ -145,7 +145,7 @@ async function autoAssignTherapist(userId, intakeFormData) {
       console.error('Auto-assignment notification insert failed', { code: notificationError?.code || 'NOTIFICATION_FAILED' });
     });
 
-    console.log(`Auto-assigned client ${userId} to therapist ${bestMatch.full_name} (score: ${bestMatch.score})`);
+    console.log('Auto-assignment completed', { clientId: userId, therapistId: bestMatch.id });
 
     return {
       assignment: result.rows[0],
@@ -155,7 +155,7 @@ async function autoAssignTherapist(userId, intakeFormData) {
     };
 
   } catch (error) {
-    console.error('Auto-assignment error:', error);
+    console.error('Auto-assignment error', { code: error?.code || 'AUTO_ASSIGNMENT_FAILED' });
     throw error;
   }
 }
