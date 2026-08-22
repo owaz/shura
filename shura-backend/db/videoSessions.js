@@ -14,6 +14,38 @@ const VIDEO_SESSION_STATUSES = Object.freeze([
 
 const VIDEO_PARTICIPANT_ROLES = Object.freeze(['client', 'therapist']);
 const VIDEO_WEBHOOK_PROCESSING_STATUSES = Object.freeze(['pending', 'processing', 'processed', 'failed']);
+const VIDEO_SESSION_TERMINAL_STATUSES = Object.freeze(['ended', 'cancelled', 'expired']);
+const VIDEO_WEBHOOK_PROCESSING_LEASE_SECONDS = 15 * 60;
+
+const VIDEO_STATUS_TRANSITIONS = Object.freeze({
+  scheduled: ['ready'],
+  provisioning: ['scheduled', 'failed'],
+  ready: ['provisioning'],
+  live: ['ready', 'rejoinable'],
+  rejoinable: ['live'],
+  ended: ['ready', 'rejoinable', 'live'],
+  cancelled: ['scheduled', 'provisioning', 'ready', 'live', 'rejoinable', 'failed'],
+  expired: ['scheduled', 'ready', 'rejoinable'],
+  failed: ['provisioning'],
+});
+
+const resolveTransitionSourceStatuses = (nextStatus, expectedCurrentStatuses = null) => {
+  const allowed = VIDEO_STATUS_TRANSITIONS[nextStatus];
+  if (!allowed) throw new Error(`No transition rule configured for status: ${nextStatus}`);
+  if (!expectedCurrentStatuses) return allowed;
+  if (!Array.isArray(expectedCurrentStatuses) || expectedCurrentStatuses.length === 0) {
+    throw new Error('expectedCurrentStatuses must be a non-empty array');
+  }
+  for (const sourceStatus of expectedCurrentStatuses) {
+    if (!VIDEO_SESSION_STATUSES.includes(sourceStatus)) {
+      throw new Error(`Invalid expected status: ${sourceStatus}`);
+    }
+    if (!allowed.includes(sourceStatus)) {
+      throw new Error(`Transition to ${nextStatus} is not allowed from ${sourceStatus}`);
+    }
+  }
+  return expectedCurrentStatuses;
+};
 
 const createVideoSession = async ({ bookingId, status = 'scheduled', statusReason = null }, queryable = pool) => {
   if (!Number.isInteger(bookingId) || bookingId <= 0) throw new Error('bookingId must be a positive integer');
@@ -41,13 +73,21 @@ const getVideoSessionByBookingId = async (bookingId, queryable = pool) => {
 };
 
 const updateVideoSessionStatus = async (
-  { videoSessionId, status, statusReason = null, startedAt = null, endedAt = null },
+  {
+    videoSessionId,
+    status,
+    statusReason = null,
+    startedAt = null,
+    endedAt = null,
+    expectedCurrentStatuses = null,
+  },
   queryable = pool
 ) => {
   if (!Number.isInteger(videoSessionId) || videoSessionId <= 0) {
     throw new Error('videoSessionId must be a positive integer');
   }
   if (!VIDEO_SESSION_STATUSES.includes(status)) throw new Error('Invalid video session status');
+  const sourceStatuses = resolveTransitionSourceStatuses(status, expectedCurrentStatuses);
   const { rows } = await queryable.query(
     `UPDATE video_sessions
      SET status = $2,
@@ -56,8 +96,22 @@ const updateVideoSessionStatus = async (
          ended_at = COALESCE($5, ended_at),
          updated_at = NOW()
      WHERE id = $1
+       AND status = ANY($6::text[])
+       AND (
+         $2 = ANY($7::text[])
+         OR status <> ALL($8::text[])
+       )
      RETURNING *`,
-    [videoSessionId, status, statusReason, startedAt, endedAt]
+    [
+      videoSessionId,
+      status,
+      statusReason,
+      startedAt,
+      endedAt,
+      sourceStatuses,
+      VIDEO_SESSION_TERMINAL_STATUSES,
+      VIDEO_SESSION_TERMINAL_STATUSES,
+    ]
   );
   return rows[0] || null;
 };
@@ -94,8 +148,7 @@ const upsertVideoParticipant = async (
     `INSERT INTO video_participants (video_session_id, principal_role, principal_id, provider_user_id)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (video_session_id, principal_role, principal_id) DO UPDATE
-     SET provider_user_id = EXCLUDED.provider_user_id,
-         updated_at = NOW()
+     SET updated_at = NOW()
      RETURNING *`,
     [videoSessionId, principalRole, principalId, providerUserId]
   );
@@ -211,13 +264,20 @@ const enqueueVideoWebhookEvent = async (event, queryable = pool) => {
   return { queued: rows.length === 1, duplicate: rows.length === 0 };
 };
 
-const claimVideoWebhookEvents = async (limit = 20, queryable = pool) => {
+const claimVideoWebhookEvents = async (
+  limit = 20,
+  queryable = pool,
+  leaseSeconds = VIDEO_WEBHOOK_PROCESSING_LEASE_SECONDS
+) => {
   if (!Number.isInteger(limit) || limit <= 0) throw new Error('limit must be a positive integer');
+  if (!Number.isInteger(leaseSeconds) || leaseSeconds <= 0) {
+    throw new Error('leaseSeconds must be a positive integer');
+  }
   const { rows } = await queryable.query(
     `WITH claim AS (
        SELECT provider, provider_event_id
        FROM video_webhook_events
-       WHERE processing_status IN ('pending', 'failed')
+       WHERE processing_status IN ('pending', 'failed', 'processing')
          AND next_attempt_at <= NOW()
        ORDER BY next_attempt_at ASC, received_at ASC
        FOR UPDATE SKIP LOCKED
@@ -225,12 +285,14 @@ const claimVideoWebhookEvents = async (limit = 20, queryable = pool) => {
      )
      UPDATE video_webhook_events AS events
      SET processing_status = 'processing',
-         attempt_count = events.attempt_count + 1
+         attempt_count = events.attempt_count + 1,
+         next_attempt_at = NOW() + ($2 * INTERVAL '1 second'),
+         error_code = NULL
      FROM claim
      WHERE events.provider = claim.provider
        AND events.provider_event_id = claim.provider_event_id
      RETURNING events.*`,
-    [limit]
+    [limit, leaseSeconds]
   );
   return rows;
 };
@@ -244,7 +306,8 @@ const markVideoWebhookProcessed = async (
     `UPDATE video_webhook_events
      SET processing_status = 'processed',
          processed_at = $3,
-         error_code = NULL
+        error_code = NULL,
+        next_attempt_at = NOW()
      WHERE provider = $1
        AND provider_event_id = $2
      RETURNING *`,
@@ -264,7 +327,8 @@ const markVideoWebhookFailed = async (
     `UPDATE video_webhook_events
      SET processing_status = 'failed',
          error_code = $3,
-         next_attempt_at = $4
+        next_attempt_at = $4,
+        processed_at = NULL
      WHERE provider = $1
        AND provider_event_id = $2
      RETURNING *`,
@@ -277,6 +341,9 @@ module.exports = {
   VIDEO_PARTICIPANT_ROLES,
   VIDEO_SESSION_STATUSES,
   VIDEO_WEBHOOK_PROCESSING_STATUSES,
+  VIDEO_WEBHOOK_PROCESSING_LEASE_SECONDS,
+  VIDEO_SESSION_TERMINAL_STATUSES,
+  VIDEO_STATUS_TRANSITIONS,
   claimVideoWebhookEvents,
   createVideoSession,
   enqueueVideoWebhookEvent,

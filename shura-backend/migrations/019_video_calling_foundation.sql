@@ -78,6 +78,10 @@ CREATE TABLE IF NOT EXISTS video_webhook_events (
   PRIMARY KEY (provider, provider_event_id)
 );
 
+ALTER TABLE video_webhook_events DROP CONSTRAINT IF EXISTS video_webhook_events_processing_status_check;
+ALTER TABLE video_webhook_events ADD CONSTRAINT video_webhook_events_processing_status_check
+  CHECK (processing_status IN ('pending', 'processing', 'processed', 'failed'));
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_video_webhook_events_participant_dedupe
   ON video_webhook_events(provider, event_type, provider_participant_session_id)
   WHERE provider_participant_session_id IS NOT NULL

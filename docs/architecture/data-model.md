@@ -29,11 +29,16 @@ therapists
 
 bookings
   ├─ client_session_reviews
-  └─ client_session_events
+  ├─ client_session_events
+  └─ video_sessions
+       └─ video_participants
 
 application email events
   └─ email_outbox
        └─ email_webhook_events (correlated by provider message ID)
+
+application video events
+  └─ video_webhook_events (provider inbox with dedupe and retry state)
 ```
 
 This is a relationship map, not a complete column diagram. Read the current SQL migration and the consuming route before altering a table.
@@ -53,6 +58,8 @@ This is a relationship map, not a complete column diagram. Read the current SQL 
 - Daily faith-content rows have a stable reference key, content kind, source/translation attribution, and explicit human editorial state. Client delivery requires both `editorial_status = 'approved'` and `is_active = TRUE`; insertion alone never publishes a quote.
 - Client billing history combines durable `payments` rows with `payment_booking_intents` that do not have a matching payment by ID or Razorpay order. Completed intents are not shown twice; captured conflict intents remain visible through their refund lifecycle even when no booking/payment row was created.
 - Email outbox event keys are unique and must contain only opaque durable identifiers. Migration 017 preserves the legacy `sent` status while adding distinct accepted, delivered, and terminal dead states, provider-event timestamps, early-webhook reconciliation fields, and nullable payload columns. Accepted/terminal payload and error fields plus old webhook dedupe rows are purged after 30 days while delivery metadata remains; migration 018 indexes the complete purge predicate.
+- Migration 019 introduces a single `video_sessions` row per booking, unique participant identity per `(video_session_id, principal_role, principal_id)`, globally unique `provider_user_id`, and durable `video_webhook_events` dedupe by `(provider, provider_event_id)` with participant-event dedupe by `(provider, event_type, provider_participant_session_id)` for `participant.joined`/`participant.left`.
+- Booking status checks now permit both legacy `'no-show'` and explicit `'no_show_client'` / `'no_show_therapist'` write states for video no-show outcomes.
 
 ## Schema sources
 
@@ -79,7 +86,7 @@ Treat this as legacy compatibility debt. Do not add new schema changes there. Ne
 2. Prefer additive, backward-compatible changes; write explicit constraints/indexes and data backfills.
 3. Ensure destructive or type-changing operations account for real legacy data and can run transactionally.
 4. Update queries, API mapping, fixtures, and focused tests together.
-5. Verify a base-schema-plus-all-migrations install in an isolated disposable database and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior. Migrations 017 and 018 are required for the Resend-only email runtime and indexed retention cleanup.
+5. Verify a base-schema-plus-all-migrations install in an isolated disposable database and an upgrade from the preceding migration state. Run the migrator twice to confirm idempotent skip behavior. Migrations 017/018 require focused email delivery/retention assertions, and migration 019 requires focused video schema/constraint assertions plus legacy booking-status compatibility coverage.
 6. Update this document and any product/API documentation if the durable model or rule changed.
 
 Do not run E2E bootstrap/seed unless `E2E_DATABASE_SAFE_TO_MUTATE=true` points to an isolated, disposable non-production database.
