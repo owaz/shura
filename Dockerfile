@@ -1,5 +1,5 @@
 # ============ Stage 1: Build Frontend ============
-FROM node:20-alpine AS frontend-build
+FROM node:24.19.0-alpine AS frontend-build
 
 # Declare build-time vars so Vite can bake them in at build time
 ARG VITE_AUTH0_DOMAIN
@@ -21,7 +21,7 @@ COPY shura-frontend/ ./
 RUN npm run build
 
 # ============ Stage 2: Production Image ============
-FROM node:20-alpine AS production
+FROM node:24.19.0-alpine AS production
 WORKDIR /app
 
 # Install backend dependencies

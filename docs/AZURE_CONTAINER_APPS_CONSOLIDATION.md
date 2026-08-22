@@ -122,7 +122,7 @@ See `Dockerfile` at the repo root.
 
 ```dockerfile
 # ============ Stage 1: Build Frontend ============
-FROM node:20-alpine AS frontend-build
+FROM node:24.19.0-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY shura-frontend/package*.json ./
 RUN npm ci
@@ -130,7 +130,7 @@ COPY shura-frontend/ ./
 RUN npm run build
 
 # ============ Stage 2: Production Image ============
-FROM node:20-alpine AS production
+FROM node:24.19.0-alpine AS production
 WORKDIR /app
 
 # Install backend dependencies
