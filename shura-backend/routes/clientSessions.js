@@ -17,6 +17,7 @@ const {
   validateCancellationReason,
   validateReview,
 } = require('../utils/clientSessionPolicy');
+const { evaluateVideoJoinPredicate } = require('../utils/videoJoinPolicy');
 const {
   sendSessionCancellationNotifications,
   sendSessionRescheduledNotifications,
@@ -37,9 +38,10 @@ const sessionMutationLimiter = rateLimit({
 
 const sessionSelect = `
   SELECT b.id, b.user_id, b.therapist_id, b.scheduled_at, b.duration_minutes,
-         b.session_type, b.status, b.cancelled_at, b.cancellation_reason,
+         b.session_type, b.status, b.payment_kind, b.cancelled_at, b.cancellation_reason,
          b.cancelled_by, b.rescheduled_at, b.rescheduled_from, b.video_room_id,
          b.created_at, b.updated_at,
+         vs.status AS video_status,
          t.full_name AS therapist_name, t.credentials AS therapist_credentials,
          t.profile_image_url AS therapist_image_url,
          t.profile_image_blob_name AS therapist_image_blob_name,
@@ -52,6 +54,7 @@ const sessionSelect = `
   FROM bookings b
   JOIN therapists t ON t.id = b.therapist_id
   JOIN users u ON u.id = b.user_id
+  LEFT JOIN video_sessions vs ON vs.booking_id = b.id
   LEFT JOIN client_session_reviews review ON review.booking_id = b.id
   LEFT JOIN LATERAL (
     SELECT p.id, p.amount_cents, p.currency, p.status, p.razorpay_payment_id,
@@ -63,6 +66,7 @@ const sessionSelect = `
   ) payment ON TRUE`;
 
 const paidStatuses = new Set(['completed', 'success', 'paid', 'refunded']);
+const hasPaidPaymentStatuses = new Set(['completed', 'success', 'paid']);
 
 const loadPolicies = async (queryable = pool) => {
   const { rows } = await queryable.query(
@@ -87,6 +91,11 @@ const sessionDto = async (row, policies, now = new Date()) => {
     sessionType: row.session_type,
     status,
     paid,
+    paymentKind: row.payment_kind,
+    paymentStatus: row.payment_status,
+    refundStatus: row.refund_status,
+    videoStatus: row.video_status,
+    hasPaidPayment: hasPaidPaymentStatuses.has(String(row.payment_status || '').toLowerCase()),
   }, policies, now);
   const credentials = Array.isArray(row.therapist_credentials)
     ? row.therapist_credentials.filter(Boolean)
@@ -588,8 +597,37 @@ router.post('/:id/join', sessionMutationLimiter, async (req, res) => {
       durationMinutes: row.duration_minutes,
       sessionType: row.session_type,
       status: row.status,
+      paymentKind: row.payment_kind,
+      paymentStatus: row.payment_status,
+      refundStatus: row.refund_status,
+      videoStatus: row.video_status,
+      hasPaidPayment: hasPaidPaymentStatuses.has(String(row.payment_status || '').toLowerCase()),
     }, policies);
     if (!actions.canJoin) {
+      if (String(row.session_type || '').toLowerCase() !== 'text') {
+        const predicate = evaluateVideoJoinPredicate({
+          role: 'client',
+          bookingStatus: normalizeSessionStatus(row.status),
+          sessionType: row.session_type,
+          paymentKind: row.payment_kind,
+          hasPaidPayment: hasPaidPaymentStatuses.has(String(row.payment_status || '').toLowerCase()),
+          refundBlocked: String(row.payment_status || '').toLowerCase() === 'refunded'
+            || ['pending', 'processed', 'failed'].includes(String(row.refund_status || '').toLowerCase()),
+          scheduledAt: row.scheduled_at,
+          durationMinutes: row.duration_minutes,
+          videoStatus: row.video_status,
+          participantPreviouslyJoined: false,
+        });
+        if (!predicate.allowed) {
+          return errorResponse(
+            res,
+            predicate.httpStatus,
+            predicate.code,
+            predicate.message,
+            predicate.details || null
+          );
+        }
+      }
       return errorResponse(res, 409, 'JOIN_WINDOW_CLOSED', `You can join ${policies.joinWindowMinutes} minutes before your session.`);
     }
     if (String(row.session_type).toLowerCase() === 'text') {

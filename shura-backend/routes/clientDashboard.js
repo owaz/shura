@@ -18,6 +18,7 @@ const notificationMutationLimiter = rateLimit({
 
 const activeSessionStatusesSql = "('pending', 'confirmed', 'upcoming', 'live')";
 const paidStatuses = new Set(['completed', 'success', 'paid', 'refunded']);
+const hasPaidPaymentStatuses = new Set(['completed', 'success', 'paid']);
 
 const safeImageUrl = async ({ provider, blobName, legacyUrl }) => {
   if (provider !== 'azure_blob' || !blobName) return legacyUrl || '';
@@ -65,6 +66,11 @@ const mapDashboardSession = async (row, policies) => {
       sessionType: row.session_type,
       status,
       paid,
+      paymentKind: row.payment_kind,
+      paymentStatus: row.payment_status,
+      refundStatus: row.refund_status,
+      videoStatus: row.video_status,
+      hasPaidPayment: hasPaidPaymentStatuses.has(String(row.payment_status || '').toLowerCase()),
     }, policies),
   };
 };
@@ -108,19 +114,23 @@ router.get('/dashboard', async (req, res) => {
       ),
       pool.query(
         `SELECT b.id, b.therapist_id, b.scheduled_at, b.duration_minutes,
-                b.session_type, b.status, b.cancelled_at, b.cancellation_reason,
-                b.cancelled_by, b.rescheduled_at, b.rescheduled_from,
-                t.full_name AS therapist_name, t.credentials AS therapist_credentials,
-                t.profile_image_url AS therapist_image_url,
-                t.profile_image_blob_name AS therapist_image_blob_name,
-                t.profile_image_storage_provider AS therapist_image_storage_provider,
-                u.timezone AS client_timezone,
-                payment.status AS payment_status
+               b.payment_kind,
+               b.session_type, b.status, b.cancelled_at, b.cancellation_reason,
+               b.cancelled_by, b.rescheduled_at, b.rescheduled_from,
+               vs.status AS video_status,
+               t.full_name AS therapist_name, t.credentials AS therapist_credentials,
+               t.profile_image_url AS therapist_image_url,
+               t.profile_image_blob_name AS therapist_image_blob_name,
+               t.profile_image_storage_provider AS therapist_image_storage_provider,
+               u.timezone AS client_timezone,
+               payment.status AS payment_status,
+               payment.refund_status AS refund_status
          FROM bookings b
          JOIN therapists t ON t.id = b.therapist_id
          JOIN users u ON u.id = b.user_id
+         LEFT JOIN video_sessions vs ON vs.booking_id = b.id
          LEFT JOIN LATERAL (
-           SELECT p.status
+           SELECT p.status, p.refund_status
            FROM payments p
            WHERE p.booking_id = b.id AND p.client_id = b.user_id
            ORDER BY p.created_at DESC, p.id DESC

@@ -379,6 +379,44 @@ test('returns uniform 403 for missing bookings and disallowed roles', async () =
   );
 });
 
+test('fails when provisioning-to-ready CAS update loses the race', async () => {
+  const db = createFakeDb(makeState({
+    booking: { video_room_id: null },
+    videoSession: {
+      id: 101,
+      booking_id: 33,
+      status: 'scheduled',
+      updated_at: new Date('2026-08-22T09:30:00.000Z'),
+    },
+    participant: null,
+  }));
+
+  const service = new VideoSessionService({
+    db,
+    providerFactory: () => ({
+      async createRoom() {
+        return {};
+      },
+      async createToken() {
+        return {};
+      },
+    }),
+  });
+
+  await assert.rejects(
+    () => service.persistProvisionedRoom({
+      bookingId: 33,
+      principalRole: 'client',
+      principalId: 7,
+      videoSessionId: 101,
+      roomName: 'shura-room',
+    }),
+    (error) => error instanceof VideoSessionServiceError
+      && error.status === 503
+      && error.code === 'VIDEO_PROVISIONING'
+  );
+});
+
 test('maps provider not configured errors to stable public 503 codes', async () => {
   const db = createFakeDb(makeState({
     booking: { video_room_id: null },
