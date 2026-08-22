@@ -813,3 +813,30 @@ Required validation includes:
 - CSP and camera/microphone permission behavior.
 
 **Phase 1 stops here. Implementation remains blocked pending design approval.**
+
+---
+
+## 14. Phase 2 implementation summary (data layer)
+
+Phase 2 scope was completed for the approved data-layer work only (no provider, route, or frontend implementation in this phase).
+
+Delivered:
+
+- Added `shura-backend/migrations/019_video_calling_foundation.sql`.
+- Created `video_sessions` with status/error/duration lifecycle fields and indexes.
+- Created `video_participants` with role-scoped principal identity, provider UUID identity, and presence summary counters.
+- Created durable `video_webhook_events` inbox with dedupe and retry-processing indexes.
+- Normalized `bookings` status constraint so `no_show_client` and `no_show_therapist` are writable while keeping legacy `no-show` read-compatible.
+- Added `shura-backend/db/videoSessions.js` in the existing db/ pattern with query helpers for:
+  - session create/read/status/error updates
+  - participant upsert/join/leave updates
+  - webhook enqueue/claim/processed/failed transitions
+
+Validation executed during Phase 2:
+
+- `npm run migrate` applied cleanly on a fresh bootstrap database.
+- `npm run migrate` applied cleanly on a pre-migrated database containing existing booking rows.
+- Post-migration checks confirmed:
+  - legacy existing booking statuses remained valid
+  - writes to `no_show_client` and `no_show_therapist` succeeded
+  - `video_sessions`, `video_participants`, and `video_webhook_events` exist after migration.
