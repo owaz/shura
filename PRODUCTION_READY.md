@@ -2,6 +2,8 @@
 
 > **Historical claim — the repository as a whole is not verified production-ready.** This file predates the current Auth0, Azure Container Apps, migration, storage, client-portal, and provider boundaries. Use [`docs/README.md`](docs/README.md), especially the system-overview maturity section and current deployment runbook. Secure video/audio and several therapist/legacy surfaces remain incomplete.
 
+> The supported runtime baseline is Node.js 24.19.0 with npm 11. The current deployment uses the pinned Node.js 24.19.0 Alpine image described in [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md).
+
 ## 🎯 What Was Done
 
 ### 1. ✅ Centralized API Configuration

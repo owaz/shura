@@ -2,6 +2,8 @@
 
 > **Legacy checklist — do not use for current releases.** Railway/Vercel, custom-password admin bootstrap, and Cloudinary instructions below are not the selected main-branch architecture. Use [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md), [`docs/LOCAL_E2E_SETUP.md`](docs/LOCAL_E2E_SETUP.md), and current source/configuration.
 
+> The supported runtime baseline for any repository checks is Node.js 24.19.0 with npm 11.
+
 ## ✅ Completed Items
 
 ### 1. Code Security

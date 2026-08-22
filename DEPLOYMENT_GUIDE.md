@@ -2,6 +2,8 @@
 
 This Auth0 companion describes tenant configuration used by the current code. For the complete production release path, begin with [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md). Current source, Auth0 Actions, environment examples, and live tenant configuration outrank this page.
 
+The supported local and deployment toolchain is Node.js 24.19.0 with npm 11.
+
 ## 1. Configure Auth0 tenant basics
 
 1. Create or select your Auth0 tenant.

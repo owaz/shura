@@ -41,6 +41,7 @@ The implementation-maturity section in [System overview](architecture/system-ove
 - [Local end-to-end setup](LOCAL_E2E_SETUP.md) is the current development/E2E runbook.
 - [Azure Container Apps deployment](DEPLOYMENT_GUIDE.md) is the current repository-backed deployment runbook.
 - [Production readiness and incident operations](PRODUCTION_READINESS.md) defines release evidence, monitoring, rollback, and provider reconciliation.
+- [Node.js 24 migration notes](../MIGRATION_NOTES.md) records the runtime migration evidence and deferred provider checks.
 - Root [`DEPLOYMENT_GUIDE.md`](../DEPLOYMENT_GUIDE.md) is the Auth0 tenant companion; [`shura-backend/AZURE_BLOB_STORAGE.md`](../shura-backend/AZURE_BLOB_STORAGE.md) records current private-image storage setup.
 - [Client portal milestone 1](CLIENT_PORTAL_MILESTONE_1.md) is a historical milestone note; current portal behavior is documented in the architecture and product pages.
 

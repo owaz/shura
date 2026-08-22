@@ -81,7 +81,7 @@ router.get('/admin-login', async (req, res) => {
     token = token?.toString();
 
     let admin;
-    const bcrypt = require('bcrypt');
+    const bcrypt = require('bcryptjs');
 
     if (!token) {
       if (email) {
@@ -163,7 +163,7 @@ router.get('/quick-login', async (req, res) => {
       }
       const r = await pool.query('SELECT id, email, full_name, role FROM admins WHERE email = $1', [email]);
       if (r.rows.length) return r.rows[0];
-      const hashed = await require('bcrypt').hash('admin123', 10);
+      const hashed = await require('bcryptjs').hash('admin123', 10);
       const q = 'INSERT INTO admins (email, password_hash, full_name) VALUES ($1, $2, $3) RETURNING id, email, full_name, role';
       const inserted = await pool.query(q, [email, hashed, 'Dev Admin']);
       return inserted.rows[0];
