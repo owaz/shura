@@ -33,6 +33,42 @@ test('never exposes join or mutation actions for cancelled sessions', () => {
   assert.equal(actions.refundEligible, false);
 });
 
+test('applies canonical payment and refund gating to video join availability', () => {
+  const unpaid = sessionActions({
+    scheduledAt: '2026-08-08T10:10:00.000Z',
+    durationMinutes: 50,
+    sessionType: 'video',
+    status: 'confirmed',
+    paymentKind: 'paid',
+    paymentStatus: 'created',
+    refundStatus: null,
+    hasPaidPayment: false,
+  }, {}, now);
+  assert.equal(unpaid.canJoin, false);
+
+  const refunded = sessionActions({
+    scheduledAt: '2026-08-08T10:10:00.000Z',
+    durationMinutes: 50,
+    sessionType: 'video',
+    status: 'confirmed',
+    paymentKind: 'paid',
+    paymentStatus: 'refunded',
+    refundStatus: 'processed',
+    hasPaidPayment: true,
+  }, {}, now);
+  assert.equal(refunded.canJoin, false);
+});
+
+test('allows text session join action when inside join window', () => {
+  const actions = sessionActions({
+    scheduledAt: '2026-08-08T10:10:00.000Z',
+    durationMinutes: 50,
+    sessionType: 'text',
+    status: 'confirmed',
+  }, {}, now);
+  assert.equal(actions.canJoin, true);
+});
+
 test('normalizes legacy no-show values and categorizes sessions', () => {
   assert.equal(normalizeSessionStatus('no-show'), 'no_show_client');
   assert.equal(categoryForSession({ status: 'no-show', scheduledAt: '2026-08-01T10:00:00Z' }, now), 'past');

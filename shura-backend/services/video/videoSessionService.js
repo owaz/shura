@@ -632,7 +632,7 @@ class VideoSessionService {
         [roomName, bookingId]
       );
 
-      await updateVideoSessionStatus(
+      const markedReady = await updateVideoSessionStatus(
         {
           videoSessionId,
           status: 'ready',
@@ -641,6 +641,13 @@ class VideoSessionService {
         },
         client
       );
+      if (!markedReady) {
+        throw new VideoSessionServiceError({
+          status: 503,
+          code: 'VIDEO_PROVISIONING',
+          message: 'Session provisioning is in progress. Please retry in a moment.',
+        });
+      }
       await client.query('COMMIT');
       return roomName;
     } catch (error) {

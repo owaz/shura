@@ -4,6 +4,7 @@ const {
   JOINABLE_BOOKING_STATUSES,
   JOINABLE_SESSION_TYPES,
   buildJoinWindow,
+  evaluateVideoJoinPredicate,
 } = require('./videoJoinPolicy');
 
 const defaultPolicies = Object.freeze({
@@ -29,6 +30,10 @@ const normalizeSessionStatus = (status) => {
   return normalized || 'pending';
 };
 
+const PAID_PAYMENT_STATUSES = new Set(['completed', 'success', 'paid']);
+const REFUND_BLOCKED_PAYMENT_STATUSES = new Set(['refunded']);
+const REFUND_BLOCKED_REFUND_STATUSES = new Set(['pending', 'processed', 'failed']);
+
 const hoursUntil = (scheduledAt, now = new Date()) =>
   (new Date(scheduledAt).getTime() - now.getTime()) / 3_600_000;
 
@@ -37,8 +42,15 @@ const sessionActions = (
     scheduledAt,
     durationMinutes = 50,
     status,
-    paid = false,
+    paid = null,
     sessionType = 'video',
+    paymentKind = 'paid',
+    paymentStatus = null,
+    refundStatus = null,
+    videoStatus = 'scheduled',
+    hasPaidPayment = null,
+    refundBlocked = null,
+    participantPreviouslyJoined = false,
   },
   policies,
   now = new Date()
@@ -46,23 +58,57 @@ const sessionActions = (
   const policy = normalizePolicies(policies);
   const normalizedStatus = normalizeSessionStatus(status);
   const normalizedSessionType = String(sessionType || '').trim().toLowerCase();
+  const normalizedPaymentStatus = String(paymentStatus || '').trim().toLowerCase();
+  const normalizedRefundStatus = String(refundStatus || '').trim().toLowerCase();
+  const paidForRefund = paid === null
+    ? PAID_PAYMENT_STATUSES.has(normalizedPaymentStatus) || normalizedPaymentStatus === 'refunded'
+    : Boolean(paid);
+  const resolvedHasPaidPayment = hasPaidPayment === null
+    ? (
+      paymentStatus == null
+        ? (paid === null ? true : Boolean(paid))
+        : PAID_PAYMENT_STATUSES.has(normalizedPaymentStatus)
+    )
+    : Boolean(hasPaidPayment);
+  const resolvedRefundBlocked = refundBlocked === null
+    ? (
+      REFUND_BLOCKED_PAYMENT_STATUSES.has(normalizedPaymentStatus)
+      || REFUND_BLOCKED_REFUND_STATUSES.has(normalizedRefundStatus)
+    )
+    : Boolean(refundBlocked);
   const start = new Date(scheduledAt);
   const end = new Date(start.getTime() + Number(durationMinutes || 50) * 60_000);
   const joinWindow = buildJoinWindow({ scheduledAt, durationMinutes, role: 'client' });
   const active = UPCOMING_STATUSES.has(normalizedStatus);
   const joinableStatus = JOINABLE_BOOKING_STATUSES.has(normalizedStatus);
-  const joinableMode = JOINABLE_SESSION_TYPES.has(normalizedSessionType);
+  const joinWindowOpen = Boolean(joinWindow)
+    && now >= joinWindow.opensAt
+    && now <= joinWindow.scheduledEnd;
+  const canJoinText = normalizedSessionType === 'text'
+    && joinableStatus
+    && joinWindowOpen;
+  const canJoinVideo = JOINABLE_SESSION_TYPES.has(normalizedSessionType)
+    ? evaluateVideoJoinPredicate({
+      role: 'client',
+      bookingStatus: normalizedStatus,
+      sessionType: normalizedSessionType,
+      paymentKind,
+      hasPaidPayment: resolvedHasPaidPayment,
+      refundBlocked: resolvedRefundBlocked,
+      scheduledAt,
+      durationMinutes,
+      videoStatus,
+      participantPreviouslyJoined,
+      now,
+    }).allowed
+    : false;
   const remainingHours = hoursUntil(start, now);
   return {
-    canJoin: joinableStatus
-      && joinableMode
-      && Boolean(joinWindow)
-      && now >= joinWindow.opensAt
-      && now <= joinWindow.scheduledEnd,
+    canJoin: canJoinText || canJoinVideo,
     joinAvailableAt: joinWindow ? joinWindow.opensAt.toISOString() : null,
     canReschedule: active && remainingHours >= policy.rescheduleCutoffHours,
     canCancel: active && now < end,
-    refundEligible: active && paid && remainingHours >= policy.cancellationCutoffHours,
+    refundEligible: active && paidForRefund && remainingHours >= policy.cancellationCutoffHours,
     rescheduleCutoffHours: policy.rescheduleCutoffHours,
     cancellationCutoffHours: policy.cancellationCutoffHours,
     cancellationPolicyText: policy.cancellationPolicyText,
