@@ -10,7 +10,7 @@ The canonical project map, architecture, domain rules, decision records, known d
 
 ## Quick verification
 
-Use Node.js 20 and install each package independently:
+Use Node.js 24.19.0 and npm 11, then install each package independently:
 
 ```powershell
 Set-Location shura-backend

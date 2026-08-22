@@ -42,7 +42,7 @@ See [domain model and rules](docs/product/domain-model-and-rules.md) and [user w
 
 ## Development commands
 
-Use Node.js 20 and npm. Run commands from the indicated package directory.
+Use Node.js 24.19.0 and npm 11. Run commands from the indicated package directory.
 
 ```powershell
 # install
