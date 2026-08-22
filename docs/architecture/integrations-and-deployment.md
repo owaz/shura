@@ -30,7 +30,9 @@ When `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, startup enables Azure Monit
 
 ### Video
 
-No external video provider is selected or configured. The adapter in `services/video/videoProvider.js` intentionally fails room/access operations. Legacy WebRTC/Socket.IO code is not a substitute for a production provider.
+The backend now includes a Daily provider foundation behind `VIDEO_PROVIDER=daily` with startup validation for `DAILY_API_KEY`, `DAILY_API_URL`, `DAILY_DOMAIN`, and `DAILY_WEBHOOK_HMAC`. This foundation covers provider boundary wiring and data-layer readiness, but production call flows are still staged.
+
+`POST /api/client/sessions/:id/join` remains a legacy endpoint. For non-text sessions it intentionally returns `VIDEO_PROVIDER_NOT_CONFIGURED` whenever a provider is configured, so provider-backed joins only activate through the dedicated `/api/video/...` routes planned in the approved video design. Legacy WebRTC/Socket.IO code is not a substitute for that rollout.
 
 ## Environment boundaries
 

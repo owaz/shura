@@ -49,7 +49,7 @@ In local development, Vite runs on port 3006 and the backend is configured on po
 - Client home dashboard, notification inbox, and review-gated daily faith content
 - Client billing history and private, authenticated PDF receipts
 - Persistent chat plus Socket.IO delivery
-- Experimental/placeholder call signaling and an intentionally unconfigured secure video-provider interface
+- Video session persistence plus a Daily provider foundation with staged API rollout
 - Private image upload and short-lived read access
 
 See the subsystem-specific architecture documents for invariants and current gaps.
@@ -62,7 +62,8 @@ Do not infer completion from the presence of a route or page:
 - Client billing supports one-time Razorpay checkout at booking, covered/free classifications, refund-state visibility, and receipts. Saved cards, subscriptions, deferred automatic charges, and automated conflict-refund reconciliation are not implemented.
 - Several therapist portal pages still use mock data or partial API integration, including payments/chat/calls.
 - Public therapist pages fall back to checked-in mock data if API loading fails.
-- `services/video/videoProvider.js` deliberately rejects room creation/access until a provider is selected.
+- `services/video/videoProvider.js` supports a validated Daily provider foundation when `VIDEO_PROVIDER=daily`, while still returning a safe unconfigured provider when `VIDEO_PROVIDER` is unset.
+- `POST /api/client/sessions/:id/join` remains a legacy endpoint. Text sessions still resolve to chat, but non-text joins intentionally return `VIDEO_PROVIDER_NOT_CONFIGURED` whenever a provider is configured until dedicated `/api/video/...` routes replace it.
 - `routes/calls.js` and some Socket.IO call events are legacy placeholders and are not a production-secure session system.
 
 ## Sources of truth and uncertainty
